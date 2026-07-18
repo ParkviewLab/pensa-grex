@@ -1,0 +1,23 @@
+version = 1
+
+# Documentation and prose — Creative Commons Attribution 4.0 International.
+[[annotations]]
+path = ["README.md", "LICENSING.md", "CHANGELOG.md", "AGENTS.md", "CLAUDE.md", "docs/**"]
+SPDX-FileCopyrightText = "2026 Gary Frattarola <garycoding@gmail.com>"
+SPDX-License-Identifier = "CC-BY-4.0"
+
+# Project config, manifests, lockfiles, CI workflows and scripts — AGPL-3.0-or-later.
+# (JSON/dotfiles/YAML cannot carry comment headers; the lockfile is generated;
+# cliff.toml and scripts/generate_changelog.py are mirrored verbatim from the handbook.)
+[[annotations]]
+path = [
+  ".gitignore",
+  "package.json",
+  "package-lock.json",
+  "cliff.toml",
+  "scripts/**",
+  ".github/**",
+  "electron-builder.yml",
+]
+SPDX-FileCopyrightText = "2026 Gary Frattarola <garycoding@gmail.com>"
+SPDX-License-Identifier = "AGPL-3.0-or-later"

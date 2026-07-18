@@ -1,0 +1,36 @@
+name: Test
+
+# Electron-app CI — lint + a build smoke-test. TaskForkStack is plain
+# JavaScript today (no TypeScript, no test suite yet), so this runs ESLint and
+# the electron-vite build, which fails loudly on a broken bundle. typecheck/test
+# tiers get added if/when the app adopts TypeScript + Vitest. See the handbook's
+# ci.md / node-tooling.md.
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24.x
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build (electron-vite)
+        run: npm run build

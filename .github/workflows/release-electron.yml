@@ -1,0 +1,133 @@
+name: Release
+
+# Tag-driven Electron release. On a `v*` tag: gate → build installers on a
+# macOS / Windows / Linux matrix (electron-vite + electron-builder, unsigned —
+# see docs/in-flight_ideas.md for the signing follow-up) → the shared changelog
+# job, which commits CHANGELOG.md back to main and creates the GitHub Release
+# with the three OS installers attached. A desktop app is not a server, so
+# there is NO GHCR image (cf. release-node.yml). The gate + changelog jobs
+# mirror release-node.yml. See the handbook's electron-tooling.md.
+#
+# Needs a repo secret ANTHROPIC_API_KEY for the changelog job's Highlights
+# paragraph (this repo has no ParkviewLab-org secret to inherit); the script
+# degrades gracefully if it's absent.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  # Pre-flight. The build matrix depends on this, so a bad tag ships nothing.
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Verify tag matches package.json version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG" != "$PKG_VERSION" ]; then
+            echo "tag $TAG != package.json $PKG_VERSION"; exit 1
+          fi
+      - name: Verify tag is reachable from origin/main
+        run: |
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "tagged commit $GITHUB_SHA is not on origin/main"
+            echo "release tags must come from main — back-merge through, then re-tag from main"
+            exit 1
+          fi
+
+  build:
+    needs: gate
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24.x
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Package installers (unsigned)
+        run: npx electron-builder --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+      - uses: actions/upload-artifact@v6
+        with:
+          name: installers-${{ matrix.os }}
+          if-no-files-found: error
+          path: |
+            dist/*.dmg
+            dist/*.exe
+            dist/*.AppImage
+            dist/*.deb
+
+  # Generate the Highlights paragraph + categorized list, commit the new
+  # CHANGELOG.md section back to main, and create the GitHub Release with the
+  # built installers attached. Mirrors release-node.yml's changelog job (the
+  # script is language-agnostic — reads package.json).
+  changelog:
+    needs: [gate, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # scoped here — only this job commits CHANGELOG.md back to main
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Download all built installers
+        uses: actions/download-artifact@v7
+        with:
+          path: artifacts
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+      - name: Install git-cliff
+        uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff
+      - name: Generate release-body.md (LLM call happens here)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_REF: ${{ github.ref }}
+        run: uv run --with anthropic python scripts/generate_changelog.py --mode=generate
+      - name: Switch to fresh origin/main and insert into CHANGELOG.md
+        run: |
+          cp release-body.md /tmp/release-body.md
+          git fetch origin main
+          git checkout origin/main
+          mv /tmp/release-body.md release-body.md
+          uv run python scripts/generate_changelog.py --mode=insert
+      - name: Commit CHANGELOG.md back to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          if git diff --staged --quiet; then echo "no changelog change to commit"; exit 0; fi
+          TAG="${GITHUB_REF#refs/tags/}"
+          git commit -m "docs(changelog): $TAG [skip ci]"
+          git push origin HEAD:main
+      - name: Create GitHub Release with installers
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          shopt -s globstar nullglob
+          files=()                                  # regular files only — the
+          for f in artifacts/**/*; do               # per-OS dirs are not assets
+            [[ -f "$f" ]] && files+=("$f")
+          done
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes-file release-body.md \
+            --target main \
+            "${files[@]}"

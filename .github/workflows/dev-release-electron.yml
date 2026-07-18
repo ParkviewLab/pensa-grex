@@ -1,0 +1,65 @@
+name: Dev release
+
+# On-demand PRE-RELEASE build from `develop` — exercises the cross-platform build
+# before a real release. Manually triggered (workflow_dispatch; run with
+# `--ref develop`). Builds installers on a macOS / Windows / Linux matrix and
+# uploads them as workflow ARTIFACTS (7-day retention). It creates NO `v*` tag and
+# no GitHub Release, so release-electron.yml's gate is untouched. Unlike the
+# Python TestPyPI dev-release it publishes to no registry, so it needs no unique
+# X.Y.Z-devN counter — but develop MUST carry a `-dev` version so the build is
+# distinguishable from a real release (the gate enforces this; open a cycle with
+# `git dev-release --open`). See the handbook's electron-tooling.md / releases.md.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Verify dev build runs from develop
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/develop" ]; then
+            echo "dev-release runs from develop only (got $GITHUB_REF)"; exit 1
+          fi
+      - name: Verify develop carries a dev-cycle version
+        run: |
+          V=$(jq -r .version package.json)
+          case "$V" in
+            *-dev*) echo "dev-cycle version: $V" ;;
+            *) echo "::error::package.json version '$V' has no -dev marker; the build would be indistinguishable from a release. Open a dev cycle first: git dev-release --open"; exit 1 ;;
+          esac
+
+  build:
+    needs: gate
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24.x
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Package installers (unsigned)
+        run: npx electron-builder --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+      - uses: actions/upload-artifact@v6
+        with:
+          name: dev-installers-${{ matrix.os }}
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            dist/*.dmg
+            dist/*.exe
+            dist/*.AppImage
+            dist/*.deb

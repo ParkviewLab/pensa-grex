@@ -1,0 +1,41 @@
+# SPDX-FileCopyrightText: 2026 Gary Frattarola <garycoding@gmail.com>
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# electron-builder — packages the electron-vite build (out/) into platform
+# installers: .dmg (macOS), NSIS .exe (Windows), .AppImage + .deb (Linux).
+# Run after `npm run build`. Unsigned for now — macOS Gatekeeper and Windows
+# SmartScreen will warn on first launch until signing is wired up (see the
+# handbook's electron-tooling.md for how to add it later).
+appId: dev.garycoding.taskforkstack
+productName: TaskForkStack
+artifactName: ${name}-${version}-${arch}.${ext}
+directories:
+  output: dist
+  buildResources: build
+files:
+  - '!src/**'
+  - '!docs/**'
+  - '!scripts/**'
+  - '!.github/**'
+  - '!LICENSES/**'
+  - '!{electron.vite.config.js,eslint.config.mjs,electron-builder.yml,cliff.toml,REUSE.toml,LICENSING.md,CHANGELOG.md,README.md,AGENTS.md,CLAUDE.md,.gitignore}'
+mac:
+  category: public.app-category.productivity
+  target: dmg
+win:
+  target: nsis
+nsis:
+  artifactName: ${name}-${version}-setup.${ext}
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  shortcutName: ${productName}
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Utility
+  maintainer: Gary Frattarola <garycoding@gmail.com>
+npmRebuild: false
+publish:
+  provider: github
+  owner: garycoding
+  repo: TaskForkStack
