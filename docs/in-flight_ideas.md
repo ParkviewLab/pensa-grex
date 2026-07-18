@@ -8,6 +8,15 @@ SPDX-License-Identifier: CC-BY-4.0
 Scratchpad for ideas under consideration. Each entry is a question, not a
 commitment — see the handbook's `documentation.md`.
 
+## Design studies (open in a browser)
+
+- [`tree-grammars.html`](tree-grammars.html) — ten black-and-white layout
+  grammars for the task tree (five horizontal, five vertical), one shared skin,
+  the same sample forest in each. Awaiting a choice of grammar to carry forward.
+- [`theme_ideas.md`](theme_ideas.md) — the Googie / atomic-age / mid-century
+  visual direction, held for the theming stage (skin comes after the grammar
+  and data model).
+
 # 1. Project intent (`docs/northstar.md`)
 
 The repo was bootstrapped from the ParkviewLab handbook conventions before
