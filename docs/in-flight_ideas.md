@@ -10,10 +10,16 @@ commitment — see the handbook's `documentation.md`.
 
 ## Design studies (open in a browser)
 
-- [`subway-forest.html`](subway-forest.html) — the chosen direction, prototyped:
-  the subway grammar drawn vertically and bottom-up (roots at the base, growth
-  rising), three trees side by side as one forest, with pan, zoom, and a Fit
-  button that frames the whole forest. Still black-and-white.
+- [`subway-forest-themed.html`](subway-forest-themed.html) — the current working
+  prototype: the subway grammar with the atomic-age skin on a cool ground, a
+  ground toggle (azure / navy), branches joining at junctions between tasks,
+  left/right alternation, and labels centered below stations.
+- [`subway-forest.html`](subway-forest.html) — the first subway prototype
+  (black-and-white, labels to the right, forks at stations). Superseded by the
+  themed version above for layout; kept as the plain-grammar reference.
+- [`model_ideas.md`](model_ideas.md) — accumulated model and interaction
+  decisions (the push/pop meaning of "stack", entities, the settled layout
+  rules, open questions). Feeds the data model and a future northstar.
 - [`tree-grammars.html`](tree-grammars.html) — the original ten black-and-white
   layout grammars for the task tree (five horizontal, five vertical), one shared
   skin, the same sample forest in each. Subway (grammar 3) was chosen.

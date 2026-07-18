@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<!-- SPDX-FileCopyrightText: 2026 Gary Frattarola <garycoding@gmail.com> -->
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+<html lang="en" data-ground="azure">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TaskForkStack &mdash; subway forest, atomic skin</title>
+<style>
+/* Cool-ground atomic skin, two grounds. Azure (light cool) and navy (dark cool)
+   share one accent palette (teal / burnt-orange / mustard / olive). */
+:root[data-ground="azure"]{
+  --ground:#d3e6ef; --panel:#f8f3e8; --ink:#173242; --line:#365b6c; --muted:#5f7d8b;
+  --grid:rgba(23,50,66,.10);
+  --c-done:#1f8f8a; --c-prog:#d75f2e; --c-todo:#d9a53a; --c-cancel:#8aa0ab; --cursor:#d75f2e;
+  --burst-a:#1f8f8a; --burst-b:#d9a53a;
+}
+:root[data-ground="navy"]{
+  --ground:#0f2334; --panel:#1a3a54; --ink:#e8f1f6; --line:#6fb6c9; --muted:#93b3c2;
+  --grid:rgba(111,182,201,.13);
+  --c-done:#37c2ba; --c-prog:#f27a44; --c-todo:#f0bd55; --c-cancel:#7590a0; --cursor:#f27a44;
+  --burst-a:#37c2ba; --burst-b:#f0bd55;
+}
+html,body{ margin:0; background:var(--ground); }
+*{ box-sizing:border-box; }
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  color:var(--ink); padding:2rem 1.5rem 3rem;
+}
+.wrap{ max-width:1000px; margin:0 auto; }
+.eyebrow{ font-size:11.5px; letter-spacing:.22em; text-transform:uppercase; color:var(--muted); margin:0 0 .5rem; }
+h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
+.lede{ font-size:14px; line-height:1.6; color:var(--muted); margin:0 0 1.3rem; max-width:70ch; }
+
+.bar{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; flex-wrap:wrap; }
+.seg{ display:inline-flex; border:1px solid var(--line); border-radius:999px; overflow:hidden; }
+.seg button{ font:inherit; font-size:12px; border:0; background:transparent; color:var(--muted); padding:6px 14px; cursor:pointer; }
+.seg button.on{ background:var(--ink); color:var(--ground); }
+.zoom{ display:flex; align-items:center; gap:6px; }
+.btn{ font:inherit; font-size:12px; line-height:1; border:1px solid var(--line); background:transparent; color:var(--ink);
+  border-radius:5px; padding:6px 10px; cursor:pointer; }
+.btn:hover{ background:color-mix(in srgb, var(--line) 16%, transparent); }
+.btn.primary{ background:var(--ink); color:var(--ground); border-color:var(--ink); }
+.btn.icon{ width:30px; padding:6px 0; text-align:center; font-size:14px; }
+.pct{ font-size:11px; color:var(--muted); min-width:42px; text-align:center; font-variant-numeric:tabular-nums; }
+
+.viewport{ position:relative; height:520px; overflow:hidden; background:var(--ground);
+  border:1px solid var(--line); border-radius:10px; cursor:grab; user-select:none; }
+.viewport.dragging{ cursor:grabbing; }
+.world{ position:absolute; top:0; left:0; transform-origin:0 0; }
+.content{ position:relative; width:1320px; height:474px;
+  background-image:radial-gradient(circle, var(--grid) 1px, transparent 1.4px); background-size:40px 40px; }
+
+.track{ fill:none; stroke:var(--line); stroke-width:2.5; stroke-linecap:round; stroke-linejoin:round; }
+.fork{ fill:var(--line); }
+.burst line{ stroke:var(--burst-a); stroke-width:1.4; }
+.burst.b line{ stroke:var(--burst-b); }
+.burst{ opacity:.13; }
+.cursor-mark line{ stroke:var(--cursor); stroke-width:1.6; }
+.cursor-mark .ball{ fill:var(--cursor); }
+.cursor-mark .core{ fill:var(--cursor); }
+
+.dot{ position:absolute; width:11px; height:11px; border-radius:50%; background:var(--line);
+  transform:translate(-50%,-50%); z-index:2; }
+.ttl{ position:absolute; transform:translateX(-50%); text-align:center; font-size:11px; font-weight:800;
+  letter-spacing:.08em; text-transform:uppercase; color:var(--ink); white-space:nowrap; }
+
+.stbox{ position:absolute; transform:translateX(-50%); z-index:2; }
+.card{ position:relative; background:var(--panel); border:1px solid var(--line); border-radius:4px; padding:5px 9px;
+  width:138px; display:flex; flex-direction:column; gap:3px; }
+.card.cursor{ border:2px solid var(--cursor); padding:4px 8px; }
+.card.cancel{ border-style:dashed; }
+.card .hd{ display:flex; align-items:center; gap:7px; }
+.card .lbl{ font-size:11.5px; line-height:1.18; color:var(--ink); }
+.card.cancel .lbl{ text-decoration:line-through; color:var(--muted); }
+.card .tag{ font-size:8.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
+.card.note::after{ content:""; position:absolute; top:5px; right:5px; width:6px; height:6px; border-radius:50%; background:var(--c-todo); }
+.flag{ position:absolute; top:-8px; left:50%; transform:translateX(-50%); background:var(--panel); padding:0 5px; font-size:8px; font-weight:800;
+  letter-spacing:.14em; color:var(--cursor); white-space:nowrap; }
+
+.gl{ width:11px; height:11px; border-radius:50%; flex:none; }
+.gl.done{ background:var(--c-done); }
+.gl.prog{ background:var(--c-prog); }
+.gl.todo{ background:transparent; border:2px solid var(--c-todo); }
+.gl.cancel{ background:transparent; border:1.5px dashed var(--c-cancel); }
+
+.hint{ font-size:11.5px; color:var(--muted); margin:9px 2px 0; }
+.legend{ display:flex; flex-wrap:wrap; gap:8px 16px; margin:11px 2px 0; font-size:11.5px; color:var(--muted); }
+.legend span{ display:inline-flex; align-items:center; gap:7px; }
+.legend i{ width:11px; height:11px; border-radius:50%; display:inline-block; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">TaskForkStack &middot; subway forest &middot; atomic skin</p>
+  <h1>Three trees, growing upward</h1>
+  <p class="lede">The subway forest with the atomic-age skin on a cool ground. Branches join the trunk at a junction between tasks; added branches alternate left, right, left as the main line runs straight up; labels sit centered below each station. Flip the ground between azure and navy. Drag to pan, scroll to zoom, Fit frames the forest.</p>
+
+  <div class="bar">
+    <div class="seg" id="ground">
+      <button data-g="azure" class="on">Azure</button>
+      <button data-g="navy">Navy</button>
+    </div>
+    <div class="zoom">
+      <button class="btn icon" id="zout" title="Zoom out" aria-label="Zoom out">&minus;</button>
+      <span class="pct" id="pct">100%</span>
+      <button class="btn icon" id="zin" title="Zoom in" aria-label="Zoom in">+</button>
+      <button class="btn primary" id="fit">Fit</button>
+    </div>
+  </div>
+
+  <div class="viewport" id="viewport">
+    <div class="world" id="world">
+      <div class="content" id="content">
+        <svg width="1320" height="460" viewBox="0 0 1320 460" style="position:absolute;top:0;left:0;z-index:0;">
+          <defs>
+            <g id="sputnik">
+              <line x1="0" y1="-15" x2="0" y2="15"/><line x1="-15" y1="0" x2="15" y2="0"/>
+              <line x1="-10.6" y1="-10.6" x2="10.6" y2="10.6"/><line x1="10.6" y1="-10.6" x2="-10.6" y2="10.6"/>
+              <circle class="ball" cx="0" cy="-15" r="2.3"/><circle class="ball" cx="0" cy="15" r="2.3"/>
+              <circle class="ball" cx="-15" cy="0" r="2.3"/><circle class="ball" cx="15" cy="0" r="2.3"/>
+              <circle class="ball" cx="-10.6" cy="-10.6" r="2.3"/><circle class="ball" cx="10.6" cy="10.6" r="2.3"/>
+              <circle class="ball" cx="10.6" cy="-10.6" r="2.3"/><circle class="ball" cx="-10.6" cy="10.6" r="2.3"/>
+              <circle class="core" cx="0" cy="0" r="3.6"/>
+            </g>
+            <g id="starburst">
+              <line x1="0" y1="-26" x2="0" y2="26"/><line x1="-26" y1="0" x2="26" y2="0"/>
+              <line x1="-18" y1="-18" x2="18" y2="18"/><line x1="18" y1="-18" x2="-18" y2="18"/>
+              <line x1="0" y1="-14" x2="0" y2="14" transform="rotate(22.5)"/>
+              <line x1="0" y1="-14" x2="0" y2="14" transform="rotate(67.5)"/>
+              <line x1="0" y1="-14" x2="0" y2="14" transform="rotate(112.5)"/>
+              <line x1="0" y1="-14" x2="0" y2="14" transform="rotate(157.5)"/>
+            </g>
+          </defs>
+
+          <!-- faint background starbursts (atmosphere) -->
+          <use href="#starburst" class="burst" transform="translate(150,110) scale(2.6)"/>
+          <use href="#starburst" class="burst b" transform="translate(1120,360) scale(3.1)"/>
+          <use href="#starburst" class="burst b" transform="translate(520,380) scale(1.7)"/>
+
+          <!-- Tree A: Media server -->
+          <path class="track" d="M280,380 L280,80"/>
+          <path class="track" d="M280,230 L110,180"/>
+          <path class="track" d="M280,230 L450,180"/>
+          <rect class="fork" x="276" y="226" width="8" height="8" transform="rotate(45 280 230)"/>
+          <!-- Tree B: Home network -->
+          <path class="track" d="M820,380 L820,180"/>
+          <path class="track" d="M820,230 L650,180 L650,80"/>
+          <rect class="fork" x="816" y="226" width="8" height="8" transform="rotate(45 820 230)"/>
+          <!-- Tree C: Home automation -->
+          <path class="track" d="M1170,380 L1170,180"/>
+          <path class="track" d="M1170,230 L1000,180"/>
+          <rect class="fork" x="1166" y="226" width="8" height="8" transform="rotate(45 1170 230)"/>
+
+          <!-- branch cursors (sputnik) -->
+          <use href="#sputnik" class="cursor-mark" transform="translate(280,280)"/>
+          <use href="#sputnik" class="cursor-mark" transform="translate(820,180)"/>
+          <use href="#sputnik" class="cursor-mark" transform="translate(1170,280)"/>
+        </svg>
+
+        <!-- ===== Tree A: Media server ===== -->
+        <div class="dot" style="left:280px;top:380px;"></div>
+        <div class="dot" style="left:280px;top:180px;"></div>
+        <div class="dot" style="left:280px;top:80px;"></div>
+        <div class="dot" style="left:110px;top:180px;"></div>
+        <div class="dot" style="left:450px;top:180px;"></div>
+        <div class="stbox" style="left:280px;top:395px;"><div class="card"><div class="hd"><span class="gl done"></span><span class="lbl">Set up NAS</span></div><span class="tag">done</span></div></div>
+        <div class="stbox" style="left:280px;top:295px;"><div class="card cursor"><span class="flag">&#9650; HERE</span><div class="hd"><span class="gl prog"></span><span class="lbl">Migrate media library</span></div><span class="tag">in progress</span></div></div>
+        <div class="stbox" style="left:280px;top:195px;"><div class="card"><div class="hd"><span class="gl prog"></span><span class="lbl">Automate backups</span></div><span class="tag">in progress</span></div></div>
+        <div class="stbox" style="left:280px;top:95px;"><div class="card"><div class="hd"><span class="gl todo"></span><span class="lbl">Test restore</span></div><span class="tag">to do</span></div></div>
+        <div class="stbox" style="left:110px;top:195px;"><div class="card note"><div class="hd"><span class="gl todo"></span><span class="lbl">Fix Plex transcoding</span></div><span class="tag">to do</span></div></div>
+        <div class="stbox" style="left:450px;top:195px;"><div class="card cancel"><div class="hd"><span class="gl cancel"></span><span class="lbl">Try Btrfs snapshots</span></div><span class="tag">cancelled</span></div></div>
+        <div class="ttl" style="left:280px;top:440px;">Media server</div>
+
+        <!-- ===== Tree B: Home network ===== -->
+        <div class="dot" style="left:820px;top:380px;"></div>
+        <div class="dot" style="left:820px;top:280px;"></div>
+        <div class="dot" style="left:650px;top:180px;"></div>
+        <div class="dot" style="left:650px;top:80px;"></div>
+        <div class="stbox" style="left:820px;top:395px;"><div class="card"><div class="hd"><span class="gl done"></span><span class="lbl">Rack + patch panel</span></div><span class="tag">done</span></div></div>
+        <div class="stbox" style="left:820px;top:295px;"><div class="card"><div class="hd"><span class="gl done"></span><span class="lbl">VLAN segmentation</span></div><span class="tag">done</span></div></div>
+        <div class="stbox" style="left:820px;top:195px;"><div class="card cursor"><span class="flag">&#9650; HERE</span><div class="hd"><span class="gl prog"></span><span class="lbl">Firewall rules</span></div><span class="tag">in progress</span></div></div>
+        <div class="stbox" style="left:650px;top:195px;"><div class="card"><div class="hd"><span class="gl todo"></span><span class="lbl">Wi-Fi 7 APs</span></div><span class="tag">to do</span></div></div>
+        <div class="stbox" style="left:650px;top:95px;"><div class="card"><div class="hd"><span class="gl todo"></span><span class="lbl">Roaming test</span></div><span class="tag">to do</span></div></div>
+        <div class="ttl" style="left:820px;top:440px;">Home network</div>
+
+        <!-- ===== Tree C: Home automation ===== -->
+        <div class="dot" style="left:1170px;top:380px;"></div>
+        <div class="dot" style="left:1170px;top:180px;"></div>
+        <div class="dot" style="left:1000px;top:180px;"></div>
+        <div class="stbox" style="left:1170px;top:395px;"><div class="card"><div class="hd"><span class="gl done"></span><span class="lbl">Install Home Assistant</span></div><span class="tag">done</span></div></div>
+        <div class="stbox" style="left:1170px;top:295px;"><div class="card cursor"><span class="flag">&#9650; HERE</span><div class="hd"><span class="gl prog"></span><span class="lbl">Zigbee hub</span></div><span class="tag">in progress</span></div></div>
+        <div class="stbox" style="left:1170px;top:195px;"><div class="card"><div class="hd"><span class="gl todo"></span><span class="lbl">Door / window sensors</span></div><span class="tag">to do</span></div></div>
+        <div class="stbox" style="left:1000px;top:195px;"><div class="card"><div class="hd"><span class="gl todo"></span><span class="lbl">Energy monitoring</span></div><span class="tag">to do</span></div></div>
+        <div class="ttl" style="left:1170px;top:440px;">Home automation</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span><i style="background:var(--c-done)"></i> done</span>
+    <span><i style="background:var(--c-prog)"></i> in progress</span>
+    <span><i style="background:transparent;border:2px solid var(--c-todo)"></i> to do</span>
+    <span><i style="background:transparent;border:1.5px dashed var(--c-cancel)"></i> cancelled</span>
+    <span><i style="background:var(--cursor)"></i> branch cursor (sputnik &amp; HERE)</span>
+    <span><i style="background:var(--line);border-radius:1px;transform:rotate(45deg)"></i> fork junction</span>
+  </div>
+  <p class="hint">Drag to pan &middot; scroll to zoom &middot; Fit frames the forest. Fonts are system for now; a period display face is a later refinement.</p>
+</div>
+
+<script>
+(function(){
+  var CW=1320, CH=474;
+  var viewport=document.getElementById('viewport'),
+      world=document.getElementById('world'),
+      pct=document.getElementById('pct');
+  var s=1, tx=0, ty=0, MIN=0.2, MAX=3;
+
+  function apply(){
+    world.style.transform='translate('+tx+'px,'+ty+'px) scale('+s+')';
+    pct.textContent=Math.round(s*100)+'%';
+  }
+  function clamp(v){ return Math.max(MIN, Math.min(MAX, v)); }
+  function fit(){
+    var vw=viewport.clientWidth, vh=viewport.clientHeight;
+    s=clamp(Math.min(vw/CW, vh/CH)*0.94);
+    tx=(vw-CW*s)/2; ty=(vh-CH*s)/2; apply();
+  }
+  function zoomAt(factor, cx, cy){
+    var ns=clamp(s*factor); var wx=(cx-tx)/s, wy=(cy-ty)/s;
+    s=ns; tx=cx-wx*ns; ty=cy-wy*ns; apply();
+  }
+
+  document.getElementById('fit').addEventListener('click', fit);
+  document.getElementById('zin').addEventListener('click', function(){ zoomAt(1.2, viewport.clientWidth/2, viewport.clientHeight/2); });
+  document.getElementById('zout').addEventListener('click', function(){ zoomAt(1/1.2, viewport.clientWidth/2, viewport.clientHeight/2); });
+  viewport.addEventListener('wheel', function(e){
+    e.preventDefault(); var r=viewport.getBoundingClientRect();
+    zoomAt(e.deltaY<0?1.1:1/1.1, e.clientX-r.left, e.clientY-r.top);
+  }, {passive:false});
+
+  var drag=false, sx=0, sy=0, stx=0, sty=0;
+  viewport.addEventListener('pointerdown', function(e){
+    drag=true; sx=e.clientX; sy=e.clientY; stx=tx; sty=ty;
+    viewport.classList.add('dragging'); viewport.setPointerCapture(e.pointerId);
+  });
+  viewport.addEventListener('pointermove', function(e){ if(!drag) return; tx=stx+(e.clientX-sx); ty=sty+(e.clientY-sy); apply(); });
+  function endDrag(){ drag=false; viewport.classList.remove('dragging'); }
+  viewport.addEventListener('pointerup', endDrag);
+  viewport.addEventListener('pointercancel', endDrag);
+
+  var groundBar=document.getElementById('ground');
+  groundBar.addEventListener('click', function(e){
+    var b=e.target.closest('button'); if(!b) return;
+    document.documentElement.dataset.ground=b.dataset.g;
+    Array.prototype.forEach.call(groundBar.children, function(c){ c.classList.toggle('on', c===b); });
+  });
+
+  window.addEventListener('resize', fit);
+  if(document.readyState!=='loading') fit(); else document.addEventListener('DOMContentLoaded', fit);
+  window.__fit=fit; window.__zoomAt=zoomAt;
+})();
+</script>
+</body>
+</html>
