@@ -10,9 +10,13 @@ commitment — see the handbook's `documentation.md`.
 
 ## Design studies (open in a browser)
 
-- [`tree-grammars.html`](tree-grammars.html) — ten black-and-white layout
-  grammars for the task tree (five horizontal, five vertical), one shared skin,
-  the same sample forest in each. Awaiting a choice of grammar to carry forward.
+- [`subway-forest.html`](subway-forest.html) — the chosen direction, prototyped:
+  the subway grammar drawn vertically and bottom-up (roots at the base, growth
+  rising), three trees side by side as one forest, with pan, zoom, and a Fit
+  button that frames the whole forest. Still black-and-white.
+- [`tree-grammars.html`](tree-grammars.html) — the original ten black-and-white
+  layout grammars for the task tree (five horizontal, five vertical), one shared
+  skin, the same sample forest in each. Subway (grammar 3) was chosen.
 - [`theme_ideas.md`](theme_ideas.md) — the Googie / atomic-age / mid-century
   visual direction, held for the theming stage (skin comes after the grammar
   and data model).
