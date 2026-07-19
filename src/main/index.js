@@ -7,7 +7,7 @@ import { pathToFileURL, fileURLToPath } from 'node:url'
 import pkg from '../../package.json'
 import {
   getSettings, setLastDomain, getLibraryRoot, setLibraryRoot,
-  listDomains, createForest, loadForest, saveForest, readNote, writeNote, deleteNote,
+  listDomains, createForest, deleteForest, loadForest, saveForest, readNote, writeNote, deleteNote,
 } from './store.js'
 
 const isDev = !app.isPackaged
@@ -255,6 +255,7 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('tfs:list-domains',  () => listDomains())
   ipcMain.handle('tfs:create-forest', (_e, name) => createForest(name))
+  ipcMain.handle('tfs:delete-forest', (_e, dir) => deleteForest(dir))
   ipcMain.handle('tfs:load-forest',   (_e, dir) => loadForest(dir))
   ipcMain.handle('tfs:save-forest',   (_e, dir, text) => saveForest(dir, text))
   ipcMain.handle('tfs:read-note',     (_e, dir, file) => readNote(dir, file))

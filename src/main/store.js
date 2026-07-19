@@ -15,7 +15,7 @@
 // Writes are atomic (write a .tmp sibling, then rename) so an interrupted save
 // never truncates a good file.
 
-import { app } from 'electron'
+import { app, shell } from 'electron'
 import { join, dirname, resolve } from 'node:path'
 import {
   existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync,
@@ -157,6 +157,25 @@ export function createForest(name) {
   const skeleton = `{\n  schema: 1,\n  domain: ${JSON.stringify(name)},\n  trees: [],\n  tasks: {},\n}\n`
   atomicWrite(join(dir, FOREST_FILE), skeleton)
   return { name, path: dir }
+}
+
+// Move a whole domain directory (its forest.json5 and all note files) to the OS
+// Trash, so a deletion is recoverable. Path-bounded to an immediate child of the
+// library root, and it must actually be a domain (hold a forest.json5).
+export async function deleteForest(dirPath) {
+  let dir
+  try {
+    dir = requireDomainDir(dirPath)
+  } catch (e) {
+    return { error: e.message }
+  }
+  if (!existsSync(join(dir, FOREST_FILE))) return { error: 'not a domain (no forest.json5)' }
+  try {
+    await shell.trashItem(dir)
+    return { ok: true }
+  } catch (e) {
+    return { error: e.message }
+  }
 }
 
 export function loadForest(dirPath) {

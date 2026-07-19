@@ -21,6 +21,7 @@ function wrapRealBridge(bridge) {
     chooseLibraryRoot: () => bridge.chooseLibraryRoot(),
     listDomains:       () => bridge.listDomains(),
     createForest:      (name) => bridge.createForest(name),
+    deleteForest:      (dir) => bridge.deleteForest(dir),
     loadForest:        (dir) => bridge.loadForest(dir),
     saveForest:        (dir, text) => bridge.saveForest(dir, text),
     readNote:          (dir, file) => bridge.readNote(dir, file),
@@ -51,6 +52,11 @@ function makeFallback() {
       if (forests.has(path)) return { error: 'exists' }
       forests.set(path, `{ schema: 1, domain: ${JSON.stringify(name)}, trees: [], tasks: {} }\n`)
       return { name, path }
+    },
+    deleteForest:      async (dir) => {
+      forests.delete(dir)
+      for (const key of [...notes.keys()]) if (key.startsWith(dir + '/')) notes.delete(key)
+      return { ok: true }
     },
     loadForest:        async (dir) => (forests.has(dir) ? { text: forests.get(dir) } : { error: 'not found' }),
     saveForest:        async (dir, text) => { forests.set(dir, text); return { ok: true } },
@@ -91,6 +97,14 @@ export function createApi() {
     pending.set(dir, text)
     clearTimeout(timers.get(dir))
     timers.set(dir, setTimeout(() => writeNow(dir), ms))
+  }
+
+  // Drop a domain's queued debounced save without writing it — call before
+  // deleting that domain, so a pending write cannot re-create the trashed forest.
+  base.cancelPendingSave = (dir) => {
+    clearTimeout(timers.get(dir))
+    timers.delete(dir)
+    pending.delete(dir)
   }
 
   // Force every pending debounced write to happen now — call before the window

@@ -12,13 +12,20 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import JSON5 from 'json5'
 
-const h = vi.hoisted(() => ({ userData: '' }))
-vi.mock('electron', () => ({ app: { getPath: () => h.userData } }))
+// shell.trashItem is mocked (no real Trash in a headless test): it records the
+// call and, via h.rm, actually removes the source so listDomains reflects it.
+const h = vi.hoisted(() => ({ userData: '', trashed: [] }))
+vi.mock('electron', () => ({
+  app: { getPath: () => h.userData },
+  shell: { trashItem: async (p) => { h.trashed.push(p); if (h.rm) h.rm(p) } },
+}))
+h.rm = (p) => rmSync(p, { recursive: true, force: true })
 
 const store = await import('./store.js')
 
 beforeEach(() => {
   h.userData = mkdtempSync(join(tmpdir(), 'tfs-store-'))
+  h.trashed = []
 })
 afterEach(() => {
   rmSync(h.userData, { recursive: true, force: true })
@@ -84,6 +91,21 @@ describe('domains', () => {
     expect(store.createForest('../evil').error).toBeTruthy()
     expect(store.createForest('a/b').error).toBeTruthy()
   })
+
+  it('deletes a domain by moving it to the Trash', async () => {
+    const home = store.createForest('HomeLab')
+    store.createForest('Work')
+    const res = await store.deleteForest(home.path)
+    expect(res).toEqual({ ok: true })
+    expect(h.trashed).toContain(home.path) // trashItem was called with the bound-checked path
+    expect(store.listDomains().map((d) => d.name)).toEqual(['Work']) // gone from the library
+  })
+
+  it('refuses to delete a directory that is not a domain', async () => {
+    const res = await store.deleteForest(join(h.userData, 'forests', 'not-a-domain'))
+    expect(res.error).toBeTruthy()
+    expect(h.trashed).toEqual([])
+  })
 })
 
 describe('notes', () => {
@@ -98,9 +120,11 @@ describe('notes', () => {
 })
 
 describe('path safety', () => {
-  it('refuses a domain path outside the library root', () => {
+  it('refuses a domain path outside the library root', async () => {
     expect(store.loadForest('/etc').error).toMatch(/library root/)
     expect(store.saveForest('/etc', 'x').error).toMatch(/library root/)
+    expect((await store.deleteForest('/etc')).error).toMatch(/library root/)
+    expect(h.trashed).toEqual([]) // never reaches trashItem
   })
 
   it('refuses a note filename that is not a bare .md name', () => {
