@@ -1,0 +1,105 @@
+// SPDX-FileCopyrightText: 2026 Gary Frattarola <garycoding@gmail.com>
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// M2 fixture: the HomeLab sample forest in the real forest.json5 schema (see
+// docs/model_ideas.md), matching the render sample from M1
+// (render/sample-fixture.js). Loaded in-renderer via a Vite raw-text import
+// and parsed with the json5 package — the same parse path the M4 IPC bridge
+// will use for a real forest file on disk.
+{
+  schema: 1,
+  domain: "HomeLab",
+  trees: [
+    { id: "t_media", name: "Media server", rootTaskId: "k_nas" },
+    { id: "t_net", name: "Home network", rootTaskId: "k_rack" },
+    { id: "t_auto", name: "Home automation", rootTaskId: "k_hassio" },
+  ],
+  tasks: {
+    // ---- Media server ----
+    k_nas: {
+      id: "k_nas", title: "Set up NAS", status: "completed",
+      createdAt: "2026-06-01T09:00:00Z", completedAt: "2026-06-03T18:00:00Z",
+      note: null, here: false, next: "k_migrate", branches: [],
+    },
+    k_migrate: {
+      id: "k_migrate", title: "Migrate media library", status: "in-progress",
+      createdAt: "2026-06-03T18:05:00Z", completedAt: null,
+      note: null, here: true, next: "k_backups",
+      branches: [
+        { child: "k_plex", side: "left", at: "above" },
+        { child: "k_btrfs", side: "right", at: "above" },
+      ],
+    },
+    k_backups: {
+      id: "k_backups", title: "Automate backups", status: "in-progress",
+      createdAt: "2026-06-10T12:00:00Z", completedAt: null,
+      note: null, here: false, next: "k_restore", branches: [],
+    },
+    k_restore: {
+      id: "k_restore", title: "Test restore", status: "todo",
+      createdAt: "2026-06-10T12:01:00Z", completedAt: null,
+      note: null, here: false, next: null, branches: [],
+    },
+    k_plex: {
+      id: "k_plex", title: "Fix Plex transcoding", status: "todo",
+      createdAt: "2026-06-04T08:00:00Z", completedAt: null,
+      note: "k_plex.md", here: false, next: null, branches: [],
+    },
+    k_btrfs: {
+      id: "k_btrfs", title: "Try Btrfs snapshots", status: "cancelled",
+      createdAt: "2026-06-04T08:05:00Z", completedAt: null,
+      note: null, here: false, next: null, branches: [],
+    },
+
+    // ---- Home network ----
+    k_rack: {
+      id: "k_rack", title: "Rack + patch panel", status: "completed",
+      createdAt: "2026-05-01T09:00:00Z", completedAt: "2026-05-02T17:00:00Z",
+      note: null, here: false, next: "k_vlan", branches: [],
+    },
+    k_vlan: {
+      id: "k_vlan", title: "VLAN segmentation", status: "completed",
+      createdAt: "2026-05-02T17:05:00Z", completedAt: "2026-05-05T14:00:00Z",
+      note: null, here: false, next: "k_firewall",
+      branches: [{ child: "k_wifi", side: "left", at: "above" }],
+    },
+    k_firewall: {
+      id: "k_firewall", title: "Firewall rules", status: "in-progress",
+      createdAt: "2026-05-05T14:05:00Z", completedAt: null,
+      note: null, here: true, next: null, branches: [],
+    },
+    k_wifi: {
+      id: "k_wifi", title: "Wi-Fi 7 APs", status: "todo",
+      createdAt: "2026-05-06T10:00:00Z", completedAt: null,
+      note: null, here: false, next: "k_roam", branches: [],
+    },
+    k_roam: {
+      id: "k_roam", title: "Roaming test", status: "todo",
+      createdAt: "2026-05-06T10:01:00Z", completedAt: null,
+      note: null, here: false, next: null, branches: [],
+    },
+
+    // ---- Home automation ----
+    k_hassio: {
+      id: "k_hassio", title: "Install Home Assistant", status: "completed",
+      createdAt: "2026-04-01T09:00:00Z", completedAt: "2026-04-01T20:00:00Z",
+      note: null, here: false, next: "k_zigbee", branches: [],
+    },
+    k_zigbee: {
+      id: "k_zigbee", title: "Zigbee hub", status: "in-progress",
+      createdAt: "2026-04-02T09:00:00Z", completedAt: null,
+      note: null, here: true, next: "k_sensors",
+      branches: [{ child: "k_energy", side: "left", at: "above" }],
+    },
+    k_sensors: {
+      id: "k_sensors", title: "Door / window sensors", status: "todo",
+      createdAt: "2026-04-03T09:00:00Z", completedAt: null,
+      note: null, here: false, next: null, branches: [],
+    },
+    k_energy: {
+      id: "k_energy", title: "Energy monitoring", status: "todo",
+      createdAt: "2026-04-03T09:05:00Z", completedAt: null,
+      note: null, here: false, next: null, branches: [],
+    },
+  },
+}
