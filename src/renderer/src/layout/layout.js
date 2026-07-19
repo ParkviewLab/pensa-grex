@@ -19,12 +19,10 @@ const DEFAULTS = {
   titleGap: 20, // gap between a root card's bottom and its tree title
   treeGap: 90, // horizontal gap between two trees' bounding boxes
   margin: 40, // canvas margin on every side
-  // Branch connectors angle upward: the flat leg tilts this much above horizontal
-  // (a render-only shape change; lanes/rows/junctions are untouched — see
-  // docs/tree-layout.md). tan is precomputed so the per-branch math stays cheap.
+  // Branch connectors angle upward at ONE constant slope: every leg rises this much
+  // above horizontal, so all branches off a junction share a single ray and their
+  // cards staircase up along it, each lifted by its own leg's rise (docs/tree-layout.md).
   branchTiltTan: Math.tan((12 * Math.PI) / 180), // 12° above horizontal = 78° from the vertical trunk
-  branchRiseMax: 120, // hard cap on a leg's rise, so a far lane never climbs into an inner branch
-  minRiser: 8, // keep at least this much vertical riser into the branch card (never invert it)
 }
 
 export function computeForestLayout(forest, sizes, titleSizes, opts = {}) {
@@ -42,9 +40,60 @@ export function computeForestLayout(forest, sizes, titleSizes, opts = {}) {
   const rawX = new Map()
   for (const id of forest.tasks.keys()) rawX.set(id, lane.get(lineOfTask.get(id)) * o.laneStep)
 
+  // ---- per-branch upward offset ----
+  // Angling a branch up should carry the branch, and everything growing along
+  // it, up in y by the leg's rise, so it grows up along the angle instead of
+  // dropping back to a flat row. Each fork lifts its branch line by that leg's
+  // rise; nested forks accumulate. See docs/tree-layout.md.
+  const baseBottom = (id) => cardTopY.get(row.get(id)) + sizes.get(id).cardH
+
+  // The row/junction/rise geometry of one fork, read off the base (un-offset)
+  // grid; shared by the offset pass below and the connector emission later, so
+  // the elbow's rise and the branch's lift are always the same number.
+  function forkGeom(id, task, b) {
+    const parentRow = row.get(id)
+    let lowerRow, upperRow, upperId
+    if (b.at === 'below') {
+      if (task.predecessorId == null) { lowerRow = parentRow; upperRow = parentRow + 1; upperId = task.next }
+      else { lowerRow = parentRow - 1; upperRow = parentRow; upperId = id }
+    } else {
+      lowerRow = parentRow; upperRow = parentRow + 1; upperId = task.next
+    }
+    const lowerTop = cardTopY.get(lowerRow)
+    const upperBottom = upperId ? baseBottom(upperId) : anchorYForRow(upperRow)
+    const junctionY = (lowerTop + upperBottom) / 2
+    const anchorY = anchorYForRow(upperRow)
+    // One angle for every leg, regardless of how far out its lane is: all branches
+    // off a junction then lie along a single ray and their cards staircase up it.
+    // Raising the card in lockstep (see the offset pass) keeps the riser positive,
+    // so no cap is needed to stop it inverting.
+    const rise = Math.abs(rawX.get(b.child) - rawX.get(id)) * o.branchTiltTan
+    return { lowerRow, upperRow, upperId, junctionY, anchorY, rise }
+  }
+
+  // Each branch line (a branch child starts a line) records its spawning fork's
+  // parent line and leg rise; a line's total offset is its parent's plus its own
+  // leg rise, with trunk lines at zero.
+  const forkOfLine = new Map()
+  for (const [id, task] of forest.tasks) {
+    for (const b of task.branches) {
+      forkOfLine.set(b.child, { parent: lineOfTask.get(id), rise: forkGeom(id, task, b).rise })
+    }
+  }
+  const off = new Map()
+  const offOfLine = (lineId) => {
+    if (off.has(lineId)) return off.get(lineId)
+    const f = forkOfLine.get(lineId)
+    const v = f ? offOfLine(f.parent) + f.rise : 0
+    off.set(lineId, v)
+    return v
+  }
+  const offOf = (id) => offOfLine(lineOfTask.get(id))
+  const anchorYOf = (id) => anchorYForRow(row.get(id)) - offOf(id)
+
   function cardBox(id) {
     const { cardW, cardH } = sizes.get(id)
-    const top = cardTopY.get(row.get(id))
+    const top = cardTopY.get(row.get(id)) - offOf(id)
     const x = rawX.get(id)
     return { x, top, cardW, cardH, left: x - cardW / 2, right: x + cardW / 2, bottom: top + cardH }
   }
@@ -90,7 +139,7 @@ export function computeForestLayout(forest, sizes, titleSizes, opts = {}) {
   for (const [id, task] of forest.tasks) {
     const box = cardBox(id)
     const x = finalX(id)
-    const anchorY = anchorYForRow(row.get(id))
+    const anchorY = anchorYOf(id)
     stations.push({
       id, x, cardTop: box.top, cardW: box.cardW, cardH: box.cardH, anchorY,
       title: task.title, status: task.status, cursor: !!task.here, note: !!task.note,
@@ -112,8 +161,8 @@ export function computeForestLayout(forest, sizes, titleSizes, opts = {}) {
   for (const ids of linesByStart.values()) {
     const sorted = ids.slice().sort((a, b) => row.get(a) - row.get(b))
     const x = finalX(sorted[0])
-    const yBottom = anchorYForRow(row.get(sorted[0]))
-    const yTop = anchorYForRow(row.get(sorted[sorted.length - 1]))
+    const yBottom = anchorYOf(sorted[0])
+    const yTop = anchorYOf(sorted[sorted.length - 1])
     tracks.push({ points: [[x, yBottom], [x, yTop]] })
   }
 
@@ -128,52 +177,33 @@ export function computeForestLayout(forest, sizes, titleSizes, opts = {}) {
   const junctionByKey = new Map()
   for (const [id, task] of forest.tasks) {
     for (const b of task.branches) {
-      const parentRow = row.get(id)
-      let lowerRow, upperRow, upperId
-      if (b.at === 'below') {
-        if (task.predecessorId == null) {
-          // A root has no predecessor to fork "below" — fall back to
-          // attaching above rather than producing a degenerate gap.
-          lowerRow = parentRow; upperRow = parentRow + 1; upperId = task.next
-        } else {
-          lowerRow = parentRow - 1; upperRow = parentRow; upperId = id
-        }
-      } else {
-        lowerRow = parentRow; upperRow = parentRow + 1; upperId = task.next
-      }
-      const lowerTop = cardTopY.get(lowerRow)
-      const upperBottom = upperId ? cardBox(upperId).bottom : anchorYForRow(upperRow)
-      const junctionY = (lowerTop + upperBottom) / 2
+      const g = forkGeom(id, task, b)
+      const offParent = offOf(id)
+      const junctionY = g.junctionY - offParent
       const parentX = finalX(id)
       const branchX = finalX(b.child)
-      const branchAnchorY = anchorYForRow(upperRow)
+      // The branch card is lifted by this leg's rise on top of the parent line,
+      // so it grows up along the angle (offOf(b.child) === offParent + g.rise).
+      const branchAnchorY = g.anchorY - offOf(b.child)
 
-      const key = id + ':' + lowerRow
+      const key = id + ':' + g.lowerRow
       if (!junctionByKey.has(key)) {
         junctionByKey.set(key, { x: parentX, y: junctionY })
         // Connect the parent up (or down) to the junction when the junction
         // falls outside the parent line's riser — a fork off a line tip would
         // otherwise leave the diamond floating, disconnected (docs/tree-layout.md).
         const pr = lineRows.get(lineOfTask.get(id))
-        const riserTopY = anchorYForRow(pr.max) // highest point of the riser (smallest y)
-        const riserBottomY = anchorYForRow(pr.min) // lowest point (largest y)
+        const riserTopY = anchorYForRow(pr.max) - offParent // highest point of the riser (smallest y)
+        const riserBottomY = anchorYForRow(pr.min) - offParent // lowest point (largest y)
         if (junctionY < riserTopY) tracks.push({ points: [[parentX, riserTopY], [parentX, junctionY]] })
         else if (junctionY > riserBottomY) tracks.push({ points: [[parentX, riserBottomY], [parentX, junctionY]] })
       }
-      // Tilt the flat leg up ~12° over the same horizontal delta, then a short
-      // vertical riser into the branch card (docs/tree-layout.md). Only the middle
-      // elbow moves off junctionY; the diamond stays at [parentX, junctionY] and
-      // the branch card at [branchX, branchAnchorY], so no lane/row/junction value
-      // changes. The rise is capped so the riser never inverts and a far lane
-      // never climbs into an inner branch.
+      // Tilt the flat leg up ~12° to the elbow, then a vertical riser into the
+      // lifted branch card (docs/tree-layout.md). The elbow and the card both rise
+      // by g.rise, so the leg keeps its 12° and the riser keeps its length; the
+      // diamond stays at [parentX, junctionY].
       const dir = Math.sign(branchAnchorY - junctionY) // -1 for an above-branch, +1 for a below-branch
-      const room = Math.abs(branchAnchorY - junctionY)
-      const rise = Math.min(
-        Math.abs(branchX - parentX) * o.branchTiltTan,
-        o.branchRiseMax,
-        Math.max(0, room - o.minRiser),
-      )
-      const elbowY = junctionY + dir * rise
+      const elbowY = junctionY + dir * g.rise
       tracks.push({ points: [[parentX, junctionY], [branchX, elbowY], [branchX, branchAnchorY]] })
     }
   }

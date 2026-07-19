@@ -215,7 +215,14 @@ function segments(layout) {
   return segs
 }
 
-const orient = (a, b, c) => Math.sign((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]))
+// A near-zero determinant means c is on line ab (collinear / a T-junction where
+// one segment's endpoint lands on the other). Threshold before Math.sign so
+// floating-point non-associativity (~1 ULP) does not read an exact touch as a
+// sign change; real crossings are orders of magnitude clear of the epsilon.
+const orient = (a, b, c) => {
+  const v = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+  return Math.abs(v) < 1e-6 ? 0 : Math.sign(v)
+}
 // A "proper" crossing: the segments intersect at a point interior to both.
 // Shared endpoints (junctions, anchors) and collinear touches yield a zero
 // orientation and are not counted — those are legitimate joins, not crossings.
@@ -346,6 +353,35 @@ describe('computeForestLayout — angled branch connectors', () => {
     // the last leg is a vertical riser, and the diamond did not move
     expect(Math.abs(p1[0] - p2[0])).toBeLessThan(0.5)
     expect(Math.abs(j.x - a.x)).toBeLessThan(0.5)
+    expect(countCrossings(layout)).toBe(0)
+  })
+
+  it('gives every branch off one junction the same slope, however far out its lane', () => {
+    // a forks right to three branches at increasing lanes; sharing one junction,
+    // their legs must all leave it at the same angle (a single ray), not flatten
+    // as the lane gets further out.
+    const fan = {
+      schema: 1, domain: 'F', trees: [{ id: 't', name: 'Fan', rootTaskId: 'a' }],
+      tasks: {
+        a: mkTask('a', { next: 'b', branches: [
+          { child: 'c', side: 'right', at: 'above' },
+          { child: 'd', side: 'right', at: 'above' },
+          { child: 'e', side: 'right', at: 'above' },
+        ] }),
+        b: mkTask('b'), c: mkTask('c'), d: mkTask('d'), e: mkTask('e'),
+      },
+    }
+    const layout = layoutOf(fan)
+    const conns = layout.tracks.filter((t) => t.points.length === 3) // the three branch connectors
+    expect(conns).toHaveLength(3)
+    const tan12 = Math.tan((12 * Math.PI) / 180)
+    const runs = conns.map((t) => Math.abs(t.points[1][0] - t.points[0][0]))
+    for (const [p0, p1] of conns.map((t) => t.points)) {
+      const slope = Math.abs(p1[1] - p0[1]) / Math.abs(p1[0] - p0[0])
+      expect(slope).toBeCloseTo(tan12, 6)
+    }
+    // the lanes really are at increasing distances (so the slope test has teeth)
+    expect(Math.max(...runs)).toBeGreaterThan(Math.min(...runs) + 1)
     expect(countCrossings(layout)).toBe(0)
   })
 })

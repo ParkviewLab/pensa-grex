@@ -109,22 +109,30 @@ covers the mirror case of a fork below a line's first task.
 
 ## Angled connectors
 
-By default the branch connector is an L: a horizontal leg from the trunk out to the
+By default a branch connector is an L: a horizontal leg from the trunk out to the
 branch lane, then a vertical riser into the branch card. Trees, and the subway map
-that inspired this one, angle their branches upward rather than leaving at a right
-angle, so the flat leg is tilted up 12° above horizontal (78° from the vertical
-trunk) over the *same* horizontal delta, followed by a short vertical riser. This is
-purely a connector-shape change in `layout.js`: only the middle elbow moves off
-`junctionY` toward the anchor; the lane, row, junction, and the fork diamond (still
-at `[parentX, junctionY]`) are untouched, so the packer's guarantees carry over.
+that inspired this one, angle their branches upward instead, so the flat leg is
+tilted up at a constant 12° above horizontal (78° from the vertical trunk) over the
+*same* horizontal delta, then a vertical riser. The angle is the same for every
+branch, however far out its lane, so all the branches off one junction lie along a
+single ray and their cards staircase up it.
 
-Because a rising leg reaches toward the branches inner to it, the non-crossing
-property is no longer guaranteed by construction; it becomes a property to validate.
-Two caps keep it safe: the rise never exceeds the room between the junction and the
-anchor (so the riser never inverts), and a `branchRiseMax` ceiling keeps a far,
-multi-lane leg from climbing into an inner branch. The angle and both caps are
-`DEFAULTS` in `layout.js`, and the `countCrossings` guard below runs over the tilted
-connectors, so a regression that made two legs cross fails the tests.
+Crucially the branch card, and everything growing along it, is *lifted* in y by the
+leg's rise, so it grows up along the angle rather than dropping back to a flat row;
+a branch off a branch accumulates its own leg's rise on top of its parent's. This
+moves cards, so it is a layout change, not a render-only one: a per-line vertical
+offset (a line's parent offset plus its own leg rise) threads through the card
+positions, risers, junctions, and bounds. The fork diamond stays at
+`[parentX, junctionY]`, and lanes and rows are unchanged, so the packer's horizontal
+guarantees carry over.
+
+Because the card rises in lockstep with its elbow, the vertical riser keeps its
+length and can never invert, so no rise cap is needed and the angle stays a single
+constant; the only `DEFAULTS` knob is the angle itself (`branchTiltTan`). The legs
+off one junction are collinear (they share the ray) and the per-lane risers sit at
+distinct x, so nothing crosses; the `countCrossings` guard treats a near-zero
+orientation as collinear, so the T-junctions where a riser meets the ray are read as
+touches rather than crossings.
 
 ## Tests
 
@@ -134,9 +142,10 @@ sub-branch cannot collide). `layout.test.js` carries the strongest guard: a
 `countCrossings` helper that decomposes every track into segments and asserts no
 two properly cross, run over the Wide tree (the case that first exposed the bug),
 the HomeLab fixture, and a deep both-sides nest; plus a tip-fork test that a stub
-connects the tip parent up to its junction, and an angled-connector test that the
-elbow lifts off the junction (no steeper than 12°) while the diamond and the
-vertical riser are preserved.
+connects the tip parent up to its junction, an angled-connector test that the elbow
+lifts off the junction (at 12°) while the diamond and the vertical riser are
+preserved, and a fan test that three branches off one junction all leave it at the
+same slope however far out their lanes are.
 
 ## References
 
