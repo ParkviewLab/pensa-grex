@@ -21,6 +21,7 @@ import { createApi } from './bridge/api.js'
 import { taskIdFromEvent } from './interaction/hittest.js'
 import { openContextMenu, closeContextMenu } from './interaction/contextMenu.js'
 import { promptText, chooseAction } from './ui/dialog.js'
+import { createNoteEditor } from './notes/noteEditor.js'
 import * as M from './model/mutations.js'
 import homelabFixtureRaw from './model/fixtures/homelab.forest.json5?raw'
 import workFixtureRaw from './model/fixtures/work.forest.json5?raw'
@@ -38,6 +39,23 @@ const api = createApi()
 let currentLayout = null
 let currentRaw = null
 let currentDomainPath = null
+
+// The note editor records a task's note filename on its first non-empty save, so
+// the note dot appears and the name is persisted in the forest.
+const noteEditor = createNoteEditor({
+  readNote: (dir, file) => api.readNote(dir, file),
+  writeNote: (dir, file, text) => api.writeNote(dir, file, text),
+  openExternal: (url) => api.openExternal(url),
+  onFirstWrite: (taskId, file) => {
+    const t = currentRaw && currentRaw.tasks[taskId]
+    if (t && !t.note) applyEdit(M.setNote(currentRaw, taskId, file))
+  },
+})
+
+function openNote(taskId) {
+  const t = currentRaw && currentRaw.tasks[taskId]
+  if (t) noteEditor.open(t, currentDomainPath)
+}
 
 const viewport = createViewport({
   viewportEl, worldEl, pctEl,
@@ -112,6 +130,7 @@ async function applyEdit(nextRaw) {
 async function openDomain(path, name) {
   if (!path) return
   closeContextMenu()
+  noteEditor.close()
   const res = await api.loadForest(path)
   if (res.error) {
     showEmpty('Could not open “' + (name || path) + '”: ' + res.error)
@@ -204,6 +223,8 @@ function openTaskMenu(x, y, taskId) {
     { label: 'Add branch above', onClick: () => addBranchFlow('above', taskId) },
     { label: 'Add branch below', onClick: () => addBranchFlow('below', taskId) },
     { separator: true },
+    { label: 'Edit note…', onClick: () => openNote(taskId) },
+    { separator: true },
     { label: 'Delete…', onClick: () => deleteTaskFlow(taskId) },
   ])
 }
@@ -218,6 +239,13 @@ viewportEl.addEventListener('contextmenu', (e) => {
   const taskId = taskIdFromEvent(e)
   if (taskId && currentRaw.tasks[taskId]) openTaskMenu(e.clientX, e.clientY, taskId)
   else openCanvasMenu(e.clientX, e.clientY)
+})
+
+// Double-clicking a task label opens its note (the same as Edit note).
+viewportEl.addEventListener('dblclick', (e) => {
+  if (!currentRaw) return
+  const taskId = taskIdFromEvent(e)
+  if (taskId && currentRaw.tasks[taskId]) openNote(taskId)
 })
 
 function populateSwitcher(domains, selectedPath) {

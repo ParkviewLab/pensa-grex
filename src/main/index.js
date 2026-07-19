@@ -84,6 +84,9 @@ const LICENSE_HIGHLIGHTS = [
   { pkg: 'electron', label: 'Electron', role: 'Desktop app runtime (Chromium + Node.js)',
     note: 'MIT · bundles Chromium + Node.js', repo: 'https://github.com/electron/electron' },
   { pkg: 'json5', label: 'JSON5', role: 'Reads and writes the forest files' },
+  { pkg: 'codemirror', label: 'CodeMirror', role: 'The in-app note editor' },
+  { pkg: 'marked', label: 'Marked', role: 'Renders note markdown' },
+  { pkg: 'katex', label: 'KaTeX', role: 'Math typesetting in notes' },
 ]
 
 let _licWin = null
@@ -225,6 +228,9 @@ app.whenReady().then(() => {
   ipcMain.handle('tfs:read-note',     (_e, dir, file) => readNote(dir, file))
   ipcMain.handle('tfs:write-note',    (_e, dir, file, text) => writeNote(dir, file, text))
   ipcMain.handle('tfs:delete-note',   (_e, dir, file) => deleteNote(dir, file))
+  ipcMain.handle('tfs:open-external', (_e, url) => {
+    if (typeof url === 'string' && /^https?:\/\//i.test(url)) shell.openExternal(url)
+  })
 
   // Safety net: keep the window from navigating away from the app; open any
   // external URL that slips through in the system browser instead.
