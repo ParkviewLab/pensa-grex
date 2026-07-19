@@ -37,9 +37,20 @@ holder.
 |---|---|
 | Source code, build scripts, configuration, lockfiles | **`AGPL-3.0-or-later`** — or the commercial license above |
 | Documentation (`docs/`, `README.md`, this file) | **`CC-BY-4.0`** |
+| Bundled typefaces (`src/renderer/src/assets/fonts/`) | **`OFL-1.1`** (SIL Open Font License) — see below |
 
 A future brand/logo asset would be all-rights-reserved (`LicenseRef-AllRightsReserved`),
 matching the ParkviewLab convention this repo follows — added if/when one exists.
+
+### Bundled typefaces
+
+The app self-hosts two open typefaces under the **SIL Open Font License 1.1**
+(`LICENSES/OFL-1.1.txt`): **League Spartan** (Copyright 2020 The League Spartan
+Project Authors) for the interface and tree titles, and **Boogaloo** (Copyright ©
+2011 John Vargas Beltrán) for task names and the app title. The OFL text ships in
+the packaged `legal/` bundle and both faces are listed in the in-app "Open Source
+Licenses" window. The woff2 files are annotated in [`REUSE.toml`](REUSE.toml)
+(binary files cannot carry an inline SPDX header).
 
 Licensing is machine-verifiable: every file carries an SPDX tag or is annotated
 in [`REUSE.toml`](REUSE.toml), and the repository passes `reuse lint`.
