@@ -19,7 +19,11 @@
     "start": "electron-vite preview",
     "lint": "eslint .",
     "test": "vitest run",
-    "build:dist": "electron-vite build && electron-builder"
+    "legal:prepare": "node scripts/prepare-legal.mjs",
+    "legal:notices": "generate-license-file --input ./package.json --output ./legal/THIRD-PARTY-NOTICES.txt --overwrite --eol lf --ci",
+    "legal:list": "license-checker-rseidelsohn --production --json --out ./legal/oss-licenses.json && node scripts/clean-oss-licenses.mjs",
+    "legal": "npm run legal:prepare && npm run legal:notices && npm run legal:list",
+    "build:dist": "npm run legal && electron-vite build && electron-builder"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -27,7 +31,9 @@
     "electron-builder": "^26.15.3",
     "electron-vite": "^2.3.0",
     "eslint": "^10.5.0",
+    "generate-license-file": "^4.2.1",
     "globals": "^17.6.0",
+    "license-checker-rseidelsohn": "^5.0.1",
     "vite": "^5.0.0",
     "vitest": "^2.1.9"
   },

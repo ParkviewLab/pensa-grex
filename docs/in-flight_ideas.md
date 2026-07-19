@@ -34,13 +34,15 @@ the app's actual purpose was written down. `docs/northstar.md` is optional
 but valuable once the intent is clear — worth writing as soon as
 TaskForkStack's shape settles.
 
-# 2. Deferred: in-app license-notices viewer
+# 2. Done (M4): in-app license-notices viewer
 
-The handbook's `electron-tooling.md` describes a generated `legal/` bundle
-(`scripts/prepare-legal.mjs`, a `Help → Open Source Licenses` window) that
-ships third-party notices with a packaged build. Skipped at bootstrap since
-there are no dependencies yet worth notarizing. Worth adding once real
-dependencies accumulate — conception-space is the reference implementation.
+The handbook's `electron-tooling.md` legal bundle is now wired: `scripts/`
+carries `prepare-legal.mjs` and `clean-oss-licenses.mjs`, `package.json` has the
+`legal:*` scripts (folded into `build:dist`), `electron-builder.yml` ships
+`legal/` as `extraResources`, and `src/main/index.js` has a `Help → Open Source
+Licenses` window reading `legal/oss-licenses.json`. The `LICENSE_HIGHLIGHTS`
+list currently names Electron and JSON5; extend it as M6 adds CodeMirror,
+Marked, and KaTeX.
 
 # 3. Deferred: code signing
 

@@ -35,6 +35,14 @@ linux:
   category: Utility
   maintainer: Gary Frattarola <garycoding@gmail.com>
 npmRebuild: false
+# Ship the generated license/notice bundle (run `npm run legal` first; build:dist
+# does this before packaging). electron-builder deletes LICENSES.chromium.html
+# from the mac .app, so legal/ carries our own copy → one stable path on all
+# OSes: process.resourcesPath/legal at runtime. See scripts/prepare-legal.mjs.
+extraResources:
+  - from: legal
+    to: legal
+    filter: ['**/*']
 publish:
   provider: github
   owner: garycoding

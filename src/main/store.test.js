@@ -1,0 +1,102 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Gary Frattarola <garycoding@gmail.com>
+
+// Integration test for the persistence store against a real temporary directory.
+// Only electron's app.getPath is mocked (the store's one electron dependency);
+// every filesystem operation runs for real, so this exercises the actual
+// create/load/save/note round trips and the path-safety boundary end to end.
+
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import JSON5 from 'json5'
+
+const h = vi.hoisted(() => ({ userData: '' }))
+vi.mock('electron', () => ({ app: { getPath: () => h.userData } }))
+
+const store = await import('./store.js')
+
+beforeEach(() => {
+  h.userData = mkdtempSync(join(tmpdir(), 'tfs-store-'))
+})
+afterEach(() => {
+  rmSync(h.userData, { recursive: true, force: true })
+})
+
+describe('library root and settings', () => {
+  it('defaults the library root under userData', () => {
+    expect(store.getLibraryRoot()).toBe(join(h.userData, 'forests'))
+  })
+
+  it('repoints the library root and persists it', () => {
+    const other = mkdtempSync(join(tmpdir(), 'tfs-lib-'))
+    store.setLibraryRoot(other)
+    expect(store.getLibraryRoot()).toBe(other)
+    expect(store.getSettings().libraryRoot).toBe(other)
+    rmSync(other, { recursive: true, force: true })
+  })
+
+  it('persists the last-opened domain', () => {
+    store.setLastDomain('Work')
+    expect(store.getSettings().lastDomain).toBe('Work')
+  })
+})
+
+describe('domains', () => {
+  it('creates a loadable, valid-shaped forest and lists it', () => {
+    const created = store.createForest('HomeLab')
+    expect(created.name).toBe('HomeLab')
+    const load = store.loadForest(created.path)
+    const parsed = JSON5.parse(load.text)
+    expect(parsed.schema).toBe(1)
+    expect(parsed.domain).toBe('HomeLab')
+    expect(parsed.trees).toEqual([])
+    expect(store.listDomains()).toEqual([{ name: 'HomeLab', path: created.path }])
+  })
+
+  it('lists multiple domains sorted by name', () => {
+    store.createForest('Work')
+    store.createForest('HomeLab')
+    expect(store.listDomains().map((d) => d.name)).toEqual(['HomeLab', 'Work'])
+  })
+
+  it('round-trips a saved forest', () => {
+    const { path } = store.createForest('HomeLab')
+    const text = '{ schema: 1, domain: "HomeLab", trees: [], tasks: {} }\n'
+    expect(store.saveForest(path, text)).toEqual({ ok: true })
+    expect(store.loadForest(path).text).toBe(text)
+  })
+
+  it('rejects a duplicate or invalid domain name', () => {
+    store.createForest('HomeLab')
+    expect(store.createForest('HomeLab').error).toMatch(/already exists/)
+    expect(store.createForest('../evil').error).toBeTruthy()
+    expect(store.createForest('a/b').error).toBeTruthy()
+  })
+})
+
+describe('notes', () => {
+  it('round-trips a note and reports a missing note as empty', () => {
+    const { path } = store.createForest('HomeLab')
+    expect(store.readNote(path, 'k_plex.md')).toEqual({ content: '' })
+    store.writeNote(path, 'k_plex.md', '# hello\n')
+    expect(store.readNote(path, 'k_plex.md').content).toBe('# hello\n')
+    store.deleteNote(path, 'k_plex.md')
+    expect(store.readNote(path, 'k_plex.md')).toEqual({ content: '' })
+  })
+})
+
+describe('path safety', () => {
+  it('refuses a domain path outside the library root', () => {
+    expect(store.loadForest('/etc').error).toMatch(/library root/)
+    expect(store.saveForest('/etc', 'x').error).toMatch(/library root/)
+  })
+
+  it('refuses a note filename that is not a bare .md name', () => {
+    const { path } = store.createForest('HomeLab')
+    expect(store.readNote(path, '../secret.md').error).toMatch(/invalid note/)
+    expect(store.writeNote(path, 'a/b.md', 'x').error).toMatch(/invalid note/)
+    expect(store.readNote(path, 'notes.txt').error).toMatch(/invalid note/)
+  })
+})
