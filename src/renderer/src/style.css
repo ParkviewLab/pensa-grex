@@ -60,3 +60,41 @@ body{
   position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
   color:var(--muted); font-size:14px; letter-spacing:.02em; pointer-events:none;
 }
+
+/* The subway map: tracks, fork junctions, the sputnik cursor mark, station
+   dots, tree-name titles, and station cards. Ported from the design mock. */
+.track{ fill:none; stroke:var(--line); stroke-width:2.5; stroke-linecap:round; stroke-linejoin:round; }
+.fork{ fill:var(--line); }
+.burst line{ stroke:var(--burst-a); stroke-width:1.4; }
+.burst.b line{ stroke:var(--burst-b); }
+.burst{ opacity:.13; }
+.cursor-mark line{ stroke:var(--ink); stroke-width:1.6; }
+.cursor-mark .ball{ fill:var(--ink); }
+.cursor-mark .core{ fill:var(--ink); }
+
+.dot{ position:absolute; width:11px; height:11px; border-radius:50%; background:var(--line);
+  transform:translate(-50%,-50%); z-index:2; }
+.ttl{ position:absolute; transform:translateX(-50%); text-align:center; font-size:11px; font-weight:800;
+  letter-spacing:.08em; text-transform:uppercase; color:var(--ink); white-space:nowrap; }
+
+.stbox{ position:absolute; transform:translateX(-50%); z-index:2; }
+.card{ position:relative; background:transparent; padding:11px 16px;
+  width:138px; display:flex; flex-direction:column; gap:3px; }
+.card.cursor{ padding-left:24px; padding-right:24px; }
+.card > .hd, .card > .tag, .card > .here{ position:relative; z-index:1; }
+.cardbg{ position:absolute; inset:0; width:100%; height:100%; overflow:visible; z-index:0; pointer-events:none; }
+.cardbg .outer{ fill:var(--line); }
+.cardbg .inner{ fill:var(--panel); }
+.card .hd{ display:flex; align-items:center; gap:7px; }
+.card .lbl{ font-size:11.5px; line-height:1.18; color:var(--ink); }
+.card.cancel .lbl{ text-decoration:line-through; color:var(--muted); }
+.card .tag{ font-size:8.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
+.card.note::after{ content:""; position:absolute; top:9px; right:15px; width:6px; height:6px; border-radius:50%; background:var(--c-todo); z-index:1; }
+.here{ align-self:flex-start; font-size:8px; font-weight:800; letter-spacing:.14em; color:var(--ground);
+  background:var(--cursor); padding:1px 5px; border-radius:3px; }
+
+.gl{ width:11px; height:11px; border-radius:50%; flex:none; }
+.gl.done{ background:var(--c-done); }
+.gl.prog{ background:var(--c-prog); }
+.gl.todo{ background:transparent; border:2px solid var(--c-todo); }
+.gl.cancel{ background:transparent; border:1.5px dashed var(--c-cancel); }
