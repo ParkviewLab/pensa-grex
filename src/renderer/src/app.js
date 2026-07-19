@@ -34,6 +34,7 @@ const contentEl = document.getElementById('content')
 const emptyEl = document.getElementById('empty')
 const pctEl = document.getElementById('pct')
 const domainSel = document.getElementById('domain')
+const delDomainBtn = document.getElementById('deldomain')
 
 const api = createApi()
 let currentLayout = null
@@ -94,7 +95,14 @@ domainSel.addEventListener('change', () => {
   if (domainSel.value === NEW_DOMAIN) { createDomainFlow(); return }
   openDomain(domainSel.value, domainSel.selectedOptions[0]?.textContent)
 })
+delDomainBtn.addEventListener('click', () => deleteDomainFlow())
 window.addEventListener('resize', () => viewport.fit())
+
+// The delete button acts on the open domain, so it is disabled when none is open.
+function updateDeleteButton() {
+  delDomainBtn.disabled = !currentDomainPath
+}
+updateDeleteButton()
 
 function showEmpty(message) {
   contentEl.innerHTML = ''
@@ -176,6 +184,7 @@ async function openDomain(path, name) {
   currentRaw = raw
   currentDomainPath = path
   await api.setLastDomain(name)
+  updateDeleteButton()
   await render(buildForest(raw), { fit: true })
 }
 
@@ -313,6 +322,41 @@ async function createDomainFlow() {
   const domains = await api.listDomains()
   populateSwitcher(domains, res.path)
   await openDomain(res.path, res.name)
+}
+
+async function deleteDomainFlow() {
+  if (!currentDomainPath) return
+  const path = currentDomainPath
+  const name = domainSel.selectedOptions[0]?.textContent || 'this domain'
+  const choice = await chooseAction({
+    title: 'Delete “' + name + '”',
+    message: 'Move “' + name + '” and all its notes to the Trash? You can restore them from the Trash.',
+    actions: [{ label: 'Cancel', value: null }, { label: 'Delete', value: 'delete', kind: 'danger' }],
+  })
+  if (choice !== 'delete') return
+
+  noteEditor.close()
+  closeContextMenu()
+  api.cancelPendingSave(path) // a queued save must not re-create the trashed forest
+  const res = await api.deleteForest(path)
+  if (res.error) {
+    await chooseAction({ title: 'Could not delete domain', message: res.error, actions: [{ label: 'OK', value: null }] })
+    return
+  }
+
+  const domains = await api.listDomains()
+  if (!domains.length) {
+    currentDomainPath = null
+    currentRaw = null
+    await api.setLastDomain(null)
+    populateSwitcher([], null)
+    updateDeleteButton()
+    showEmpty('No domains. Use “New domain…” in the switcher to create one.')
+    return
+  }
+  const next = domains[0]
+  populateSwitcher(domains, next.path)
+  await openDomain(next.path, next.name)
 }
 
 async function boot() {

@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('taskforkstack', {
   chooseLibraryRoot: ()                  => ipcRenderer.invoke('tfs:choose-library-root'),
   listDomains:       ()                  => ipcRenderer.invoke('tfs:list-domains'),
   createForest:      (name)              => ipcRenderer.invoke('tfs:create-forest', name),
+  deleteForest:      (dir)               => ipcRenderer.invoke('tfs:delete-forest', dir),
   loadForest:        (dir)               => ipcRenderer.invoke('tfs:load-forest', dir),
   saveForest:        (dir, text)         => ipcRenderer.invoke('tfs:save-forest', dir, text),
   readNote:          (dir, file)         => ipcRenderer.invoke('tfs:read-note', dir, file),

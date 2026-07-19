@@ -48,6 +48,10 @@ body{
 .btn:hover{ background:color-mix(in srgb, var(--line) 16%, transparent); }
 .btn.primary{ background:var(--ink); color:var(--ground); border-color:var(--ink); }
 .btn.icon{ width:30px; padding:6px 0; text-align:center; font-size:14px; }
+.btn.danger{ color:var(--c-prog); border-color:color-mix(in srgb, var(--c-prog) 55%, var(--line)); }
+.btn.danger:hover{ background:color-mix(in srgb, var(--c-prog) 16%, transparent); }
+.btn:disabled{ opacity:.4; cursor:default; }
+.btn:disabled:hover{ background:transparent; }
 .pct{ font-size:11px; color:var(--muted); min-width:42px; text-align:center; font-variant-numeric:tabular-nums; }
 
 .viewport{
