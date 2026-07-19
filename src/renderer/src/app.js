@@ -57,6 +57,27 @@ function openNote(taskId) {
   if (t) noteEditor.open(t, currentDomainPath)
 }
 
+// A failed forest save must not be silent — the edit is on screen but not on
+// disk. Surface it once (not once per retry) without tearing down the map.
+let saveErrorOpen = false
+api.onSaveError = async (msg) => {
+  if (saveErrorOpen) return
+  saveErrorOpen = true
+  await chooseAction({
+    title: 'Save failed',
+    message: 'A change could not be saved to disk: ' + msg,
+    actions: [{ label: 'OK', value: null }],
+  })
+  saveErrorOpen = false
+}
+
+// Flush pending debounced writes (forest and the open note) before the window
+// closes, so an edit made within the debounce window is not lost on quit.
+window.addEventListener('beforeunload', () => {
+  api.flushSaves()
+  noteEditor.flush()
+})
+
 const viewport = createViewport({
   viewportEl, worldEl, pctEl,
   getBounds: () => currentLayout?.bounds || { w: 0, h: 0 },

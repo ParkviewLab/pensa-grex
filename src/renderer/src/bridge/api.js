@@ -65,10 +65,41 @@ export function createApi() {
   const raw = window.taskforkstack
   const base = raw && Object.keys(raw).length ? wrapRealBridge(raw) : makeFallback()
 
-  const timers = new Map()
+  // Set by the caller to be told when a debounced forest save fails, so a lost
+  // write is never silent (the on-screen edit would otherwise not reach disk).
+  base.onSaveError = null
+
+  const timers = new Map() // dir -> timeout id
+  const pending = new Map() // dir -> latest text awaiting a write
+
+  async function writeNow(dir) {
+    const text = pending.get(dir)
+    pending.delete(dir)
+    timers.delete(dir)
+    if (text === undefined) return
+    try {
+      const r = await base.saveForest(dir, text)
+      if (r && r.error) throw new Error(r.error)
+    } catch (e) {
+      const msg = (e && e.message) || String(e)
+      console.error('forest save failed:', msg)
+      if (base.onSaveError) base.onSaveError(msg)
+    }
+  }
+
   base.saveForestDebounced = (dir, text, ms = 500) => {
+    pending.set(dir, text)
     clearTimeout(timers.get(dir))
-    timers.set(dir, setTimeout(() => { base.saveForest(dir, text) }, ms))
+    timers.set(dir, setTimeout(() => writeNow(dir), ms))
+  }
+
+  // Force every pending debounced write to happen now — call before the window
+  // closes so an edit made within the debounce window is not lost on quit.
+  base.flushSaves = () => {
+    for (const dir of [...timers.keys()]) {
+      clearTimeout(timers.get(dir))
+      writeNow(dir)
+    }
   }
   return base
 }

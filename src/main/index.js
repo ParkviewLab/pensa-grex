@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Gary Frattarola <garycoding@gmail.com>
-import { app, BrowserWindow, Menu, ipcMain, dialog, shell } from 'electron'
+import { app, BrowserWindow, Menu, ipcMain, dialog, shell, session } from 'electron'
 import { join } from 'path'
 import { readFileSync, existsSync } from 'fs'
 import { pathToFileURL, fileURLToPath } from 'node:url'
@@ -21,8 +21,18 @@ function createWindow() {
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
-      sandbox: false,
+      // The preload uses only contextBridge + ipcRenderer, both sandbox-safe, so
+      // keep the renderer inside the OS sandbox to limit a compromise's reach.
+      sandbox: true,
     },
+  })
+
+  // Never open a child window in-app; route http(s) to the system browser and
+  // deny everything else (the About/Licenses windows are created directly, not
+  // via window.open, so this does not affect them).
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url)
+    return { action: 'deny' }
   })
 
   const devUrl = process.env['ELECTRON_RENDERER_URL']
@@ -33,6 +43,23 @@ function createWindow() {
   }
 
   return win
+}
+
+// The renderer's Content-Security-Policy. In production it is strict — no remote
+// anything, so an injected script (belt to the note sanitiser) cannot exfiltrate
+// via fetch; 'unsafe-inline' for styles is required because the app, CodeMirror,
+// and KaTeX all set element styles. In dev it is loosened for the Vite dev
+// server and its HMR websocket.
+function contentSecurityPolicy() {
+  if (isDev) {
+    return "default-src 'self' 'unsafe-inline' data: blob:; " +
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
+      "connect-src 'self' ws://localhost:* http://localhost:*; " +
+      "img-src 'self' data: blob:; font-src 'self' data:"
+  }
+  return "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
+    "img-src 'self' data:; font-src 'self' data:; connect-src 'self'; " +
+    "base-uri 'none'; form-action 'none'"
 }
 
 let _aboutWin = null
@@ -205,6 +232,11 @@ function buildMenu() {
 }
 
 app.whenReady().then(() => {
+  const csp = contentSecurityPolicy()
+  session.defaultSession.webRequest.onHeadersReceived((details, cb) => {
+    cb({ responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [csp] } })
+  })
+
   const win = createWindow()
   buildMenu()
 
@@ -235,9 +267,12 @@ app.whenReady().then(() => {
   // Safety net: keep the window from navigating away from the app; open any
   // external URL that slips through in the system browser instead.
   win.webContents.on('will-navigate', (e, url) => {
+    // Compare against the real file URL (pathToFileURL) rather than a hand-built
+    // 'file://' + OS path, which is malformed on Windows (backslashes, drive
+    // letter, two slashes) and would treat the app's own URL as external.
     const appUrl = isDev
       ? process.env['ELECTRON_RENDERER_URL']
-      : `file://${join(__dirname, '../renderer/index.html')}`
+      : pathToFileURL(join(__dirname, '../renderer/index.html')).href
     if (appUrl && !url.startsWith(appUrl)) {
       e.preventDefault()
       shell.openExternal(url)

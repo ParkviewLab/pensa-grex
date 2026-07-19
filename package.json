@@ -41,6 +41,7 @@
     "@codemirror/lang-markdown": "^6.5.1",
     "@codemirror/state": "^6.7.1",
     "codemirror": "^6.0.2",
+    "dompurify": "^3.4.12",
     "json5": "^2.2.3",
     "katex": "^0.17.0",
     "marked": "^18.0.6",

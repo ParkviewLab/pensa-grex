@@ -48,6 +48,8 @@ jobs:
           node-version: 24.x
           cache: npm
       - run: npm ci
+      # Generate the legal/ notice bundle before packaging (see release-electron.yml).
+      - run: npm run legal
       - run: npm run build
       - name: Package installers (unsigned)
         run: npx electron-builder --publish never
