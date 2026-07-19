@@ -35,7 +35,7 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
 .bar{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; flex-wrap:wrap; }
 .seglbl{ font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); }
 .bar2{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
-#thick{ width:130px; accent-color:var(--cursor); }
+#margin{ width:150px; accent-color:var(--cursor); }
 .seg{ display:inline-flex; border:1px solid var(--line); border-radius:999px; overflow:hidden; }
 .seg button{ font:inherit; font-size:12px; border:0; background:transparent; color:var(--muted); padding:6px 14px; cursor:pointer; }
 .seg button.on{ background:var(--ink); color:var(--ground); }
@@ -69,7 +69,7 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
   letter-spacing:.08em; text-transform:uppercase; color:var(--ink); white-space:nowrap; }
 
 .stbox{ position:absolute; transform:translateX(-50%); z-index:2; }
-.card{ position:relative; background:transparent; padding:7px 14px;
+.card{ position:relative; background:transparent; padding:calc(var(--m,18) * 0.66px) calc(var(--m,18) * 1px);
   width:138px; display:flex; flex-direction:column; gap:3px; }
 .card > .hd, .card > .tag, .card > .here{ position:relative; z-index:1; }
 .cardbg{ position:absolute; inset:0; width:100%; height:100%; overflow:visible; z-index:0; pointer-events:none; }
@@ -126,14 +126,9 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
   </div>
 
   <div class="bar2">
-    <span class="seglbl">Outline</span>
-    <div class="seg" id="edgemode">
-      <button data-e="uniform" class="on">Uniform</button>
-      <button data-e="varied">Per-side</button>
-    </div>
-    <span class="seglbl">Thickness</span>
-    <input type="range" id="thick" min="1" max="8" step="0.5" value="2" aria-label="Outline thickness">
-    <span class="pct" id="thickval">2px</span>
+    <span class="seglbl">Text margin</span>
+    <input type="range" id="margin" min="10" max="34" step="1" value="18" aria-label="Text margin">
+    <span class="pct" id="marginval">18px</span>
   </div>
 
   <div class="viewport" id="viewport">
@@ -232,7 +227,7 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
     <span><i style="background:var(--cursor)"></i> branch cursor (sputnik &amp; HERE)</span>
     <span><i style="background:var(--line);border-radius:1px;transform:rotate(45deg)"></i> fork junction</span>
   </div>
-  <p class="hint">Use the Shape and Outline controls to try Googie station forms and edge weights (per-side thickness gives the hand-inked look). Drag to pan &middot; scroll to zoom &middot; Fit frames the forest. Fonts are system for now.</p>
+  <p class="hint">Station outlines are heavier on the sides than top and bottom, with the right edge a little heavier than the left, for a hand-inked look. Try the shapes; the Text margin slider pushes the text clear of the outline. Drag to pan &middot; scroll to zoom &middot; Fit frames the forest.</p>
 </div>
 
 <script>
@@ -284,7 +279,7 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
   });
   // ---- card silhouettes: outer + inner filled paths, per-side thickness ----
   var SVGNS='http://www.w3.org/2000/svg';
-  var shapeName='screen', edgeMode='uniform', thick=2;
+  var shapeName='screen';
 
   // GEOMETRY: screen / trapezium / boomerang. Rounded corners. Outline is the gap
   // between an outer silhouette and an inner one inset per side (t/r/b/l).
@@ -352,10 +347,8 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
     return { outer: rr(m,m,w-m,h-m,R), inner: rr(m+l,m+t,w-m-r,h-m-b,Ri) };
   }
 
-  function sidesFor(){
-    if(edgeMode==='varied') return { t:thick*0.62, r:thick*1.6, b:thick*0.62, l:thick*1.3 };
-    return { t:thick, r:thick, b:thick, l:thick };
-  }
+  // Fixed per-side outline: thin top/bottom, heavier sides, right a little heavier than left.
+  function sidesFor(){ return { t:3.5, r:8, b:3.5, l:7 }; }
   function renderCards(){
     var sides=sidesFor();
     Array.prototype.forEach.call(document.querySelectorAll('.card'), function(card){
@@ -382,18 +375,12 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
     Array.prototype.forEach.call(shapeBar.children, function(c){ c.classList.toggle('on', c===b); });
     renderCards();
   });
-  var edgeBar=document.getElementById('edgemode');
-  edgeBar.addEventListener('click', function(e){
-    var b=e.target.closest('button'); if(!b) return;
-    edgeMode=b.dataset.e;
-    Array.prototype.forEach.call(edgeBar.children, function(c){ c.classList.toggle('on', c===b); });
-    renderCards();
-  });
-  var thickInput=document.getElementById('thick'), thickVal=document.getElementById('thickval');
-  thickInput.addEventListener('input', function(){ thick=parseFloat(thickInput.value); thickVal.textContent=thick+'px'; renderCards(); });
+  var marginInput=document.getElementById('margin'), marginVal=document.getElementById('marginval');
+  function setMargin(v){ document.documentElement.style.setProperty('--m', v); marginVal.textContent=v+'px'; renderCards(); }
+  marginInput.addEventListener('input', function(){ setMargin(parseInt(marginInput.value,10)); });
 
   window.addEventListener('resize', fit);
-  renderCards();
+  setMargin(parseInt(marginInput.value,10));
   if(document.readyState!=='loading') fit(); else document.addEventListener('DOMContentLoaded', fit);
   window.__fit=fit; window.__zoomAt=zoomAt; window.__render=renderCards;
 })();
