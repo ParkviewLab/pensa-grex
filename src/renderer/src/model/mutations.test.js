@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import { validateForest } from './validate.js'
 import {
-  setTitle, setStatus, makeHere, clearHere, addTree,
+  setTitle, setNote, setStatus, makeHere, clearHere, addTree,
   addTaskAbove, addTaskBelow, addBranchAbove, addBranchBelow, deleteTask,
 } from './mutations.js'
 
@@ -37,6 +37,15 @@ describe('setTitle / setStatus', () => {
     const out = setTitle(base(), 'm2', 'Renamed')
     expect(out.tasks.m2.title).toBe('Renamed')
     valid(out)
+  })
+
+  it('records and clears a note filename', () => {
+    const withNote = setNote(base(), 'm2', 'm2.md')
+    expect(withNote.tasks.m2.note).toBe('m2.md')
+    valid(withNote)
+    const cleared = setNote(withNote, 'm2', null)
+    expect(cleared.tasks.m2.note).toBeNull()
+    valid(cleared)
   })
 
   it('stamps completedAt on completion and clears it on leaving completed', () => {

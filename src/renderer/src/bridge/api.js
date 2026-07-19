@@ -26,6 +26,7 @@ function wrapRealBridge(bridge) {
     readNote:          (dir, file) => bridge.readNote(dir, file),
     writeNote:         (dir, file, text) => bridge.writeNote(dir, file, text),
     deleteNote:        (dir, file) => bridge.deleteNote(dir, file),
+    openExternal:      (url) => bridge.openExternal(url),
   }
 }
 
@@ -56,6 +57,7 @@ function makeFallback() {
     readNote:          async (dir, file) => ({ content: notes.get(dir + '/' + file) || '' }),
     writeNote:         async (dir, file, text) => { notes.set(dir + '/' + file, text); return { ok: true } },
     deleteNote:        async (dir, file) => { notes.delete(dir + '/' + file); return { ok: true } },
+    openExternal:      async (url) => { window.open(url, '_blank', 'noopener') },
   }
 }
 

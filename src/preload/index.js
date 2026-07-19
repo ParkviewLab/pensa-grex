@@ -18,4 +18,5 @@ contextBridge.exposeInMainWorld('taskforkstack', {
   readNote:          (dir, file)         => ipcRenderer.invoke('tfs:read-note', dir, file),
   writeNote:         (dir, file, text)   => ipcRenderer.invoke('tfs:write-note', dir, file, text),
   deleteNote:        (dir, file)         => ipcRenderer.invoke('tfs:delete-note', dir, file),
+  openExternal:      (url)               => ipcRenderer.invoke('tfs:open-external', url),
 })

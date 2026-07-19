@@ -147,6 +147,13 @@ export function setTitle(raw, taskId, title) {
   return next
 }
 
+/** Record (or clear, with null) a task's note filename, which drives the note dot. */
+export function setNote(raw, taskId, filename) {
+  const next = clone(raw)
+  requireTask(next, taskId).note = filename || null
+  return next
+}
+
 /** Set a task's status. Completing stamps completedAt; leaving completed clears it. */
 export function setStatus(raw, taskId, status) {
   if (!STATUSES.includes(status)) throw new Error('invalid status "' + status + '"')
