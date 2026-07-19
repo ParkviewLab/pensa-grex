@@ -69,7 +69,10 @@ document.getElementById('zin').addEventListener('click', () => {
 document.getElementById('zout').addEventListener('click', () => {
   viewport.zoomAt(1 / 1.2, viewportEl.clientWidth / 2, viewportEl.clientHeight / 2)
 })
-domainSel.addEventListener('change', () => openDomain(domainSel.value, domainSel.selectedOptions[0]?.textContent))
+domainSel.addEventListener('change', () => {
+  if (domainSel.value === NEW_DOMAIN) { createDomainFlow(); return }
+  openDomain(domainSel.value, domainSel.selectedOptions[0]?.textContent)
+})
 window.addEventListener('resize', () => viewport.fit())
 
 function showEmpty(message) {
@@ -248,6 +251,8 @@ viewportEl.addEventListener('dblclick', (e) => {
   if (taskId && currentRaw.tasks[taskId]) openNote(taskId)
 })
 
+const NEW_DOMAIN = '__new__'
+
 function populateSwitcher(domains, selectedPath) {
   domainSel.innerHTML = ''
   for (const d of domains) {
@@ -257,7 +262,36 @@ function populateSwitcher(domains, selectedPath) {
     if (d.path === selectedPath) opt.selected = true
     domainSel.appendChild(opt)
   }
-  domainSel.disabled = domains.length <= 1
+  const sep = document.createElement('option')
+  sep.disabled = true
+  sep.textContent = '──────────'
+  domainSel.appendChild(sep)
+  const create = document.createElement('option')
+  create.value = NEW_DOMAIN
+  create.textContent = 'New domain…'
+  domainSel.appendChild(create)
+  // Never disabled: the New entry must stay reachable even with one domain.
+  domainSel.disabled = false
+}
+
+// Reset the switcher to the open domain after a New that was cancelled or failed
+// (the selection is left on the New entry otherwise).
+function restoreSwitcher() {
+  if (currentDomainPath) domainSel.value = currentDomainPath
+}
+
+async function createDomainFlow() {
+  const name = await promptText({ title: 'New domain', label: 'Domain name', value: '' })
+  if (name === null) { restoreSwitcher(); return }
+  const res = await api.createForest(name)
+  if (res.error) {
+    await chooseAction({ title: 'Could not create domain', message: res.error, actions: [{ label: 'OK', value: null }] })
+    restoreSwitcher()
+    return
+  }
+  const domains = await api.listDomains()
+  populateSwitcher(domains, res.path)
+  await openDomain(res.path, res.name)
 }
 
 async function boot() {

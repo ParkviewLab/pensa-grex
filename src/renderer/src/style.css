@@ -72,9 +72,13 @@ body{
 .burst line{ stroke:var(--burst-a); stroke-width:1.4; }
 .burst.b line{ stroke:var(--burst-b); }
 .burst{ opacity:.13; }
-.cursor-mark line{ stroke:var(--ink); stroke-width:1.6; }
-.cursor-mark .ball{ fill:var(--ink); }
-.cursor-mark .core{ fill:var(--ink); }
+/* The sputnik dots live in a <use> shadow tree, so descendant selectors like
+   `.cursor-mark .ball` do not reach them (a well-known SVG <use> limitation);
+   the circles then fall back to the default black and vanish on the navy
+   ground. Set fill on the <use> itself and it inherits into the cloned circles,
+   so var(--ink) keeps the dots readable on both grounds: light on navy, dark on
+   azure. */
+.cursor-mark{ fill:var(--ink); }
 
 .dot{ position:absolute; width:11px; height:11px; border-radius:50%; background:var(--line);
   transform:translate(-50%,-50%); z-index:2; }
