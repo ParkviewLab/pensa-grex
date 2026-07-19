@@ -33,6 +33,9 @@ export function buildCard(task, { isCursor } = {}) {
     const here = document.createElement('span')
     here.className = 'here'
     here.textContent = '▲ HERE'
+    // The HERE pill takes the task's own status colour, not a dedicated cursor
+    // colour, so it never collides with the in-progress colour (see shapes.js).
+    here.style.background = 'var(--c-' + statusGlyphClass(task.status) + ')'
     card.appendChild(here)
   }
 

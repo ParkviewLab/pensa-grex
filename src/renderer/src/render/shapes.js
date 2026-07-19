@@ -130,7 +130,10 @@ export function renderCard(cardEl) {
   for (const name of statusNames) {
     if (glyph && glyph.classList.contains(name)) { status = name; break }
   }
-  svg.querySelector('.outer').style.fill = isCursor ? 'var(--cursor)' : 'var(--c-' + status + ')'
+  // The current ("here") card no longer takes a dedicated cursor colour: it wears
+  // its own status colour like any card, and its here-ness is carried by the wider
+  // trapezium shape, the heavier outline, and the sputnik mark instead.
+  svg.querySelector('.outer').style.fill = 'var(--c-' + status + ')'
 }
 
 // Render every .card element under root (defaults to the whole document).
