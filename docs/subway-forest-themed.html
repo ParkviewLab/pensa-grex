@@ -35,7 +35,7 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
 .bar{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; flex-wrap:wrap; }
 .seglbl{ font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); }
 .bar2{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
-#margin{ width:150px; accent-color:var(--cursor); }
+#scale{ width:150px; accent-color:var(--cursor); }
 .seg{ display:inline-flex; border:1px solid var(--line); border-radius:999px; overflow:hidden; }
 .seg button{ font:inherit; font-size:12px; border:0; background:transparent; color:var(--muted); padding:6px 14px; cursor:pointer; }
 .seg button.on{ background:var(--ink); color:var(--ground); }
@@ -69,8 +69,9 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
   letter-spacing:.08em; text-transform:uppercase; color:var(--ink); white-space:nowrap; }
 
 .stbox{ position:absolute; transform:translateX(-50%); z-index:2; }
-.card{ position:relative; background:transparent; padding:calc(var(--m,18) * 0.66px) calc(var(--m,18) * 1px);
-  width:138px; display:flex; flex-direction:column; gap:3px; }
+.card{ position:relative; background:transparent; padding:11px 22px;
+  width:138px; display:flex; flex-direction:column; gap:3px;
+  transform:scale(var(--cardscale,1)); transform-origin:top center; }
 .card > .hd, .card > .tag, .card > .here{ position:relative; z-index:1; }
 .cardbg{ position:absolute; inset:0; width:100%; height:100%; overflow:visible; z-index:0; pointer-events:none; }
 .cardbg .outer{ fill:var(--line); }
@@ -126,9 +127,9 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
   </div>
 
   <div class="bar2">
-    <span class="seglbl">Text margin</span>
-    <input type="range" id="margin" min="10" max="34" step="1" value="18" aria-label="Text margin">
-    <span class="pct" id="marginval">18px</span>
+    <span class="seglbl">Size</span>
+    <input type="range" id="scale" min="0.7" max="1.8" step="0.05" value="1" aria-label="Station size">
+    <span class="pct" id="scaleval">100%</span>
   </div>
 
   <div class="viewport" id="viewport">
@@ -227,7 +228,7 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
     <span><i style="background:var(--cursor)"></i> branch cursor (sputnik &amp; HERE)</span>
     <span><i style="background:var(--line);border-radius:1px;transform:rotate(45deg)"></i> fork junction</span>
   </div>
-  <p class="hint">Station outlines are heavier on the sides than top and bottom, with the right edge a little heavier than the left, for a hand-inked look. Try the shapes; the Text margin slider pushes the text clear of the outline. Drag to pan &middot; scroll to zoom &middot; Fit frames the forest.</p>
+  <p class="hint">Station outlines are heavier on the sides than top and bottom, with the right edge a little heavier than the left, for a hand-inked look. Try the shapes; the Size slider scales the stations. Drag to pan &middot; scroll to zoom &middot; Fit frames the forest.</p>
 </div>
 
 <script>
@@ -328,9 +329,10 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
         l=Math.max(0,Math.min(s.l,w/2-4)), r=Math.max(0,Math.min(s.r,w/2-4));
     var mn=Math.min(t,b,l,r);
     if(shape==='trapezium'){
-      // four corners with no parallel sides; edges map to top/right/bottom/left
-      var P=[ [m+w*0.02,m], [w-m,m+h*0.22], [w-m-w*0.10,h-m], [m,h-m-h*0.10] ];
-      var rcO=Math.min(9,h*0.22), rcI=Math.max(2.5,rcO-mn);
+      // marquee lean: both sides slant the same way (rightward), with a slight
+      // taper so no two sides are parallel. edges map to top/right/bottom/left.
+      var P=[ [m+w*0.10,m], [w-m,m+h*0.05], [w-m-w*0.08,h-m], [m,h-m-h*0.10] ];
+      var rcO=Math.min(7,h*0.16,w*0.06), rcI=Math.max(2.5,rcO-mn);
       return { outer: roundPoly(P,rcO), inner: roundPoly(insetPoly(P,[t,r,b,l]),rcI) };
     }
     if(shape==='boomerang'){
@@ -375,12 +377,13 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
     Array.prototype.forEach.call(shapeBar.children, function(c){ c.classList.toggle('on', c===b); });
     renderCards();
   });
-  var marginInput=document.getElementById('margin'), marginVal=document.getElementById('marginval');
-  function setMargin(v){ document.documentElement.style.setProperty('--m', v); marginVal.textContent=v+'px'; renderCards(); }
-  marginInput.addEventListener('input', function(){ setMargin(parseInt(marginInput.value,10)); });
+  var scaleInput=document.getElementById('scale'), scaleVal=document.getElementById('scaleval');
+  function setScale(v){ document.documentElement.style.setProperty('--cardscale', v); scaleVal.textContent=Math.round(v*100)+'%'; }
+  scaleInput.addEventListener('input', function(){ setScale(parseFloat(scaleInput.value)); });
 
   window.addEventListener('resize', fit);
-  setMargin(parseInt(marginInput.value,10));
+  renderCards();
+  setScale(parseFloat(scaleInput.value));
   if(document.readyState!=='loading') fit(); else document.addEventListener('DOMContentLoaded', fit);
   window.__fit=fit; window.__zoomAt=zoomAt; window.__render=renderCards;
 })();
