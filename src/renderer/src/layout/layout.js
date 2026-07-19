@@ -19,6 +19,12 @@ const DEFAULTS = {
   titleGap: 20, // gap between a root card's bottom and its tree title
   treeGap: 90, // horizontal gap between two trees' bounding boxes
   margin: 40, // canvas margin on every side
+  // Branch connectors angle upward: the flat leg tilts this much above horizontal
+  // (a render-only shape change; lanes/rows/junctions are untouched — see
+  // docs/tree-layout.md). tan is precomputed so the per-branch math stays cheap.
+  branchTiltTan: Math.tan((12 * Math.PI) / 180), // 12° above horizontal = 78° from the vertical trunk
+  branchRiseMax: 120, // hard cap on a leg's rise, so a far lane never climbs into an inner branch
+  minRiser: 8, // keep at least this much vertical riser into the branch card (never invert it)
 }
 
 export function computeForestLayout(forest, sizes, titleSizes, opts = {}) {
@@ -154,7 +160,21 @@ export function computeForestLayout(forest, sizes, titleSizes, opts = {}) {
         if (junctionY < riserTopY) tracks.push({ points: [[parentX, riserTopY], [parentX, junctionY]] })
         else if (junctionY > riserBottomY) tracks.push({ points: [[parentX, riserBottomY], [parentX, junctionY]] })
       }
-      tracks.push({ points: [[parentX, junctionY], [branchX, junctionY], [branchX, branchAnchorY]] })
+      // Tilt the flat leg up ~12° over the same horizontal delta, then a short
+      // vertical riser into the branch card (docs/tree-layout.md). Only the middle
+      // elbow moves off junctionY; the diamond stays at [parentX, junctionY] and
+      // the branch card at [branchX, branchAnchorY], so no lane/row/junction value
+      // changes. The rise is capped so the riser never inverts and a far lane
+      // never climbs into an inner branch.
+      const dir = Math.sign(branchAnchorY - junctionY) // -1 for an above-branch, +1 for a below-branch
+      const room = Math.abs(branchAnchorY - junctionY)
+      const rise = Math.min(
+        Math.abs(branchX - parentX) * o.branchTiltTan,
+        o.branchRiseMax,
+        Math.max(0, room - o.minRiser),
+      )
+      const elbowY = junctionY + dir * rise
+      tracks.push({ points: [[parentX, junctionY], [branchX, elbowY], [branchX, branchAnchorY]] })
     }
   }
   const junctions = Array.from(junctionByKey.values())
