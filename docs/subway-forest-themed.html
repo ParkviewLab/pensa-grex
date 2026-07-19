@@ -48,7 +48,7 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
   border:1px solid var(--line); border-radius:10px; cursor:grab; user-select:none; }
 .viewport.dragging{ cursor:grabbing; }
 .world{ position:absolute; top:0; left:0; transform-origin:0 0; }
-.content{ position:relative; width:1320px; height:474px;
+.content{ position:relative; width:1320px; height:490px;
   background-image:radial-gradient(circle, var(--grid) 1px, transparent 1.4px); background-size:40px 40px; }
 
 .track{ fill:none; stroke:var(--line); stroke-width:2.5; stroke-linecap:round; stroke-linejoin:round; }
@@ -75,8 +75,8 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
 .card.cancel .lbl{ text-decoration:line-through; color:var(--muted); }
 .card .tag{ font-size:8.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
 .card.note::after{ content:""; position:absolute; top:5px; right:5px; width:6px; height:6px; border-radius:50%; background:var(--c-todo); }
-.flag{ position:absolute; top:-8px; left:50%; transform:translateX(-50%); background:var(--panel); padding:0 5px; font-size:8px; font-weight:800;
-  letter-spacing:.14em; color:var(--cursor); white-space:nowrap; }
+.here{ align-self:flex-start; font-size:8px; font-weight:800; letter-spacing:.14em; color:var(--ground);
+  background:var(--cursor); padding:1px 5px; border-radius:3px; }
 
 .gl{ width:11px; height:11px; border-radius:50%; flex:none; }
 .gl.done{ background:var(--c-done); }
@@ -94,7 +94,7 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
 <div class="wrap">
   <p class="eyebrow">TaskForkStack &middot; subway forest &middot; atomic skin</p>
   <h1>Three trees, growing upward</h1>
-  <p class="lede">The subway forest with the atomic-age skin on a cool ground. Branches join the trunk at a junction between tasks; added branches alternate left, right, left as the main line runs straight up; labels sit centered below each station. Flip the ground between azure and navy. Drag to pan, scroll to zoom, Fit frames the forest.</p>
+  <p class="lede">The subway forest with the atomic-age skin on a cool ground. A branch leaves its parent at a junction that sits in the open track between two stations, clear of the labels; added branches alternate left, right, left while the main line runs straight up; labels sit centered below each station. Flip the ground between azure and navy. Drag to pan, scroll to zoom, Fit frames the forest.</p>
 
   <div class="bar">
     <div class="seg" id="ground">
@@ -112,16 +112,16 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
   <div class="viewport" id="viewport">
     <div class="world" id="world">
       <div class="content" id="content">
-        <svg width="1320" height="460" viewBox="0 0 1320 460" style="position:absolute;top:0;left:0;z-index:0;">
+        <svg width="1320" height="490" viewBox="0 0 1320 490" style="position:absolute;top:0;left:0;z-index:0;">
           <defs>
             <g id="sputnik">
-              <line x1="0" y1="-15" x2="0" y2="15"/><line x1="-15" y1="0" x2="15" y2="0"/>
-              <line x1="-10.6" y1="-10.6" x2="10.6" y2="10.6"/><line x1="10.6" y1="-10.6" x2="-10.6" y2="10.6"/>
-              <circle class="ball" cx="0" cy="-15" r="2.3"/><circle class="ball" cx="0" cy="15" r="2.3"/>
-              <circle class="ball" cx="-15" cy="0" r="2.3"/><circle class="ball" cx="15" cy="0" r="2.3"/>
-              <circle class="ball" cx="-10.6" cy="-10.6" r="2.3"/><circle class="ball" cx="10.6" cy="10.6" r="2.3"/>
-              <circle class="ball" cx="10.6" cy="-10.6" r="2.3"/><circle class="ball" cx="-10.6" cy="10.6" r="2.3"/>
-              <circle class="core" cx="0" cy="0" r="3.6"/>
+              <line x1="0" y1="-13" x2="0" y2="13"/><line x1="-13" y1="0" x2="13" y2="0"/>
+              <line x1="-9.2" y1="-9.2" x2="9.2" y2="9.2"/><line x1="9.2" y1="-9.2" x2="-9.2" y2="9.2"/>
+              <circle class="ball" cx="0" cy="-13" r="2.2"/><circle class="ball" cx="0" cy="13" r="2.2"/>
+              <circle class="ball" cx="-13" cy="0" r="2.2"/><circle class="ball" cx="13" cy="0" r="2.2"/>
+              <circle class="ball" cx="-9.2" cy="-9.2" r="2.2"/><circle class="ball" cx="9.2" cy="9.2" r="2.2"/>
+              <circle class="ball" cx="9.2" cy="-9.2" r="2.2"/><circle class="ball" cx="-9.2" cy="9.2" r="2.2"/>
+              <circle class="core" cx="0" cy="0" r="3.4"/>
             </g>
             <g id="starburst">
               <line x1="0" y1="-26" x2="0" y2="26"/><line x1="-26" y1="0" x2="26" y2="0"/>
@@ -134,65 +134,65 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
           </defs>
 
           <!-- faint background starbursts (atmosphere) -->
-          <use href="#starburst" class="burst" transform="translate(150,110) scale(2.6)"/>
-          <use href="#starburst" class="burst b" transform="translate(1120,360) scale(3.1)"/>
-          <use href="#starburst" class="burst b" transform="translate(520,380) scale(1.7)"/>
+          <use href="#starburst" class="burst" transform="translate(150,120) scale(2.6)"/>
+          <use href="#starburst" class="burst b" transform="translate(1120,380) scale(3.1)"/>
+          <use href="#starburst" class="burst b" transform="translate(520,400) scale(1.7)"/>
 
           <!-- Tree A: Media server -->
-          <path class="track" d="M280,380 L280,80"/>
-          <path class="track" d="M280,230 L110,180"/>
-          <path class="track" d="M280,230 L450,180"/>
-          <rect class="fork" x="276" y="226" width="8" height="8" transform="rotate(45 280 230)"/>
+          <path class="track" d="M280,400 L280,40"/>
+          <path class="track" d="M280,244 L110,244 L110,160"/>
+          <path class="track" d="M280,244 L450,244 L450,160"/>
+          <rect class="fork" x="276" y="240" width="8" height="8" transform="rotate(45 280 244)"/>
           <!-- Tree B: Home network -->
-          <path class="track" d="M820,380 L820,180"/>
-          <path class="track" d="M820,230 L650,180 L650,80"/>
-          <rect class="fork" x="816" y="226" width="8" height="8" transform="rotate(45 820 230)"/>
+          <path class="track" d="M820,400 L820,160"/>
+          <path class="track" d="M820,244 L650,244 L650,40"/>
+          <rect class="fork" x="816" y="240" width="8" height="8" transform="rotate(45 820 244)"/>
           <!-- Tree C: Home automation -->
-          <path class="track" d="M1170,380 L1170,180"/>
-          <path class="track" d="M1170,230 L1000,180"/>
-          <rect class="fork" x="1166" y="226" width="8" height="8" transform="rotate(45 1170 230)"/>
+          <path class="track" d="M1170,400 L1170,160"/>
+          <path class="track" d="M1170,244 L1000,244 L1000,160"/>
+          <rect class="fork" x="1166" y="240" width="8" height="8" transform="rotate(45 1170 244)"/>
 
           <!-- branch cursors (sputnik) -->
           <use href="#sputnik" class="cursor-mark" transform="translate(280,280)"/>
-          <use href="#sputnik" class="cursor-mark" transform="translate(820,180)"/>
+          <use href="#sputnik" class="cursor-mark" transform="translate(820,160)"/>
           <use href="#sputnik" class="cursor-mark" transform="translate(1170,280)"/>
         </svg>
 
         <!-- ===== Tree A: Media server ===== -->
-        <div class="dot" style="left:280px;top:380px;"></div>
-        <div class="dot" style="left:280px;top:180px;"></div>
-        <div class="dot" style="left:280px;top:80px;"></div>
-        <div class="dot" style="left:110px;top:180px;"></div>
-        <div class="dot" style="left:450px;top:180px;"></div>
-        <div class="stbox" style="left:280px;top:395px;"><div class="card"><div class="hd"><span class="gl done"></span><span class="lbl">Set up NAS</span></div><span class="tag">done</span></div></div>
-        <div class="stbox" style="left:280px;top:295px;"><div class="card cursor"><span class="flag">&#9650; HERE</span><div class="hd"><span class="gl prog"></span><span class="lbl">Migrate media library</span></div><span class="tag">in progress</span></div></div>
-        <div class="stbox" style="left:280px;top:195px;"><div class="card"><div class="hd"><span class="gl prog"></span><span class="lbl">Automate backups</span></div><span class="tag">in progress</span></div></div>
-        <div class="stbox" style="left:280px;top:95px;"><div class="card"><div class="hd"><span class="gl todo"></span><span class="lbl">Test restore</span></div><span class="tag">to do</span></div></div>
-        <div class="stbox" style="left:110px;top:195px;"><div class="card note"><div class="hd"><span class="gl todo"></span><span class="lbl">Fix Plex transcoding</span></div><span class="tag">to do</span></div></div>
-        <div class="stbox" style="left:450px;top:195px;"><div class="card cancel"><div class="hd"><span class="gl cancel"></span><span class="lbl">Try Btrfs snapshots</span></div><span class="tag">cancelled</span></div></div>
-        <div class="ttl" style="left:280px;top:440px;">Media server</div>
+        <div class="dot" style="left:280px;top:400px;"></div>
+        <div class="dot" style="left:280px;top:160px;"></div>
+        <div class="dot" style="left:280px;top:40px;"></div>
+        <div class="dot" style="left:110px;top:160px;"></div>
+        <div class="dot" style="left:450px;top:160px;"></div>
+        <div class="stbox" style="left:280px;top:415px;"><div class="card"><div class="hd"><span class="gl done"></span><span class="lbl">Set up NAS</span></div><span class="tag">done</span></div></div>
+        <div class="stbox" style="left:280px;top:295px;"><div class="card cursor"><span class="here">&#9650; HERE</span><div class="hd"><span class="gl prog"></span><span class="lbl">Migrate media library</span></div><span class="tag">in progress</span></div></div>
+        <div class="stbox" style="left:280px;top:175px;"><div class="card"><div class="hd"><span class="gl prog"></span><span class="lbl">Automate backups</span></div><span class="tag">in progress</span></div></div>
+        <div class="stbox" style="left:280px;top:55px;"><div class="card"><div class="hd"><span class="gl todo"></span><span class="lbl">Test restore</span></div><span class="tag">to do</span></div></div>
+        <div class="stbox" style="left:110px;top:175px;"><div class="card note"><div class="hd"><span class="gl todo"></span><span class="lbl">Fix Plex transcoding</span></div><span class="tag">to do</span></div></div>
+        <div class="stbox" style="left:450px;top:175px;"><div class="card cancel"><div class="hd"><span class="gl cancel"></span><span class="lbl">Try Btrfs snapshots</span></div><span class="tag">cancelled</span></div></div>
+        <div class="ttl" style="left:280px;top:452px;">Media server</div>
 
         <!-- ===== Tree B: Home network ===== -->
-        <div class="dot" style="left:820px;top:380px;"></div>
+        <div class="dot" style="left:820px;top:400px;"></div>
         <div class="dot" style="left:820px;top:280px;"></div>
-        <div class="dot" style="left:650px;top:180px;"></div>
-        <div class="dot" style="left:650px;top:80px;"></div>
-        <div class="stbox" style="left:820px;top:395px;"><div class="card"><div class="hd"><span class="gl done"></span><span class="lbl">Rack + patch panel</span></div><span class="tag">done</span></div></div>
+        <div class="dot" style="left:650px;top:160px;"></div>
+        <div class="dot" style="left:650px;top:40px;"></div>
+        <div class="stbox" style="left:820px;top:415px;"><div class="card"><div class="hd"><span class="gl done"></span><span class="lbl">Rack + patch panel</span></div><span class="tag">done</span></div></div>
         <div class="stbox" style="left:820px;top:295px;"><div class="card"><div class="hd"><span class="gl done"></span><span class="lbl">VLAN segmentation</span></div><span class="tag">done</span></div></div>
-        <div class="stbox" style="left:820px;top:195px;"><div class="card cursor"><span class="flag">&#9650; HERE</span><div class="hd"><span class="gl prog"></span><span class="lbl">Firewall rules</span></div><span class="tag">in progress</span></div></div>
-        <div class="stbox" style="left:650px;top:195px;"><div class="card"><div class="hd"><span class="gl todo"></span><span class="lbl">Wi-Fi 7 APs</span></div><span class="tag">to do</span></div></div>
-        <div class="stbox" style="left:650px;top:95px;"><div class="card"><div class="hd"><span class="gl todo"></span><span class="lbl">Roaming test</span></div><span class="tag">to do</span></div></div>
-        <div class="ttl" style="left:820px;top:440px;">Home network</div>
+        <div class="stbox" style="left:820px;top:175px;"><div class="card cursor"><span class="here">&#9650; HERE</span><div class="hd"><span class="gl prog"></span><span class="lbl">Firewall rules</span></div><span class="tag">in progress</span></div></div>
+        <div class="stbox" style="left:650px;top:175px;"><div class="card"><div class="hd"><span class="gl todo"></span><span class="lbl">Wi-Fi 7 APs</span></div><span class="tag">to do</span></div></div>
+        <div class="stbox" style="left:650px;top:55px;"><div class="card"><div class="hd"><span class="gl todo"></span><span class="lbl">Roaming test</span></div><span class="tag">to do</span></div></div>
+        <div class="ttl" style="left:820px;top:452px;">Home network</div>
 
         <!-- ===== Tree C: Home automation ===== -->
-        <div class="dot" style="left:1170px;top:380px;"></div>
-        <div class="dot" style="left:1170px;top:180px;"></div>
-        <div class="dot" style="left:1000px;top:180px;"></div>
-        <div class="stbox" style="left:1170px;top:395px;"><div class="card"><div class="hd"><span class="gl done"></span><span class="lbl">Install Home Assistant</span></div><span class="tag">done</span></div></div>
-        <div class="stbox" style="left:1170px;top:295px;"><div class="card cursor"><span class="flag">&#9650; HERE</span><div class="hd"><span class="gl prog"></span><span class="lbl">Zigbee hub</span></div><span class="tag">in progress</span></div></div>
-        <div class="stbox" style="left:1170px;top:195px;"><div class="card"><div class="hd"><span class="gl todo"></span><span class="lbl">Door / window sensors</span></div><span class="tag">to do</span></div></div>
-        <div class="stbox" style="left:1000px;top:195px;"><div class="card"><div class="hd"><span class="gl todo"></span><span class="lbl">Energy monitoring</span></div><span class="tag">to do</span></div></div>
-        <div class="ttl" style="left:1170px;top:440px;">Home automation</div>
+        <div class="dot" style="left:1170px;top:400px;"></div>
+        <div class="dot" style="left:1170px;top:160px;"></div>
+        <div class="dot" style="left:1000px;top:160px;"></div>
+        <div class="stbox" style="left:1170px;top:415px;"><div class="card"><div class="hd"><span class="gl done"></span><span class="lbl">Install Home Assistant</span></div><span class="tag">done</span></div></div>
+        <div class="stbox" style="left:1170px;top:295px;"><div class="card cursor"><span class="here">&#9650; HERE</span><div class="hd"><span class="gl prog"></span><span class="lbl">Zigbee hub</span></div><span class="tag">in progress</span></div></div>
+        <div class="stbox" style="left:1170px;top:175px;"><div class="card"><div class="hd"><span class="gl todo"></span><span class="lbl">Door / window sensors</span></div><span class="tag">to do</span></div></div>
+        <div class="stbox" style="left:1000px;top:175px;"><div class="card"><div class="hd"><span class="gl todo"></span><span class="lbl">Energy monitoring</span></div><span class="tag">to do</span></div></div>
+        <div class="ttl" style="left:1170px;top:452px;">Home automation</div>
       </div>
     </div>
   </div>
@@ -210,7 +210,7 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
 
 <script>
 (function(){
-  var CW=1320, CH=474;
+  var CW=1320, CH=490;
   var viewport=document.getElementById('viewport'),
       world=document.getElementById('world'),
       pct=document.getElementById('pct');
