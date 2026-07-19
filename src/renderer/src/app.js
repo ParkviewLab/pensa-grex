@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Gary Frattarola <garycoding@gmail.com>
 
-// Renderer entry: boots the theme and the pan/zoom viewport, then loads a real
+// Renderer entry: boots the theme and the pan/zoom viewport, loads a real
 // forest from disk over the persistence bridge (bridge/api.js → preload →
-// main/store.js). On first run — an empty library — it seeds the two bundled
-// sample domains so there is something to show and something already persisted.
-// The domain switcher in the header lists every domain and reopens the last one
-// used across restarts. The pipeline downstream of parsing is unchanged from
-// M3: parse → validate → build → measure → layout → render.
+// main/store.js), and — as of M5 — edits it through a right-click menu. Every
+// edit runs a pure mutation (model/mutations.js) on the raw forest, is
+// re-validated, then re-rendered in place and saved (debounced). On first run
+// it seeds the two bundled sample domains; the header switcher reopens the
+// last-used domain across restarts.
 
 import JSON5 from 'json5'
 import { initTheme } from './theme/theme.js'
@@ -18,6 +18,10 @@ import { buildForest } from './model/forest.js'
 import { measureForest } from './layout/measure.js'
 import { computeForestLayout } from './layout/layout.js'
 import { createApi } from './bridge/api.js'
+import { taskIdFromEvent } from './interaction/hittest.js'
+import { openContextMenu, closeContextMenu } from './interaction/contextMenu.js'
+import { promptText, chooseAction } from './ui/dialog.js'
+import * as M from './model/mutations.js'
 import homelabFixtureRaw from './model/fixtures/homelab.forest.json5?raw'
 import workFixtureRaw from './model/fixtures/work.forest.json5?raw'
 
@@ -32,6 +36,8 @@ const domainSel = document.getElementById('domain')
 
 const api = createApi()
 let currentLayout = null
+let currentRaw = null
+let currentDomainPath = null
 
 const viewport = createViewport({
   viewportEl, worldEl, pctEl,
@@ -76,20 +82,36 @@ async function seedSamples() {
   }
 }
 
-async function render(forest) {
+// Draw a runtime forest. On edits, fit is false so the map does not jump under
+// the user's pan/zoom; on opening a domain it frames the whole forest.
+async function render(forest, { fit = true } = {}) {
   if (!forest.trees.length) {
-    showEmpty('This domain has no tasks yet')
+    showEmpty('This domain has no tasks yet. Right-click the canvas to start a tree.')
     return
   }
   const { sizes, titleSizes } = await measureForest(forest)
   currentLayout = computeForestLayout(forest, sizes, titleSizes)
   mountLayout(contentEl, currentLayout, forest)
   if (emptyEl) emptyEl.style.display = 'none'
-  viewport.fit()
+  if (fit) viewport.fit()
+}
+
+// Apply a pure mutation result: reject it if it breaks an invariant, otherwise
+// adopt it, re-render in place, and persist (debounced).
+async function applyEdit(nextRaw) {
+  const v = validateForest(nextRaw)
+  if (!v.ok) {
+    console.error('edit rejected — would break an invariant:', v.errors)
+    return
+  }
+  currentRaw = nextRaw
+  await render(buildForest(nextRaw), { fit: false })
+  api.saveForestDebounced(currentDomainPath, JSON5.stringify(nextRaw, null, 2))
 }
 
 async function openDomain(path, name) {
   if (!path) return
+  closeContextMenu()
   const res = await api.loadForest(path)
   if (res.error) {
     showEmpty('Could not open “' + (name || path) + '”: ' + res.error)
@@ -108,10 +130,95 @@ async function openDomain(path, name) {
     showEmpty('“' + (name || path) + '” failed validation (see console)')
     return
   }
+  currentRaw = raw
+  currentDomainPath = path
   await api.setLastDomain(name)
-  await render(buildForest(raw))
-  console.log('Opened', name, '—', currentLayout ? currentLayout.junctions.length + ' junctions' : 'empty')
+  await render(buildForest(raw), { fit: true })
 }
+
+// ---- editing flows (each dialog runs after the menu has closed) ----
+
+async function renameTask(taskId) {
+  const title = await promptText({ title: 'Rename task', label: 'Title', value: currentRaw.tasks[taskId].title })
+  if (title === null) return
+  applyEdit(M.setTitle(currentRaw, taskId, title))
+}
+
+async function addTaskFlow(dir, taskId) {
+  const title = await promptText({ title: 'Add task ' + dir, label: 'Title', value: '' })
+  if (title === null) return
+  applyEdit(dir === 'above' ? M.addTaskAbove(currentRaw, taskId, title) : M.addTaskBelow(currentRaw, taskId, title))
+}
+
+async function addBranchFlow(dir, taskId) {
+  const title = await promptText({ title: 'Add branch ' + dir, label: 'Title', value: '' })
+  if (title === null) return
+  applyEdit(dir === 'above' ? M.addBranchAbove(currentRaw, taskId, title) : M.addBranchBelow(currentRaw, taskId, title))
+}
+
+async function deleteTaskFlow(taskId) {
+  const task = currentRaw.tasks[taskId]
+  const hasDescendants = !!task.next || (task.branches && task.branches.length > 0)
+  let mode = 'subtree'
+  if (hasDescendants) {
+    mode = await chooseAction({
+      title: 'Delete “' + task.title + '”',
+      message: 'This task has tasks growing from it. Remove the whole subtree, or keep them by splicing the task above onto the one below?',
+      actions: [
+        { label: 'Cancel', value: null },
+        { label: 'Splice (keep above)', value: 'splice' },
+        { label: 'Remove subtree', value: 'subtree', kind: 'danger' },
+      ],
+    })
+    if (mode === null) return
+  }
+  applyEdit(M.deleteTask(currentRaw, taskId, mode))
+}
+
+async function addTreeFlow() {
+  const name = await promptText({ title: 'New tree', label: 'Tree name', value: '' })
+  if (name === null) return
+  applyEdit(M.addTree(currentRaw, name))
+}
+
+function openTaskMenu(x, y, taskId) {
+  const task = currentRaw.tasks[taskId]
+  const status = (label, value) => ({
+    label, checked: task.status === value,
+    onClick: () => applyEdit(M.setStatus(currentRaw, taskId, value)),
+  })
+  openContextMenu(x, y, [
+    { label: 'Status', submenu: [
+      status('To do', 'todo'),
+      status('In progress', 'in-progress'),
+      status('Completed', 'completed'),
+      status('Cancelled', 'cancelled'),
+    ] },
+    task.here
+      ? { label: 'Clear here', onClick: () => applyEdit(M.clearHere(currentRaw, taskId)) }
+      : { label: 'Make here', onClick: () => applyEdit(M.makeHere(currentRaw, taskId)) },
+    { label: 'Rename…', onClick: () => renameTask(taskId) },
+    { separator: true },
+    { label: 'Add task above', onClick: () => addTaskFlow('above', taskId) },
+    { label: 'Add task below', onClick: () => addTaskFlow('below', taskId) },
+    { label: 'Add branch above', onClick: () => addBranchFlow('above', taskId) },
+    { label: 'Add branch below', onClick: () => addBranchFlow('below', taskId) },
+    { separator: true },
+    { label: 'Delete…', onClick: () => deleteTaskFlow(taskId) },
+  ])
+}
+
+function openCanvasMenu(x, y) {
+  openContextMenu(x, y, [{ label: 'New tree…', onClick: () => addTreeFlow() }])
+}
+
+viewportEl.addEventListener('contextmenu', (e) => {
+  e.preventDefault()
+  if (!currentRaw) return
+  const taskId = taskIdFromEvent(e)
+  if (taskId && currentRaw.tasks[taskId]) openTaskMenu(e.clientX, e.clientY, taskId)
+  else openCanvasMenu(e.clientX, e.clientY)
+})
 
 function populateSwitcher(domains, selectedPath) {
   domainSel.innerHTML = ''
