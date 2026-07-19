@@ -34,8 +34,6 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
 
 .bar{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; flex-wrap:wrap; }
 .seglbl{ font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); }
-.bar2{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
-#scale{ width:150px; accent-color:var(--cursor); }
 .seg{ display:inline-flex; border:1px solid var(--line); border-radius:999px; overflow:hidden; }
 .seg button{ font:inherit; font-size:12px; border:0; background:transparent; color:var(--muted); padding:6px 14px; cursor:pointer; }
 .seg button.on{ background:var(--ink); color:var(--ground); }
@@ -69,9 +67,9 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
   letter-spacing:.08em; text-transform:uppercase; color:var(--ink); white-space:nowrap; }
 
 .stbox{ position:absolute; transform:translateX(-50%); z-index:2; }
-.card{ position:relative; background:transparent; padding:11px 22px;
-  width:138px; display:flex; flex-direction:column; gap:3px;
-  transform:scale(var(--cardscale,1)); transform-origin:top center; }
+.card{ position:relative; background:transparent; padding:11px 16px;
+  width:138px; display:flex; flex-direction:column; gap:3px; }
+.card.cursor{ padding-left:24px; padding-right:24px; }
 .card > .hd, .card > .tag, .card > .here{ position:relative; z-index:1; }
 .cardbg{ position:absolute; inset:0; width:100%; height:100%; overflow:visible; z-index:0; pointer-events:none; }
 .cardbg .outer{ fill:var(--line); }
@@ -111,12 +109,6 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
         <button data-g="azure" class="on">Azure</button>
         <button data-g="navy">Navy</button>
       </div>
-      <span class="seglbl">Shape</span>
-      <div class="seg" id="shape">
-        <button data-s="screen" class="on">Screen</button>
-        <button data-s="trapezium">Trapezium</button>
-        <button data-s="boomerang">Boomerang</button>
-      </div>
     </div>
     <div class="zoom">
       <button class="btn icon" id="zout" title="Zoom out" aria-label="Zoom out">&minus;</button>
@@ -124,12 +116,6 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
       <button class="btn icon" id="zin" title="Zoom in" aria-label="Zoom in">+</button>
       <button class="btn primary" id="fit">Fit</button>
     </div>
-  </div>
-
-  <div class="bar2">
-    <span class="seglbl">Size</span>
-    <input type="range" id="scale" min="0.7" max="1.8" step="0.05" value="1" aria-label="Station size">
-    <span class="pct" id="scaleval">100%</span>
   </div>
 
   <div class="viewport" id="viewport">
@@ -228,7 +214,7 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
     <span><i style="background:var(--cursor)"></i> branch cursor (sputnik &amp; HERE)</span>
     <span><i style="background:var(--line);border-radius:1px;transform:rotate(45deg)"></i> fork junction</span>
   </div>
-  <p class="hint">Station outlines are heavier on the sides than top and bottom, with the right edge a little heavier than the left, for a hand-inked look. Try the shapes; the Size slider scales the stations. Drag to pan &middot; scroll to zoom &middot; Fit frames the forest.</p>
+  <p class="hint">Each station is a screen; the current station on each branch (the &#9650; HERE marker) is a leaning trapezium. Outlines are heavier on the sides than top and bottom, with the right edge a little heavier than the left, for a hand-inked look. Drag to pan &middot; scroll to zoom &middot; Fit frames the forest.</p>
 </div>
 
 <script>
@@ -280,7 +266,6 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
   });
   // ---- card silhouettes: outer + inner filled paths, per-side thickness ----
   var SVGNS='http://www.w3.org/2000/svg';
-  var shapeName='screen';
 
   // GEOMETRY: screen / trapezium / boomerang. Rounded corners. Outline is the gap
   // between an outer silhouette and an inner one inset per side (t/r/b/l).
@@ -335,25 +320,18 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
       var rcO=Math.min(7,h*0.16,w*0.06), rcI=Math.max(2.5,rcO-mn);
       return { outer: roundPoly(P,rcO), inner: roundPoly(insetPoly(P,[t,r,b,l]),rcI) };
     }
-    if(shape==='boomerang'){
-      var ty=h*0.20, by=h-m, cxm=w/2, oTop=m, oBot=h-m-h*0.24;
-      var outer='M'+m+','+ty+'Q'+cxm+','+oTop+' '+(w-m)+','+ty+'L'+(w-m)+','+by+
-                'Q'+cxm+','+oBot+' '+m+','+by+'Z';
-      var itop=ty+t, ibot=by-b;
-      if(ibot-itop<8){ var mid=(ty+by)/2; itop=mid-4; ibot=mid+4; }
-      var inner='M'+(m+l)+','+itop+'Q'+cxm+','+(oTop+t)+' '+(w-m-r)+','+itop+
-                'L'+(w-m-r)+','+ibot+'Q'+cxm+','+(oBot-b)+' '+(m+l)+','+ibot+'Z';
-      return { outer: outer, inner: inner };
-    }
     var R=Math.min(14,(h-2*m)/2,(w-2*m)/2), Ri=Math.max(3,R-mn);
     return { outer: rr(m,m,w-m,h-m,R), inner: rr(m+l,m+t,w-m-r,h-m-b,Ri) };
   }
 
-  // Fixed per-side outline: thin top/bottom, heavier sides, right a little heavier than left.
-  function sidesFor(){ return { t:3.5, r:8, b:3.5, l:7 }; }
+  // Shape by role: the current ("here") station is a leaning trapezium, the rest
+  // are screens. Per-side outline is thin top/bottom, heavier sides, right a
+  // little heavier than left; the trapezium runs a touch heavier.
   function renderCards(){
-    var sides=sidesFor();
     Array.prototype.forEach.call(document.querySelectorAll('.card'), function(card){
+      var isCur=card.classList.contains('cursor');
+      var shape=isCur?'trapezium':'screen';
+      var sides=isCur?{t:4,r:9,b:4,l:8}:{t:3.5,r:8,b:3.5,l:7};
       var w=card.offsetWidth, h=card.offsetHeight;
       var svg=card.querySelector('svg.cardbg');
       if(!svg){
@@ -364,26 +342,15 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
         card.insertBefore(svg, card.firstChild);
       }
       svg.setAttribute('viewBox','0 0 '+w+' '+h);
-      var d=buildShape(shapeName, w, h, sides);
+      var d=buildShape(shape, w, h, sides);
       svg.querySelector('.outer').setAttribute('d', d.outer);
       svg.querySelector('.inner').setAttribute('d', d.inner);
     });
   }
 
-  var shapeBar=document.getElementById('shape');
-  shapeBar.addEventListener('click', function(e){
-    var b=e.target.closest('button'); if(!b) return;
-    shapeName=b.dataset.s; document.documentElement.dataset.shape=b.dataset.s;
-    Array.prototype.forEach.call(shapeBar.children, function(c){ c.classList.toggle('on', c===b); });
-    renderCards();
-  });
-  var scaleInput=document.getElementById('scale'), scaleVal=document.getElementById('scaleval');
-  function setScale(v){ document.documentElement.style.setProperty('--cardscale', v); scaleVal.textContent=Math.round(v*100)+'%'; }
-  scaleInput.addEventListener('input', function(){ setScale(parseFloat(scaleInput.value)); });
 
   window.addEventListener('resize', fit);
   renderCards();
-  setScale(parseFloat(scaleInput.value));
   if(document.readyState!=='loading') fit(); else document.addEventListener('DOMContentLoaded', fit);
   window.__fit=fit; window.__zoomAt=zoomAt; window.__render=renderCards;
 })();
