@@ -166,3 +166,68 @@ describe('assignLanes', () => {
     expect(lane.get(lineOfTask.get('x1'))).not.toBe(lane.get(lineOfTask.get('x2')))
   })
 })
+
+describe('assignLanes — non-crossing ordering', () => {
+  // The Wide tree: trunk alpha->bravo->charlie->delta; charlie forks left=one,
+  // right=two; delta forks left=apple, right=banana; two continues up to wonder.
+  // Two's line now spans rows 2-3 and overlaps banana's row 3. The branch that
+  // attaches HIGHER (banana, off delta/row3) must sit INNER; the lower-attaching
+  // two (off charlie/row2) is pushed outer, so delta's connector to banana no
+  // longer crosses two's lane.
+  function wide() {
+    return fakeForest(
+      [{ id: 't1', rootTaskId: 'alpha' }],
+      {
+        alpha: { next: 'bravo' },
+        bravo: { next: 'charlie' },
+        charlie: { next: 'delta', branches: [{ child: 'one', side: 'left', at: 'below' }, { child: 'two', side: 'right', at: 'below' }] },
+        delta: { branches: [{ child: 'apple', side: 'left', at: 'below' }, { child: 'banana', side: 'right', at: 'below' }] },
+        one: {}, two: { next: 'wonder' }, wonder: {}, apple: {}, banana: {},
+      },
+    )
+  }
+
+  it('places the higher-attaching same-side branch inner', () => {
+    const forest = wide()
+    const row = assignRows(forest)
+    const { lane, lineOfTask } = assignLanes(forest, row)
+    const l = (id) => lane.get(lineOfTask.get(id))
+    // right side: banana (attaches at delta/row3) inner, two (charlie/row2) outer
+    expect(l('banana')).toBeGreaterThan(0)
+    expect(l('two')).toBeGreaterThan(0)
+    expect(l('banana')).toBeLessThan(l('two'))
+    // left side: one and apple never share a row, so they still pack onto one lane
+    expect(l('one')).toBe(l('apple'))
+    expect(l('one')).toBeLessThan(0)
+    // wonder rides two's line
+    expect(l('wonder')).toBe(l('two'))
+  })
+
+  it('reserves a band for a nested subtree so an inner sub-branch cannot collide', () => {
+    // b (right branch of the trunk) has its own right sub-branch s; b's line
+    // spans rows 2-4 so it overlaps a sibling c at row 3. b's band must be wide
+    // enough for s, and c must sit outside the whole band.
+    const forest = fakeForest(
+      [{ id: 't1', rootTaskId: 'a' }],
+      {
+        a: { next: 'a2', branches: [{ child: 'b', side: 'right', at: 'above' }] },
+        a2: { branches: [{ child: 'c', side: 'right', at: 'above' }] },
+        b: { next: 'b2', branches: [{ child: 's', side: 'right', at: 'above' }] },
+        b2: { next: 'b3' }, b3: {}, s: {}, c: {},
+      },
+    )
+    const row = assignRows(forest)
+    const { lane, lineOfTask } = assignLanes(forest, row)
+    const l = (id) => lane.get(lineOfTask.get(id))
+    // All three are right-side branches.
+    expect(l('b')).toBeGreaterThan(0)
+    expect(l('s')).toBeGreaterThan(0)
+    expect(l('c')).toBeGreaterThan(0)
+    // b's subtree spreads b and s onto distinct lanes (a reserved band, not one lane).
+    expect(l('s')).not.toBe(l('b'))
+    // c and s both sit at row 2 on the right; without the reserved band they would
+    // collide on the same lane — they must not.
+    expect(l('c')).not.toBe(l('s'))
+    expect(l('c')).not.toBe(l('b'))
+  })
+})

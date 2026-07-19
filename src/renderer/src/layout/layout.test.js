@@ -190,3 +190,117 @@ describe('computeForestLayout — edge cases', () => {
     expect(Number.isFinite(layout.bounds.h)).toBe(true)
   })
 })
+
+// --- non-crossing branches and tip-fork connectivity -------------------------
+
+function mkTask(id, over = {}) {
+  return {
+    id, title: id, status: 'todo', createdAt: '2026-01-01T00:00:00Z', completedAt: null,
+    note: null, here: false, next: null, branches: [], ...over,
+  }
+}
+
+function layoutOf(raw) {
+  const forest = buildForest(raw)
+  const { sizes, titleSizes } = syntheticSizes(forest)
+  return computeForestLayout(forest, sizes, titleSizes)
+}
+
+// All track segments (risers, L-connectors, and the new tip-fork stubs).
+function segments(layout) {
+  const segs = []
+  for (const t of layout.tracks) {
+    for (let i = 1; i < t.points.length; i++) segs.push([t.points[i - 1], t.points[i]])
+  }
+  return segs
+}
+
+const orient = (a, b, c) => Math.sign((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]))
+// A "proper" crossing: the segments intersect at a point interior to both.
+// Shared endpoints (junctions, anchors) and collinear touches yield a zero
+// orientation and are not counted — those are legitimate joins, not crossings.
+function properlyCross(s1, s2) {
+  const [a, b] = s1, [c, d] = s2
+  return orient(a, b, c) * orient(a, b, d) < 0 && orient(c, d, a) * orient(c, d, b) < 0
+}
+function countCrossings(layout) {
+  const segs = segments(layout)
+  let n = 0
+  for (let i = 0; i < segs.length; i++) {
+    for (let j = i + 1; j < segs.length; j++) {
+      if (properlyCross(segs[i], segs[j])) n++
+    }
+  }
+  return n
+}
+
+describe('computeForestLayout — non-crossing branches', () => {
+  // The Wide tree: trunk Alpha->Bravo->Charlie->Delta; Charlie forks below to
+  // One (left) and Two (right); Delta forks below to Apple (left) and Banana
+  // (right); Two continues up to Wonder. Adding Wonder used to push Banana into
+  // a lane whose connector crossed Two's line.
+  const wide = {
+    schema: 1, domain: 'W', trees: [{ id: 't', name: 'Wide', rootTaskId: 'alpha' }],
+    tasks: {
+      alpha: mkTask('alpha', { next: 'bravo' }),
+      bravo: mkTask('bravo', { next: 'charlie' }),
+      charlie: mkTask('charlie', { next: 'delta', branches: [{ child: 'one', side: 'left', at: 'below' }, { child: 'two', side: 'right', at: 'below' }] }),
+      delta: mkTask('delta', { branches: [{ child: 'apple', side: 'left', at: 'below' }, { child: 'banana', side: 'right', at: 'below' }] }),
+      one: mkTask('one'), two: mkTask('two', { next: 'wonder' }), wonder: mkTask('wonder'),
+      apple: mkTask('apple'), banana: mkTask('banana'),
+    },
+  }
+
+  it('draws the Wide tree with no branch crossing', () => {
+    expect(countCrossings(layoutOf(wide))).toBe(0)
+  })
+
+  it('draws the HomeLab fixture with no branch crossing', () => {
+    expect(countCrossings(loadFixtureLayout().layout)).toBe(0)
+  })
+
+  it('draws a deep both-sides nest with no crossing', () => {
+    // a spine with nested sub-branches on both sides at overlapping rows
+    const deep = {
+      schema: 1, domain: 'D', trees: [{ id: 't', name: 'Deep', rootTaskId: 'r' }],
+      tasks: {
+        r: mkTask('r', { next: 'r2', branches: [{ child: 'L', side: 'left', at: 'above' }, { child: 'R', side: 'right', at: 'above' }] }),
+        r2: mkTask('r2', { branches: [{ child: 'L2', side: 'left', at: 'above' }, { child: 'R2', side: 'right', at: 'above' }] }),
+        L: mkTask('L', { next: 'La', branches: [{ child: 'Lb', side: 'left', at: 'above' }] }), La: mkTask('La'), Lb: mkTask('Lb'),
+        R: mkTask('R', { next: 'Ra', branches: [{ child: 'Rb', side: 'right', at: 'above' }] }), Ra: mkTask('Ra'), Rb: mkTask('Rb'),
+        L2: mkTask('L2'), R2: mkTask('R2'),
+      },
+    }
+    expect(countCrossings(layoutOf(deep))).toBe(0)
+  })
+})
+
+describe('computeForestLayout — tip-fork connector', () => {
+  // The Move tree: Alpha (root) -> Beta (the tip of the main line), and Beta
+  // forks left to Gamma above it. Beta must be connected up to the fork junction.
+  const move = {
+    schema: 1, domain: 'M', trees: [{ id: 't', name: 'Move', rootTaskId: 'alpha' }],
+    tasks: {
+      alpha: mkTask('alpha', { next: 'beta' }),
+      beta: mkTask('beta', { branches: [{ child: 'gamma', side: 'left', at: 'above' }] }),
+      gamma: mkTask('gamma'),
+    },
+  }
+
+  it('connects the tip parent up to its floating fork junction', () => {
+    const layout = layoutOf(move)
+    expect(layout.junctions).toHaveLength(1)
+    const j = layout.junctions[0]
+    const beta = layout.stations.find((s) => s.id === 'beta')
+    // a vertical stub at the parent's x runs from Beta's anchor up to the junction y
+    const stub = layout.tracks.find((t) =>
+      t.points.length === 2 &&
+      Math.abs(t.points[0][0] - beta.x) < 0.5 && Math.abs(t.points[1][0] - beta.x) < 0.5 &&
+      (Math.abs(t.points[0][1] - beta.anchorY) < 0.5 || Math.abs(t.points[1][1] - beta.anchorY) < 0.5) &&
+      (Math.abs(t.points[0][1] - j.y) < 0.5 || Math.abs(t.points[1][1] - j.y) < 0.5),
+    )
+    expect(stub).toBeTruthy()
+    // and it is not a degenerate zero-length segment
+    expect(Math.abs(stub.points[0][1] - stub.points[1][1])).toBeGreaterThan(0)
+  })
+})
