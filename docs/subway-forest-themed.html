@@ -21,9 +21,6 @@
   --c-done:#37c2ba; --c-prog:#f27a44; --c-todo:#f0bd55; --c-cancel:#7590a0; --cursor:#f27a44;
   --burst-a:#37c2ba; --burst-b:#f0bd55;
 }
-:root[data-shape="screen"]{ --card-radius:16px; }
-:root[data-shape="tombstone"]{ --card-radius:22px 22px 6px 6px; }
-:root[data-shape="capsule"]{ --card-radius:999px; }
 html,body{ margin:0; background:var(--ground); }
 *{ box-sizing:border-box; }
 body{
@@ -37,6 +34,8 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
 
 .bar{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; flex-wrap:wrap; }
 .seglbl{ font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); }
+.bar2{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+#thick{ width:130px; accent-color:var(--cursor); }
 .seg{ display:inline-flex; border:1px solid var(--line); border-radius:999px; overflow:hidden; }
 .seg button{ font:inherit; font-size:12px; border:0; background:transparent; color:var(--muted); padding:6px 14px; cursor:pointer; }
 .seg button.on{ background:var(--ink); color:var(--ground); }
@@ -70,15 +69,19 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
   letter-spacing:.08em; text-transform:uppercase; color:var(--ink); white-space:nowrap; }
 
 .stbox{ position:absolute; transform:translateX(-50%); z-index:2; }
-.card{ position:relative; background:var(--panel); border:2px solid var(--line); border-radius:var(--card-radius,16px); padding:5px 12px;
+.card{ position:relative; background:transparent; padding:7px 14px;
   width:138px; display:flex; flex-direction:column; gap:3px; }
-.card.cursor{ border:3px solid var(--cursor); padding:4px 9px; }
-.card.cancel{ border-style:dashed; }
+.card > .hd, .card > .tag, .card > .here{ position:relative; z-index:1; }
+.cardbg{ position:absolute; inset:0; width:100%; height:100%; overflow:visible; z-index:0; pointer-events:none; }
+.cardbg .outer{ fill:var(--line); }
+.cardbg .inner{ fill:var(--panel); }
+.card.cursor .cardbg .outer{ fill:var(--cursor); }
+.card.cancel .cardbg .outer{ fill:var(--c-cancel); }
 .card .hd{ display:flex; align-items:center; gap:7px; }
 .card .lbl{ font-size:11.5px; line-height:1.18; color:var(--ink); }
 .card.cancel .lbl{ text-decoration:line-through; color:var(--muted); }
 .card .tag{ font-size:8.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
-.card.note::after{ content:""; position:absolute; top:8px; right:13px; width:6px; height:6px; border-radius:50%; background:var(--c-todo); }
+.card.note::after{ content:""; position:absolute; top:9px; right:15px; width:6px; height:6px; border-radius:50%; background:var(--c-todo); z-index:1; }
 .here{ align-self:flex-start; font-size:8px; font-weight:800; letter-spacing:.14em; color:var(--ground);
   background:var(--cursor); padding:1px 5px; border-radius:3px; }
 
@@ -110,8 +113,8 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
       <span class="seglbl">Shape</span>
       <div class="seg" id="shape">
         <button data-s="screen" class="on">Screen</button>
-        <button data-s="tombstone">Tombstone</button>
-        <button data-s="capsule">Capsule</button>
+        <button data-s="trapezium">Trapezium</button>
+        <button data-s="boomerang">Boomerang</button>
       </div>
     </div>
     <div class="zoom">
@@ -120,6 +123,17 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
       <button class="btn icon" id="zin" title="Zoom in" aria-label="Zoom in">+</button>
       <button class="btn primary" id="fit">Fit</button>
     </div>
+  </div>
+
+  <div class="bar2">
+    <span class="seglbl">Outline</span>
+    <div class="seg" id="edgemode">
+      <button data-e="uniform" class="on">Uniform</button>
+      <button data-e="varied">Per-side</button>
+    </div>
+    <span class="seglbl">Thickness</span>
+    <input type="range" id="thick" min="1" max="8" step="0.5" value="2" aria-label="Outline thickness">
+    <span class="pct" id="thickval">2px</span>
   </div>
 
   <div class="viewport" id="viewport">
@@ -218,7 +232,7 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
     <span><i style="background:var(--cursor)"></i> branch cursor (sputnik &amp; HERE)</span>
     <span><i style="background:var(--line);border-radius:1px;transform:rotate(45deg)"></i> fork junction</span>
   </div>
-  <p class="hint">Use the Shape control to try Googie station shapes. Drag to pan &middot; scroll to zoom &middot; Fit frames the forest. Fonts are system for now.</p>
+  <p class="hint">Use the Shape and Outline controls to try Googie station forms and edge weights (per-side thickness gives the hand-inked look). Drag to pan &middot; scroll to zoom &middot; Fit frames the forest. Fonts are system for now.</p>
 </div>
 
 <script>
@@ -268,16 +282,120 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
     document.documentElement.dataset.ground=b.dataset.g;
     Array.prototype.forEach.call(groundBar.children, function(c){ c.classList.toggle('on', c===b); });
   });
+  // ---- card silhouettes: outer + inner filled paths, per-side thickness ----
+  var SVGNS='http://www.w3.org/2000/svg';
+  var shapeName='screen', edgeMode='uniform', thick=2;
+
+  // GEOMETRY: screen / trapezium / boomerang. Rounded corners. Outline is the gap
+  // between an outer silhouette and an inner one inset per side (t/r/b/l).
+  function rr(x0,y0,x1,y1,r){
+    r=Math.max(0,Math.min(r,(x1-x0)/2,(y1-y0)/2));
+    return 'M'+(x0+r)+','+y0+'L'+(x1-r)+','+y0+'Q'+x1+','+y0+' '+x1+','+(y0+r)+
+      'L'+x1+','+(y1-r)+'Q'+x1+','+y1+' '+(x1-r)+','+y1+
+      'L'+(x0+r)+','+y1+'Q'+x0+','+y1+' '+x0+','+(y1-r)+
+      'L'+x0+','+(y0+r)+'Q'+x0+','+y0+' '+(x0+r)+','+y0+'Z';
+  }
+  function roundPoly(pts, rc){
+    var n=pts.length, d='';
+    for(var i=0;i<n;i++){
+      var cur=pts[i], prev=pts[(i-1+n)%n], next=pts[(i+1)%n];
+      var v1x=prev[0]-cur[0], v1y=prev[1]-cur[1], l1=Math.hypot(v1x,v1y)||1;
+      var v2x=next[0]-cur[0], v2y=next[1]-cur[1], l2=Math.hypot(v2x,v2y)||1;
+      var r=Math.min(rc, l1/2, l2/2);
+      var ax=cur[0]+v1x/l1*r, ay=cur[1]+v1y/l1*r, bx=cur[0]+v2x/l2*r, by=cur[1]+v2y/l2*r;
+      d+=(i?'L':'M')+ax.toFixed(2)+','+ay.toFixed(2)+'Q'+cur[0].toFixed(2)+','+cur[1].toFixed(2)+' '+bx.toFixed(2)+','+by.toFixed(2);
+    }
+    return d+'Z';
+  }
+  function insetPoly(pts, th){
+    var n=pts.length, cx=0, cy=0, i;
+    for(i=0;i<n;i++){ cx+=pts[i][0]; cy+=pts[i][1]; } cx/=n; cy/=n;
+    var lines=[];
+    for(i=0;i<n;i++){
+      var A=pts[i], B=pts[(i+1)%n], dx=B[0]-A[0], dy=B[1]-A[1], len=Math.hypot(dx,dy)||1;
+      var nx=-dy/len, ny=dx/len, mx=(A[0]+B[0])/2, my=(A[1]+B[1])/2;
+      if((cx-mx)*nx+(cy-my)*ny<0){ nx=-nx; ny=-ny; }
+      lines.push({ px:A[0]+nx*th[i], py:A[1]+ny*th[i], dx:dx, dy:dy });
+    }
+    var out=[];
+    for(i=0;i<n;i++){
+      var L1=lines[(i-1+n)%n], L2=lines[i];
+      var D=L1.dx*(-L2.dy)-(-L2.dx)*L1.dy;
+      if(Math.abs(D)<1e-6){ out.push([L2.px,L2.py]); continue; }
+      var rx=L2.px-L1.px, ry=L2.py-L1.py, tt=(rx*(-L2.dy)-(-L2.dx)*ry)/D;
+      out.push([L1.px+L1.dx*tt, L1.py+L1.dy*tt]);
+    }
+    return out;
+  }
+  function buildShape(shape,w,h,s){
+    var m=1.5;
+    var t=Math.max(0,Math.min(s.t,h/2-4)), b=Math.max(0,Math.min(s.b,h/2-4)),
+        l=Math.max(0,Math.min(s.l,w/2-4)), r=Math.max(0,Math.min(s.r,w/2-4));
+    var mn=Math.min(t,b,l,r);
+    if(shape==='trapezium'){
+      // four corners with no parallel sides; edges map to top/right/bottom/left
+      var P=[ [m+w*0.02,m], [w-m,m+h*0.22], [w-m-w*0.10,h-m], [m,h-m-h*0.10] ];
+      var rcO=Math.min(9,h*0.22), rcI=Math.max(2.5,rcO-mn);
+      return { outer: roundPoly(P,rcO), inner: roundPoly(insetPoly(P,[t,r,b,l]),rcI) };
+    }
+    if(shape==='boomerang'){
+      var ty=h*0.20, by=h-m, cxm=w/2, oTop=m, oBot=h-m-h*0.24;
+      var outer='M'+m+','+ty+'Q'+cxm+','+oTop+' '+(w-m)+','+ty+'L'+(w-m)+','+by+
+                'Q'+cxm+','+oBot+' '+m+','+by+'Z';
+      var itop=ty+t, ibot=by-b;
+      if(ibot-itop<8){ var mid=(ty+by)/2; itop=mid-4; ibot=mid+4; }
+      var inner='M'+(m+l)+','+itop+'Q'+cxm+','+(oTop+t)+' '+(w-m-r)+','+itop+
+                'L'+(w-m-r)+','+ibot+'Q'+cxm+','+(oBot-b)+' '+(m+l)+','+ibot+'Z';
+      return { outer: outer, inner: inner };
+    }
+    var R=Math.min(14,(h-2*m)/2,(w-2*m)/2), Ri=Math.max(3,R-mn);
+    return { outer: rr(m,m,w-m,h-m,R), inner: rr(m+l,m+t,w-m-r,h-m-b,Ri) };
+  }
+
+  function sidesFor(){
+    if(edgeMode==='varied') return { t:thick*0.62, r:thick*1.6, b:thick*0.62, l:thick*1.3 };
+    return { t:thick, r:thick, b:thick, l:thick };
+  }
+  function renderCards(){
+    var sides=sidesFor();
+    Array.prototype.forEach.call(document.querySelectorAll('.card'), function(card){
+      var w=card.offsetWidth, h=card.offsetHeight;
+      var svg=card.querySelector('svg.cardbg');
+      if(!svg){
+        svg=document.createElementNS(SVGNS,'svg'); svg.setAttribute('class','cardbg'); svg.setAttribute('preserveAspectRatio','none');
+        var op=document.createElementNS(SVGNS,'path'); op.setAttribute('class','outer');
+        var ip=document.createElementNS(SVGNS,'path'); ip.setAttribute('class','inner');
+        svg.appendChild(op); svg.appendChild(ip);
+        card.insertBefore(svg, card.firstChild);
+      }
+      svg.setAttribute('viewBox','0 0 '+w+' '+h);
+      var d=buildShape(shapeName, w, h, sides);
+      svg.querySelector('.outer').setAttribute('d', d.outer);
+      svg.querySelector('.inner').setAttribute('d', d.inner);
+    });
+  }
+
   var shapeBar=document.getElementById('shape');
   shapeBar.addEventListener('click', function(e){
     var b=e.target.closest('button'); if(!b) return;
-    document.documentElement.dataset.shape=b.dataset.s;
+    shapeName=b.dataset.s; document.documentElement.dataset.shape=b.dataset.s;
     Array.prototype.forEach.call(shapeBar.children, function(c){ c.classList.toggle('on', c===b); });
+    renderCards();
   });
+  var edgeBar=document.getElementById('edgemode');
+  edgeBar.addEventListener('click', function(e){
+    var b=e.target.closest('button'); if(!b) return;
+    edgeMode=b.dataset.e;
+    Array.prototype.forEach.call(edgeBar.children, function(c){ c.classList.toggle('on', c===b); });
+    renderCards();
+  });
+  var thickInput=document.getElementById('thick'), thickVal=document.getElementById('thickval');
+  thickInput.addEventListener('input', function(){ thick=parseFloat(thickInput.value); thickVal.textContent=thick+'px'; renderCards(); });
 
   window.addEventListener('resize', fit);
+  renderCards();
   if(document.readyState!=='loading') fit(); else document.addEventListener('DOMContentLoaded', fit);
-  window.__fit=fit; window.__zoomAt=zoomAt;
+  window.__fit=fit; window.__zoomAt=zoomAt; window.__render=renderCards;
 })();
 </script>
 </body>
