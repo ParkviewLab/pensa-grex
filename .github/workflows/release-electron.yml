@@ -57,6 +57,11 @@ jobs:
           node-version: 24.x
           cache: npm
       - run: npm ci
+      # Generate the legal/ notice bundle before packaging — electron-builder
+      # ships it via extraResources, and legal/ is gitignored so it is absent on
+      # a clean runner. Without this, installers build but carry no third-party
+      # licence notices and the in-app Licenses window shows a placeholder.
+      - run: npm run legal
       - run: npm run build
       - name: Package installers (unsigned)
         run: npx electron-builder --publish never

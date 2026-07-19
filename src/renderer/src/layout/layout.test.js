@@ -160,4 +160,33 @@ describe('computeForestLayout — edge cases', () => {
     expect(layout.stations).toHaveLength(1)
     expect(Number.isFinite(layout.bounds.w)).toBe(true)
   })
+
+  // Regression: a fork "below" a bare root (no .next) once produced NaN junction
+  // and branch-track coordinates. assignRows now rises such a child to row 1.
+  it('lays out a below-branch on a bare root with finite coordinates', () => {
+    const raw = {
+      schema: 1, domain: 'D',
+      trees: [{ id: 't1', name: 'Solo', rootTaskId: 'r' }],
+      tasks: {
+        r: { id: 'r', title: 'Root', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: null, branches: [{ child: 'b', side: 'left', at: 'below' }] },
+        b: { id: 'b', title: 'Below', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: null, branches: [] },
+      },
+    }
+    const forest = buildForest(raw)
+    const sizes = new Map([['r', { cardW: 138, cardH: 49 }], ['b', { cardW: 138, cardH: 49 }]])
+    const titleSizes = new Map([['t1', { titleW: 60, titleH: 14 }]])
+    const layout = computeForestLayout(forest, sizes, titleSizes)
+    for (const j of layout.junctions) {
+      expect(Number.isFinite(j.x)).toBe(true)
+      expect(Number.isFinite(j.y)).toBe(true)
+    }
+    for (const t of layout.tracks) {
+      for (const [x, y] of t.points) {
+        expect(Number.isFinite(x)).toBe(true)
+        expect(Number.isFinite(y)).toBe(true)
+      }
+    }
+    expect(Number.isFinite(layout.bounds.w)).toBe(true)
+    expect(Number.isFinite(layout.bounds.h)).toBe(true)
+  })
 })

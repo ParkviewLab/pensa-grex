@@ -7,7 +7,7 @@
 // create/load/save/note round trips and the path-safety boundary end to end.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import JSON5 from 'json5'
@@ -40,6 +40,16 @@ describe('library root and settings', () => {
   it('persists the last-opened domain', () => {
     store.setLastDomain('Work')
     expect(store.getSettings().lastDomain).toBe('Work')
+  })
+
+  it('refuses to overwrite a corrupt settings.json, preserving the library root', () => {
+    const p = join(h.userData, 'settings.json')
+    writeFileSync(p, '{ this is not valid json', 'utf-8')
+    const res = store.setLastDomain('HomeLab')
+    expect(res.error).toMatch(/unreadable/)
+    expect(readFileSync(p, 'utf-8')).toBe('{ this is not valid json') // untouched
+    // read-only accessors tolerate the corruption by falling back to the default
+    expect(store.getLibraryRoot()).toBe(join(h.userData, 'forests'))
   })
 })
 

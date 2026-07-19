@@ -15,6 +15,7 @@ import { EditorState } from '@codemirror/state'
 import { markdown } from '@codemirror/lang-markdown'
 import { marked } from 'marked'
 import markedKatex from 'marked-katex-extension'
+import DOMPurify from 'dompurify'
 import 'katex/dist/katex.min.css'
 
 marked.use(markedKatex({ throwOnError: false }))
@@ -68,21 +69,40 @@ export function createNoteEditor({ readNote, writeNote, openExternal, onFirstWri
 
   const isOpen = () => !backdrop.classList.contains('hidden')
 
+  // Notes are portable files that may be shared or synced (northstar intent 3),
+  // so note markdown is untrusted: marked does not sanitize, and this renders
+  // into innerHTML, so run the output through DOMPurify to strip scripts,
+  // inline event handlers, and javascript: URLs before it reaches the DOM.
   function renderPreview() {
-    body.innerHTML = marked.parse(raw || '')
+    body.innerHTML = DOMPurify.sanitize(marked.parse(raw || ''))
   }
 
   function destroyEditor() {
     if (view) { view.destroy(); view = null }
   }
 
+  // Snapshot the target before the await: close() may reset the module state
+  // (domainPath/taskId/file/raw) while this write is in flight, so reading them
+  // afterward for the onFirstWrite bookkeeping would use the cleared values.
   async function save() {
     if (file === null) return
-    const r = await writeNote(domainPath, file, raw)
+    const dir = domainPath, f = file, id = taskId, text = raw
+    const firstWrite = !recorded && text.trim().length > 0
+    const r = await writeNote(dir, f, text)
     if (r && r.error) { console.warn('[note save]', r.error); return }
-    if (!recorded && raw.trim().length && onFirstWrite) {
+    if (firstWrite && onFirstWrite) {
       recorded = true
-      onFirstWrite(taskId, file)
+      onFirstWrite(id, f)
+    }
+  }
+
+  // Force a pending debounced save to happen now (on Done, on close, on quit),
+  // so edits made within the debounce window are never dropped.
+  function flush() {
+    if (saveTimer) {
+      clearTimeout(saveTimer)
+      saveTimer = null
+      save()
     }
   }
 
@@ -100,7 +120,7 @@ export function createNoteEditor({ readNote, writeNote, openExternal, onFirstWri
             raw = u.state.doc.toString()
             renderPreview()
             clearTimeout(saveTimer)
-            saveTimer = setTimeout(save, 500)
+            saveTimer = setTimeout(() => { saveTimer = null; save() }, 500)
           }),
         ],
       }),
@@ -113,8 +133,12 @@ export function createNoteEditor({ readNote, writeNote, openExternal, onFirstWri
     panel.classList.toggle('edit', editMode)
     toggleBtn.textContent = editMode ? 'Done' : 'Edit'
     renderPreview()
-    if (editMode) createEditor()
-    else destroyEditor()
+    if (editMode) {
+      createEditor()
+    } else {
+      flush() // leaving edit (Done) must not drop edits still inside the debounce window
+      destroyEditor()
+    }
   }
 
   toggleBtn.addEventListener('click', () => { editMode = !editMode; applyMode() })
@@ -151,8 +175,7 @@ export function createNoteEditor({ readNote, writeNote, openExternal, onFirstWri
   }
 
   function close() {
-    clearTimeout(saveTimer)
-    if (view) save() // flush any pending edit
+    flush() // write any pending edit before we tear the panel down (regardless of view)
     destroyEditor()
     backdrop.classList.add('hidden')
     body.innerHTML = ''
@@ -161,5 +184,5 @@ export function createNoteEditor({ readNote, writeNote, openExternal, onFirstWri
     editMode = false
   }
 
-  return { open, close, isOpen }
+  return { open, close, flush, isOpen }
 }

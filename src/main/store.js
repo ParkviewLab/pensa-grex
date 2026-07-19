@@ -18,7 +18,8 @@
 import { app } from 'electron'
 import { join, dirname, resolve } from 'node:path'
 import {
-  existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, renameSync, rmSync,
+  existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync,
+  openSync, writeSync, fsyncSync, closeSync,
 } from 'node:fs'
 import { isValidDomainName, isValidNoteFile, resolveUnder } from './pathsafe.js'
 
@@ -28,9 +29,26 @@ function settingsPath() {
   return join(app.getPath('userData'), 'settings.json')
 }
 
+// Read settings, distinguishing "not there yet" (ENOENT → {}) from "present but
+// unreadable" (corrupt JSON, EACCES, a sync conflict), which throws. A blind
+// catch-all here would let a corrupt file read as {} and the next write clobber
+// it, silently erasing the user's libraryRoot — see readSettingsSafe/setters.
 function readSettings() {
+  let text
   try {
-    return JSON.parse(readFileSync(settingsPath(), 'utf-8'))
+    text = readFileSync(settingsPath(), 'utf-8')
+  } catch (e) {
+    if (e.code === 'ENOENT') return {}
+    throw e
+  }
+  return JSON.parse(text)
+}
+
+// For read-only defaults: tolerate a corrupt settings file by falling back to
+// empty WITHOUT writing anything, so the bad file is preserved for recovery.
+function readSettingsSafe() {
+  try {
+    return readSettings()
   } catch {
     return {}
   }
@@ -40,31 +58,60 @@ function writeSettings(next) {
   atomicWrite(settingsPath(), JSON.stringify(next, null, 2) + '\n')
 }
 
+// Atomic and durable: write the temp file, fsync it, rename over the target,
+// then fsync the directory so the rename survives a crash/power loss. Without
+// the fsyncs a crash just after rename can leave a zero-length file — the very
+// truncation this is meant to prevent.
 function atomicWrite(absPath, text) {
   const tmp = absPath + '.tmp'
-  writeFileSync(tmp, text, 'utf-8')
+  const fd = openSync(tmp, 'w')
+  try {
+    writeSync(fd, text)
+    fsyncSync(fd)
+  } finally {
+    closeSync(fd)
+  }
   renameSync(tmp, absPath)
+  try {
+    const dir = openSync(dirname(absPath), 'r')
+    try { fsyncSync(dir) } finally { closeSync(dir) }
+  } catch {
+    // Directory fsync is best-effort (not supported on every platform).
+  }
 }
 
 // The default library lives under the app's userData directory; a user can
 // repoint it to any folder via setLibraryRoot (chooseLibraryRoot in the UI).
 export function getLibraryRoot() {
-  return readSettings().libraryRoot || join(app.getPath('userData'), 'forests')
+  return readSettingsSafe().libraryRoot || join(app.getPath('userData'), 'forests')
 }
 
 export function setLibraryRoot(root) {
-  const s = readSettings()
+  let s
+  try {
+    s = readSettings()
+  } catch (e) {
+    return { error: 'settings.json is unreadable; refusing to overwrite it: ' + e.message }
+  }
   s.libraryRoot = root
   writeSettings(s)
   return { ok: true, root }
 }
 
 export function getSettings() {
-  return { libraryRoot: getLibraryRoot(), lastDomain: readSettings().lastDomain || null }
+  const s = readSettingsSafe()
+  return { libraryRoot: s.libraryRoot || join(app.getPath('userData'), 'forests'), lastDomain: s.lastDomain || null }
 }
 
 export function setLastDomain(name) {
-  const s = readSettings()
+  let s
+  try {
+    s = readSettings()
+  } catch (e) {
+    // Refuse rather than clobber a present-but-unreadable file, which would
+    // silently erase the user's libraryRoot pointer.
+    return { error: 'settings.json is unreadable; refusing to overwrite it: ' + e.message }
+  }
   s.lastDomain = name
   writeSettings(s)
   return { ok: true }

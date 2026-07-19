@@ -243,7 +243,9 @@ export function addBranchBelow(raw, taskId, title, side) {
   const next = clone(raw)
   const task = requireTask(next, taskId)
   const n = newTask(title)
-  task.branches.push({ child: n.id, side: branchSide(task, side), at: 'below' })
+  // A tree root has no gap below it, so a fork "below" a root is a fork above.
+  const at = predecessorOf(next, taskId) ? 'below' : 'above'
+  task.branches.push({ child: n.id, side: branchSide(task, side), at })
   next.tasks[n.id] = n
   return next
 }

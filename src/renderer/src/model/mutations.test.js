@@ -156,6 +156,13 @@ describe('addBranch', () => {
     expect(out.tasks.m2.branches[0]).toMatchObject({ side: 'right', at: 'below' })
     valid(out)
   })
+
+  it('records a fork below a root as at:above (a root has no gap below it)', () => {
+    const before = base()
+    const out = addBranchBelow(before, 'r', 'A')
+    expect(out.tasks.r.branches[0].at).toBe('above')
+    valid(out)
+  })
 })
 
 describe('deleteTask — subtree', () => {

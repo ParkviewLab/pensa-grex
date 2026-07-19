@@ -19,7 +19,23 @@
 // parent's own .next — a fork's branches and its main-line continuation
 // begin at the same height) or at the parent's own row for at:'below'
 // (level with the parent itself, one gap lower).
+// A tree root sits at the base (row 0) with no gap below it, so a fork "below" a
+// root has nowhere to go; it is treated as a fork above instead — the child
+// rises to the parent's row +1, matching the below-on-root fallback in
+// layout.js. Without this the child would be pinned at the root's own row while
+// the connector aimed a row higher, producing a dangling track or, when the
+// root has no successor, NaN coordinates.
+function rootSet(forest) {
+  return new Set(forest.trees.map((t) => t.rootTaskId))
+}
+
+function childRow(id, r, b, roots) {
+  if (b.at !== 'below') return r + 1 // above: level with the parent's own .next
+  return roots.has(id) ? r + 1 : r // below-on-root rises; below elsewhere is level with the parent
+}
+
 export function assignRows(forest) {
+  const roots = rootSet(forest)
   const row = new Map()
   for (const tree of forest.trees) {
     const stack = [[tree.rootTaskId, 0]]
@@ -31,7 +47,7 @@ export function assignRows(forest) {
       if (!task) continue
       if (task.next) stack.push([task.next, r + 1])
       for (const b of task.branches) {
-        stack.push([b.child, b.at === 'below' ? r : r + 1])
+        stack.push([b.child, childRow(id, r, b, roots)])
       }
     }
   }
@@ -39,13 +55,16 @@ export function assignRows(forest) {
 }
 
 // The lower row index of every gap (r, r+1) that carries at least one fork
-// junction — used to widen that gap's pitch so the diamond has room.
+// junction — used to widen that gap's pitch so the diamond has room. A
+// below-on-root fork uses the gap above the root (r), like an above fork.
 export function junctionGaps(forest, row) {
+  const roots = rootSet(forest)
   const gaps = new Set()
   for (const [id, task] of forest.tasks) {
     for (const b of task.branches) {
       const r = row.get(id)
-      gaps.add(b.at === 'below' ? r - 1 : r)
+      const below = b.at === 'below' && !roots.has(id)
+      gaps.add(below ? r - 1 : r)
     }
   }
   return gaps
