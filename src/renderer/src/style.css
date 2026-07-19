@@ -102,3 +102,39 @@ body{
 .gl.prog{ background:var(--c-prog); }
 .gl.todo{ background:transparent; border:2px solid var(--c-todo); }
 .gl.cancel{ background:transparent; border:1.5px dashed var(--c-cancel); }
+
+/* Right-click menu (interaction/contextMenu.js). */
+.menu{ position:fixed; z-index:50; min-width:190px; background:var(--panel); color:var(--ink);
+  border:1px solid var(--line); border-radius:8px; padding:5px;
+  box-shadow:0 10px 30px rgba(0,0,0,.28); font-size:12.5px; user-select:none; }
+.menu.submenu{ position:absolute; left:100%; top:-6px; margin-left:3px; display:none; }
+.menu-item.has-sub:hover > .submenu{ display:block; }
+.menu-sep{ height:1px; background:var(--line); opacity:.5; margin:5px 6px; }
+.menu-item{ position:relative; display:flex; align-items:center; gap:6px; padding:6px 10px;
+  border-radius:5px; cursor:pointer; white-space:nowrap; }
+.menu-item:hover{ background:color-mix(in srgb, var(--line) 20%, transparent); }
+.menu-item.disabled{ opacity:.4; cursor:default; }
+.menu-item.disabled:hover{ background:transparent; }
+.menu-check{ width:12px; text-align:center; color:var(--muted); font-size:11px; }
+.menu-label{ flex:1; }
+.menu-arrow{ color:var(--muted); margin-left:10px; }
+
+/* Themed modal dialogs (ui/dialog.js): title entry and the delete choice. */
+.modal-backdrop{ position:fixed; inset:0; z-index:60; background:rgba(0,0,0,.35);
+  display:flex; align-items:center; justify-content:center; }
+.modal{ min-width:320px; max-width:min(90vw,440px); background:var(--panel); color:var(--ink);
+  border:1px solid var(--line); border-radius:12px; padding:18px 20px;
+  box-shadow:0 20px 60px rgba(0,0,0,.4); }
+.modal-title{ font-size:14px; font-weight:800; letter-spacing:.02em; margin-bottom:10px; }
+.modal-label{ display:block; font-size:10px; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--muted); margin-bottom:5px; }
+.modal-message{ font-size:12.5px; line-height:1.5; margin-bottom:4px; }
+.modal-input{ width:100%; font:inherit; font-size:13px; color:var(--ink); background:var(--ground);
+  border:1px solid var(--line); border-radius:6px; padding:8px 10px; }
+.modal-input:focus{ outline:2px solid var(--cursor); outline-offset:0; border-color:var(--cursor); }
+.modal-actions{ display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
+.modal-btn{ font:inherit; font-size:12px; border:1px solid var(--line); background:transparent;
+  color:var(--ink); border-radius:6px; padding:7px 14px; cursor:pointer; }
+.modal-btn:hover{ background:color-mix(in srgb, var(--line) 16%, transparent); }
+.modal-btn.primary{ background:var(--ink); color:var(--ground); border-color:var(--ink); }
+.modal-btn.danger{ background:var(--c-prog); color:var(--ground); border-color:var(--c-prog); }

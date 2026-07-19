@@ -47,6 +47,7 @@ export function createViewport({ viewportEl, worldEl, pctEl, getBounds, minScale
     zoomAt(e.deltaY < 0 ? 1.1 : 1 / 1.1, e.clientX - r.left, e.clientY - r.top)
   }
   function onPointerDown(e) {
+    if (e.button !== 0) return // left-button pans; right-button is for the menu
     dragging = true; sx = e.clientX; sy = e.clientY; stx = tx; sty = ty
     viewportEl.classList.add('dragging')
     viewportEl.setPointerCapture(e.pointerId)

@@ -70,9 +70,16 @@ to build once the data model and a dynamic layout exist. The menu offers:
   is what decides which child is the straight-up main line.
 - **Add branch above** / **Add branch below** — fork a new parallel stack off this
   point; the new stack becomes an alternating left/right **branch child**.
+- **Rename** — change the task's title in place (added at M5; a mistyped title
+  needs a way back, and single-click and double-click are spoken for).
 - **Edit note** — open this task's markdown note (also on double-click of the
-  label); see Notes below.
-- **Delete task** — remove this task (subtree behaviour is an open question).
+  label); see Notes below. Arrives at M6.
+- **Delete task** — remove this task. When it has tasks growing from it, the app
+  offers the **choice** (settled below): remove the whole subtree, or splice the
+  successor onto the parent.
+
+Right-clicking empty canvas offers **New tree**, the one way to begin a stack
+from nothing (an empty domain, or after the last tree was deleted).
 
 Mapping to the mental model: add-task is a push on the stack (the main line);
 add-branch is a fork; delete is a pop or subtree removal. Whether a child is the
@@ -98,10 +105,7 @@ the subway grammar in [`subway-forest-themed.html`](subway-forest-themed.html).
 
 ## Open questions
 
-- **Delete with children.** Deleting a task that has children: remove the whole
-  subtree, or splice the children onto the parent?
-- **Pop and status.** Is pop purely structural removal at a tip, independent of
-  completing or cancelling a task, or are they related?
+- None outstanding for the data model. (Both prior questions are settled below.)
 
 ## Decided
 
@@ -112,3 +116,12 @@ the subway grammar in [`subway-forest-themed.html`](subway-forest-themed.html).
   created by Add task above/below; branches come from Add branch above/below.
 - **Notes.** Markdown per task, edited the conception-space way (CodeMirror plus
   marked); double-click the label or right-click, Edit note.
+- **Delete with children (M5).** The app offers the choice at delete time:
+  **remove the subtree** (the task and everything growing from it) or **splice**
+  (remove only the task; its main-line successor, or lacking one its first fork,
+  takes its place, and any remaining forks reattach to that new head). Deleting a
+  tip is the same either way. A splice that would merge two cursored lines keeps
+  the tip-most "here" and clears the rest.
+- **Pop and status (M5).** Independent. Completing or cancelling a task leaves it
+  on the map (recoloured, struck through); delete is the separate structural
+  "pop". Finishing a task never removes it.
