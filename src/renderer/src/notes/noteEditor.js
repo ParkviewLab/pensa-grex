@@ -47,7 +47,7 @@ export function createNoteEditor({ readNote, writeNote, openExternal, onFirstWri
   const panel = elem('div', 'note-panel')
   const head = elem('div', 'note-head')
   const title = elem('div', 'note-title')
-  const toggleBtn = elem('button', 'note-toggle', 'Edit')
+  const toggleBtn = elem('button', 'note-toggle', 'View')
   const closeBtn = elem('button', 'note-close', '✕')
   head.append(title, toggleBtn, closeBtn)
   const content = elem('div', 'note-content')
@@ -131,12 +131,12 @@ export function createNoteEditor({ readNote, writeNote, openExternal, onFirstWri
 
   function applyMode() {
     panel.classList.toggle('edit', editMode)
-    toggleBtn.textContent = editMode ? 'Done' : 'Edit'
+    toggleBtn.textContent = editMode ? 'View' : 'Edit'
     renderPreview()
     if (editMode) {
       createEditor()
     } else {
-      flush() // leaving edit (Done) must not drop edits still inside the debounce window
+      flush() // leaving edit (View) must not drop edits still inside the debounce window
       destroyEditor()
     }
   }
@@ -168,7 +168,7 @@ export function createNoteEditor({ readNote, writeNote, openExternal, onFirstWri
     title.textContent = task.title
     const res = await readNote(domainPath, file)
     raw = res && typeof res.content === 'string' ? res.content : ''
-    editMode = false
+    editMode = true
     destroyEditor()
     applyMode()
     backdrop.classList.remove('hidden')
