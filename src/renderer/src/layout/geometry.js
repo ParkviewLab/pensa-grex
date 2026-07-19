@@ -5,14 +5,13 @@
 // row grid, and horizontal lane packing. No DOM; every input is plain data
 // (a forest model — see model/forest.js — plus measured sizes).
 //
-// Card width is fixed (every station is the same width; see style.css
-// .card{width:138px}), so horizontal placement doesn't need general
-// variable-width contour packing — an integer "lane" per line (0 = trunk,
-// negative = left, positive = right) at a fixed per-lane x-step is enough,
-// and two lines that never occupy the same row can safely share a lane for
-// tight packing. If stations ever become variable-width this would need to
-// become real contour packing; until then this is the simpler, equally
-// correct approach.
+// Horizontal placement (assignLanes) is a subtree-aware tidy-tree contour
+// packer that guarantees branch connectors never cross. Card width is fixed
+// (style.css .card{width:138px}), so lanes are integers at a fixed per-lane
+// x-step rather than real per-row contours; the integer band is the
+// fixed-width specialization of the algorithm. The algorithm, its lineage
+// (Reingold-Tilford / Walker / Buchheim / van der Ploeg) and this variant are
+// written up in docs/tree-layout.md.
 
 // Row 0 is every tree's root; a main-line successor (.next) is +1. A branch
 // child starts at its parent's row +1 for at:'above' (level with the
@@ -98,15 +97,27 @@ function rangesOverlap(a, b) {
 }
 
 // Every task belongs to exactly one "line" (docs/model_ideas.md): the chain
-// reached by .next from a tree root or a branch child. Assigns each line an
-// integer lane, per tree (trunk = lane 0), packing lines whose row-ranges
-// never overlap onto the same lane on the same side.
+// reached by .next from a tree root or a branch child, drawn colinear at one x.
+// assignLanes assigns each line an integer lane (0 = trunk, negative = left,
+// positive = right) with a subtree-aware tidy-tree contour packer, so branch
+// connectors never cross. See docs/tree-layout.md for the full algorithm.
+//
+// Two rules make it planar. (1) On each side, a branch that attaches HIGHER on
+// its spine sits inner (nearer the spine) and a lower-attaching branch reaches
+// around it outer: an outer branch's horizontal connector then leaves the spine
+// below where any inner band begins, so it cannot cross one. (2) Each branch
+// reserves a contiguous BAND of lanes wide enough for its whole subtree, packed
+// by first-fit against the row-ranges already placed on that side, so two
+// subtrees whose rows never overlap still share lanes (tight packing) but bands
+// that would collide grow outward.
 export function assignLanes(forest, row) {
   const lineOfTask = new Map() // taskId -> the line's own start-task id
-  const lineRows = new Map() // lineId -> {min,max}
+  const lineRows = new Map() // lineId -> {min,max} of the line's own rows
   const treeOfLine = new Map() // lineId -> the tree root's task id
-  const lane = new Map() // lineId -> integer lane, relative to its tree's trunk
-  const laneOccupancy = new Map() // treeRootId -> Map<lane, [{min,max}, ...]>
+  const lane = new Map() // lineId -> absolute integer lane
+  const childrenOf = new Map() // lineId -> [{ child, side, attach }]
+  const relLane = new Map() // lineId -> lane relative to its parent spine
+  const maxLanes = forest.tasks.size + 2 // a generous, always-sufficient bound
 
   function walkLine(startId) {
     const ids = []
@@ -117,46 +128,90 @@ export function assignLanes(forest, row) {
       const task = forest.getTask(id)
       id = task ? task.next : null
     }
-    lineRows.set(startId, { min: Math.min(...ids.map((i) => row.get(i))), max: Math.max(...ids.map((i) => row.get(i))) })
+    const rows = ids.map((i) => row.get(i))
+    lineRows.set(startId, { min: Math.min(...rows), max: Math.max(...rows) })
     return ids
   }
 
-  function placeLane(treeRootId, lineId, side) {
-    const occ = laneOccupancy.get(treeRootId)
-    const rows = lineRows.get(lineId)
-    const step = side === 'left' ? -1 : 1
-    const maxLanes = forest.tasks.size + 1 // a generous, always-sufficient bound
-    for (let i = 1, candidate = step; i <= maxLanes; i++, candidate += step) {
-      const existing = occ.get(candidate) || []
-      if (!existing.some((r) => rangesOverlap(r, rows))) {
-        occ.set(candidate, existing.concat([rows]))
-        lane.set(lineId, candidate)
-        return
-      }
+  // Build the line-tree: a line's children are the branches forking off any of
+  // its tasks. `side` is explicit or alternates by branch index (unchanged);
+  // `attach` is the branch child's own row, which equals the junction's upper row.
+  function collectChildren(startId) {
+    const ids = walkLine(startId)
+    const kids = []
+    for (const id of ids) {
+      forest.getTask(id).branches.forEach((b, idx) => {
+        const side = b.side === 'left' || b.side === 'right' ? b.side : (idx % 2 === 0 ? 'left' : 'right')
+        kids.push({ child: b.child, side, attach: row.get(b.child) })
+        collectChildren(b.child)
+      })
     }
-    throw new Error('assignLanes: could not place line "' + lineId + '" — this should be unreachable')
+    childrenOf.set(startId, kids)
   }
 
-  function discover(startId, treeRootId) {
-    const ids = walkLine(startId)
-    treeOfLine.set(startId, treeRootId)
-    ids.forEach((id) => {
-      const task = forest.getTask(id)
-      task.branches.forEach((b, idx) => {
-        const side = b.side === 'left' || b.side === 'right' ? b.side : (idx % 2 === 0 ? 'left' : 'right')
-        walkLine(b.child) // populate lineRows for the child before placing its lane
-        placeLane(treeRootId, b.child, side)
-        discover(b.child, treeRootId)
-      })
-    })
+  // Post-order: place each child subtree relative to this spine, then return
+  // this subtree's { leftWidth, rightWidth, rows } for the parent to pack.
+  function layout(startId) {
+    const kids = childrenOf.get(startId)
+    const ext = new Map()
+    for (const k of kids) ext.set(k.child, layout(k.child))
+
+    function placeSide(side) {
+      // inner -> outer: higher attach first; a stable sort keeps declaration
+      // order for equal-attach ties.
+      const list = kids.filter((k) => k.side === side).sort((a, b) => b.attach - a.attach)
+      const occ = new Map() // lane magnitude -> [rows, ...]
+      let outer = 0
+      for (const k of list) {
+        const { leftWidth: L, rightWidth: R, rows } = ext.get(k.child)
+        const width = L + 1 + R
+        let e = 1
+        for (; e <= maxLanes; e++) {
+          let free = true
+          for (let m = e; m < e + width; m++) {
+            const at = occ.get(m)
+            if (at && at.some((r) => rangesOverlap(r, rows))) { free = false; break }
+          }
+          if (free) break
+        }
+        if (e > maxLanes) throw new Error('assignLanes: could not place a branch band — unreachable')
+        for (let m = e; m < e + width; m++) {
+          if (!occ.has(m)) occ.set(m, [])
+          occ.get(m).push(rows)
+        }
+        // The band spans magnitudes [e, e+width-1]; the child's spine sits at the
+        // magnitude that puts its inner (trunk-facing) descendants at e.
+        relLane.set(k.child, side === 'left' ? -(e + R) : e + L)
+        outer = Math.max(outer, e + width - 1)
+      }
+      return outer
+    }
+
+    const leftWidth = placeSide('left')
+    const rightWidth = placeSide('right')
+
+    let { min, max } = lineRows.get(startId)
+    for (const k of kids) {
+      const r = ext.get(k.child).rows
+      min = Math.min(min, r.min)
+      max = Math.max(max, r.max)
+    }
+    return { leftWidth, rightWidth, rows: { min, max } }
+  }
+
+  // Top-down: accumulate relative lanes into absolute lanes (trunk = 0).
+  function assignAbsolute(startId, base, treeRoot) {
+    lane.set(startId, base)
+    treeOfLine.set(startId, treeRoot)
+    for (const k of childrenOf.get(startId)) {
+      assignAbsolute(k.child, base + relLane.get(k.child), treeRoot)
+    }
   }
 
   for (const tree of forest.trees) {
-    lane.set(tree.rootTaskId, 0)
-    walkLine(tree.rootTaskId)
-    treeOfLine.set(tree.rootTaskId, tree.rootTaskId)
-    laneOccupancy.set(tree.rootTaskId, new Map([[0, [lineRows.get(tree.rootTaskId)]]]))
-    discover(tree.rootTaskId, tree.rootTaskId)
+    collectChildren(tree.rootTaskId)
+    layout(tree.rootTaskId)
+    assignAbsolute(tree.rootTaskId, 0, tree.rootTaskId)
   }
 
   return { lineOfTask, lineRows, lane, treeOfLine }

@@ -72,6 +72,15 @@ commercial license is available — see [`../LICENSING.md`](../LICENSING.md)), d
 are **CC-BY-4.0**. Every new file needs an SPDX header or a `REUSE.toml` entry,
 or `reuse lint` breaks: code/config/CI → `AGPL-3.0-or-later`, docs → `CC-BY-4.0`.
 
+## Documenting adopted algorithms
+
+When we implement a known algorithm or a variant of one, write it up in a
+markdown document in this `docs/` directory: the problem, the algorithm and its
+lineage with citations, and how our variant differs. Add a code comment at the
+implementation pointing to that document, so the reasoning is not buried in the
+code. The first example is [`tree-layout.md`](tree-layout.md) (the non-crossing
+branch layout).
+
 ## AI contributors
 
 Read [`northstar.md`](northstar.md) first, if it exists, and follow the

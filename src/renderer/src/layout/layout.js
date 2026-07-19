@@ -30,7 +30,7 @@ export function computeForestLayout(forest, sizes, titleSizes, opts = {}) {
 
   const row = assignRows(forest)
   const { cardTopY } = buildRowGrid(forest, row, sizes, o)
-  const { lineOfTask, lane } = assignLanes(forest, row)
+  const { lineOfTask, lineRows, lane } = assignLanes(forest, row)
   const anchorYForRow = (r) => cardTopY.get(r) - o.anchorGap
 
   const rawX = new Map()
@@ -143,7 +143,17 @@ export function computeForestLayout(forest, sizes, titleSizes, opts = {}) {
       const branchAnchorY = anchorYForRow(upperRow)
 
       const key = id + ':' + lowerRow
-      if (!junctionByKey.has(key)) junctionByKey.set(key, { x: parentX, y: junctionY })
+      if (!junctionByKey.has(key)) {
+        junctionByKey.set(key, { x: parentX, y: junctionY })
+        // Connect the parent up (or down) to the junction when the junction
+        // falls outside the parent line's riser — a fork off a line tip would
+        // otherwise leave the diamond floating, disconnected (docs/tree-layout.md).
+        const pr = lineRows.get(lineOfTask.get(id))
+        const riserTopY = anchorYForRow(pr.max) // highest point of the riser (smallest y)
+        const riserBottomY = anchorYForRow(pr.min) // lowest point (largest y)
+        if (junctionY < riserTopY) tracks.push({ points: [[parentX, riserTopY], [parentX, junctionY]] })
+        else if (junctionY > riserBottomY) tracks.push({ points: [[parentX, riserBottomY], [parentX, junctionY]] })
+      }
       tracks.push({ points: [[parentX, junctionY], [branchX, junctionY], [branchX, branchAnchorY]] })
     }
   }
