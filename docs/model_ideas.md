@@ -27,12 +27,15 @@ at a tip, and fork at a point.
 - **Tree** — a strict tree of tasks (forks split, branches never rejoin). Root at
   the base; growth rises. **A tree carries its own name** (decided), distinct from
   its root task, shown beneath the root station.
-- **Task** — id, title, status, ordered children, an optional markdown note (its
-  own file), and timestamps. Statuses: to do, in progress, completed, cancelled.
-  Timestamps: created and completed (per an earlier decision).
-- **Cursor** — "here," set by hand and clearable; marks where the author is. Shown
-  as a sputnik marker plus a HERE flag, and the station takes the leaning-trapezium
-  shape. Set via the task's right-click menu (see Editing below).
+- **Task** — id, title, status, timestamps, a markdown **note** (its own file), and
+  its outgoing structure: an optional **main-line successor** (the next task up the
+  same stack) plus zero or more **branch children** (forked stacks). See Editing for
+  how the two are created. Statuses: to do, in progress, completed, cancelled.
+  Timestamps: created and completed.
+- **Cursor ("here")** — set by hand and clearable; marks where the author is. At most
+  one per branch, so a forked tree may show several (one per branch). The station
+  takes the leaning-trapezium shape with a sputnik marker and a HERE flag. Set via
+  right-click, Make here.
 
 ## Settled interaction and layout rules (subway direction)
 
@@ -55,22 +58,37 @@ at a tip, and fork at a point.
 ## Editing (right-click on a task) — app behaviour to build
 
 The app's primary editing surface is a **right-click (context) menu on a task's
-label**. It is not in the static skin mock (which cannot re-lay-out a tree); it is
-recorded here as the first behaviour to build once the data model and a dynamic
-layout exist. The menu offers:
+label**, plus a double-click shortcut for the note. It is not in the static skin
+mock (which cannot re-lay-out a tree); it is recorded here as the first behaviour
+to build once the data model and a dynamic layout exist. The menu offers:
 
 - **Set status** — to do, in progress, completed, or cancelled.
-- **Make here** — set this task as the branch cursor (clearing it elsewhere on
-  that branch).
-- **Add task above** / **Add task below** — push a new task onto this stack, before
-  or after this one.
+- **Make here** — set this task as this branch's cursor (clearing any existing
+  "here" on the same branch; other branches keep theirs).
+- **Add task above** / **Add task below** — extend this stack in place: the new task
+  becomes the **main-line successor** (or predecessor), continuing straight up. This
+  is what decides which child is the straight-up main line.
 - **Add branch above** / **Add branch below** — fork a new parallel stack off this
-  point (a new child that becomes an alternating left/right branch).
-- **Delete task** — remove this task (structural; behaviour for a task with
-  children is an open question).
+  point; the new stack becomes an alternating left/right **branch child**.
+- **Edit note** — open this task's markdown note (also on double-click of the
+  label); see Notes below.
+- **Delete task** — remove this task (subtree behaviour is an open question).
 
-These map onto the mental model: add-above/below are pushes on the stack;
-add-branch is a fork; delete is a pop or a subtree removal.
+Mapping to the mental model: add-task is a push on the stack (the main line);
+add-branch is a fork; delete is a pop or subtree removal. Whether a child is the
+main line or a branch is decided by the action that created it, not by ordering.
+
+## Notes (markdown, edited the conception-space way)
+
+Each task has a markdown **note** in its own file, in the forest's directory.
+Editing follows the pattern of ParkviewLab's **conception-space** Electron app (the
+same convention, not a code dependency): a panel with a **view** that renders the
+markdown and an **Edit** toggle that reveals a text editor beside it, reading and
+writing the task's `.md` file through the main process. conception-space's stack is
+the reference: **CodeMirror 6** for editing (`@codemirror/lang-markdown`,
+`@codemirror/theme-one-dark`) and **marked** for rendering (with
+`marked-katex-extension` + KaTeX for math). Opened by double-clicking a task label
+or via right-click, Edit note.
 
 ## Theme
 
@@ -80,12 +98,6 @@ the subway grammar in [`subway-forest-themed.html`](subway-forest-themed.html).
 
 ## Open questions
 
-- **Cursor scope.** "Here" is set per task via right-click and cleared elsewhere on
-  that branch, so it is at most one per branch. Whether a forked tree may show
-  several (one per branch) or only one for the whole tree is unconfirmed.
-- **Which child is the main line.** The alternation rule needs a rule for which
-  child continues straight up versus which are the added left/right branches,
-  most likely child creation order.
 - **Delete with children.** Deleting a task that has children: remove the whole
   subtree, or splice the children onto the parent?
 - **Pop and status.** Is pop purely structural removal at a tip, independent of
@@ -95,3 +107,8 @@ the subway grammar in [`subway-forest-themed.html`](subway-forest-themed.html).
 
 - **Tree identity.** A tree has its own name, distinct from its root task.
 - **Timestamps.** Created and completed.
+- **Cursor scope.** At most one "here" per branch; a forked tree may show several.
+- **Main line at a fork.** The straight-up main line is the stack continuation,
+  created by Add task above/below; branches come from Add branch above/below.
+- **Notes.** Markdown per task, edited the conception-space way (CodeMirror plus
+  marked); double-click the label or right-click, Edit note.
