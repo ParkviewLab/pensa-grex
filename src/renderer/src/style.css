@@ -8,13 +8,13 @@
   --ground:#d3e6ef; --panel:#f8f3e8; --ink:#173242; --line:#365b6c; --muted:#5f7d8b;
   --grid:rgba(23,50,66,.10);
   --c-done:#1f8f8a; --c-prog:#d75f2e; --c-todo:#d9a53a; --c-cancel:#8aa0ab; --cursor:#d75f2e;
-  --burst-a:#1f8f8a; --burst-b:#d9a53a;
+  --burst-a:#1f8f8a; --burst-b:#d9a53a; --here-ink:var(--ink);
 }
 :root[data-ground="navy"]{
   --ground:#0f2334; --panel:#1a3a54; --ink:#e8f1f6; --line:#6fb6c9; --muted:#93b3c2;
   --grid:rgba(111,182,201,.13);
   --c-done:#37c2ba; --c-prog:#f27a44; --c-todo:#f0bd55; --c-cancel:#7590a0; --cursor:#f27a44;
-  --burst-a:#37c2ba; --burst-b:#f0bd55;
+  --burst-a:#37c2ba; --burst-b:#f0bd55; --here-ink:var(--ground);
 }
 
 *{ box-sizing:border-box; }
@@ -102,7 +102,9 @@ body{
 .card.cancel .lbl{ text-decoration:line-through; color:var(--muted); }
 .card .tag{ font-size:8.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
 .card.note::after{ content:""; position:absolute; top:9px; right:15px; width:6px; height:6px; border-radius:50%; background:var(--c-todo); z-index:1; }
-.here{ align-self:flex-start; font-size:8px; font-weight:800; letter-spacing:.14em; color:var(--ground);
+/* The HERE pill's background is set per-task to the status colour in render/card.js;
+   --here-ink is the ground's dark tone so the label stays legible on any status colour. */
+.here{ align-self:flex-start; font-size:8px; font-weight:800; letter-spacing:.14em; color:var(--here-ink);
   background:var(--cursor); padding:1px 5px; border-radius:3px; }
 
 .gl{ width:11px; height:11px; border-radius:50%; flex:none; }
