@@ -1,0 +1,57 @@
+// SPDX-FileCopyrightText: 2026 Gary Frattarola <garycoding@gmail.com>
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// A small second sample forest (the "Work" domain), so the domain switcher has
+// somewhere to switch to and first-run seeding writes more than one forest. Two
+// trees, seven tasks, one fork per tree, one "here" cursor per tree. Same schema
+// as homelab.forest.json5 (see docs/model_ideas.md).
+{
+  schema: 1,
+  domain: "Work",
+  trees: [
+    { id: "t_road", name: "Q3 roadmap", rootTaskId: "k_roadmap" },
+    { id: "t_hire", name: "Hiring", rootTaskId: "k_hiring" },
+  ],
+  tasks: {
+    // ---- Q3 roadmap ----
+    k_roadmap: {
+      id: "k_roadmap", title: "Agree Q3 goals", status: "completed",
+      createdAt: "2026-06-20T09:00:00Z", completedAt: "2026-06-22T17:00:00Z",
+      note: null, here: false, next: "k_specs", branches: [],
+    },
+    k_specs: {
+      id: "k_specs", title: "Write specs", status: "in-progress",
+      createdAt: "2026-06-22T17:05:00Z", completedAt: null,
+      note: null, here: true, next: "k_ship",
+      branches: [{ child: "k_review", side: "right", at: "above" }],
+    },
+    k_ship: {
+      id: "k_ship", title: "Ship v1", status: "todo",
+      createdAt: "2026-06-22T17:06:00Z", completedAt: null,
+      note: null, here: false, next: null, branches: [],
+    },
+    k_review: {
+      id: "k_review", title: "Design review", status: "todo",
+      createdAt: "2026-06-23T10:00:00Z", completedAt: null,
+      note: null, here: false, next: null, branches: [],
+    },
+
+    // ---- Hiring ----
+    k_hiring: {
+      id: "k_hiring", title: "Open two roles", status: "in-progress",
+      createdAt: "2026-06-15T09:00:00Z", completedAt: null,
+      note: null, here: true, next: "k_interview",
+      branches: [{ child: "k_jd", side: "left", at: "above" }],
+    },
+    k_interview: {
+      id: "k_interview", title: "Interview loop", status: "todo",
+      createdAt: "2026-06-16T09:00:00Z", completedAt: null,
+      note: null, here: false, next: null, branches: [],
+    },
+    k_jd: {
+      id: "k_jd", title: "Draft job descriptions", status: "cancelled",
+      createdAt: "2026-06-16T09:05:00Z", completedAt: null,
+      note: null, here: false, next: null, branches: [],
+    },
+  },
+}
