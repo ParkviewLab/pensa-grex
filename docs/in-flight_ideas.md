@@ -58,7 +58,16 @@ its own repo secret (`gh secret set ANTHROPIC_API_KEY`). The script degrades
 gracefully without it (placeholder text, release still ships), so this isn't
 blocking, just worth doing before the first real release.
 
-# 5. Deferred: `vitest` critical advisory (dev-only, UI server)
+# 5. Deferred: decorative background starbursts
+
+The theme mock scattered a few faint starburst symbols across the canvas for
+atmosphere (`render/tracks.js` still exports `buildBurst` for this). The
+layout engine (M3) computes real, data-driven bounds, so hand-picked mock
+coordinates no longer make sense; dropped for now rather than faked. Worth
+revisiting once there's a reason to scatter them procedurally (e.g. seeded by
+forest bounds) as part of a real theming pass.
+
+# 6. `vitest` critical advisory (dev-only, UI server)
 
 `npm audit` flags a critical advisory in `vitest` ("arbitrary file read/execute
 when the Vitest UI server is listening"): [GHSA scored critical, fix requires

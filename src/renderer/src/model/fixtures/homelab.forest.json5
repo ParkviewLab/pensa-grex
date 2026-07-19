@@ -1,11 +1,13 @@
 // SPDX-FileCopyrightText: 2026 Gary Frattarola <garycoding@gmail.com>
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// M2 fixture: the HomeLab sample forest in the real forest.json5 schema (see
-// docs/model_ideas.md), matching the render sample from M1
-// (render/sample-fixture.js). Loaded in-renderer via a Vite raw-text import
-// and parsed with the json5 package — the same parse path the M4 IPC bridge
-// will use for a real forest file on disk.
+// The HomeLab sample forest in the real forest.json5 schema (see
+// docs/model_ideas.md) — the same 3-tree, 15-task forest the design mock and
+// M1's now-retired render-only fixture drew, in the real data shape. Loaded
+// in-renderer via a Vite raw-text import and parsed with the json5 package —
+// the same parse path the M4 IPC bridge will use for a real forest file on
+// disk. Drives the actual on-screen forest as of M3 (model → measure →
+// layout → render).
 {
   schema: 1,
   domain: "HomeLab",
