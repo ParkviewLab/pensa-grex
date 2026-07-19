@@ -1,56 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Gary Frattarola <garycoding@gmail.com>
 
-// Mounts a forest scene into a content element: the SVG track/marker layer
-// plus the HTML station/title markers, then paints each card's silhouette.
-// M1 renders the sample-fixture data; M3 replaces the fixture with the
-// layout engine's output (see docs/model_ideas.md for the shape/status/
-// cursor rules this reproduces).
+// Mounts a computed layout (layout/layout.js) into a content element: the
+// SVG track/marker layer plus the HTML station/title markers, then paints
+// each card's silhouette. Replaces M1's mountScene, which drew a hardcoded
+// sample forest — every coordinate here comes from the layout engine.
 
 import { renderCards } from './shapes.js'
-import { ensureDefs, buildTrack, buildForkMarker, buildCursorMark, buildBurst } from './tracks.js'
-import { SAMPLE_BOUNDS, SAMPLE_BURSTS, SAMPLE_TREES, STATUS_TAG } from './sample-fixture.js'
+import { ensureDefs, buildTrack, buildForkMarker, buildCursorMark } from './tracks.js'
+import { buildStationBox } from './card.js'
 
 const SVGNS = 'http://www.w3.org/2000/svg'
-
-function buildStationCard(station) {
-  const stbox = document.createElement('div')
-  stbox.className = 'stbox'
-  stbox.style.left = station.x + 'px'
-  stbox.style.top = station.top + 'px'
-
-  const card = document.createElement('div')
-  card.className = 'card'
-  if (station.cursor) card.classList.add('cursor')
-  if (station.status === 'cancel') card.classList.add('cancel')
-  if (station.note) card.classList.add('note')
-
-  if (station.cursor) {
-    const here = document.createElement('span')
-    here.className = 'here'
-    here.textContent = '▲ HERE'
-    card.appendChild(here)
-  }
-
-  const hd = document.createElement('div')
-  hd.className = 'hd'
-  const gl = document.createElement('span')
-  gl.className = 'gl ' + station.status
-  const lbl = document.createElement('span')
-  lbl.className = 'lbl'
-  lbl.textContent = station.title
-  hd.appendChild(gl)
-  hd.appendChild(lbl)
-  card.appendChild(hd)
-
-  const tag = document.createElement('span')
-  tag.className = 'tag'
-  tag.textContent = STATUS_TAG[station.status] || station.status
-  card.appendChild(tag)
-
-  stbox.appendChild(card)
-  return stbox
-}
 
 function buildDot(x, y) {
   const dot = document.createElement('div')
@@ -60,41 +20,41 @@ function buildDot(x, y) {
   return dot
 }
 
-function buildTitle(tree) {
+function buildTitleEl(title) {
   const ttl = document.createElement('div')
   ttl.className = 'ttl'
-  ttl.style.left = tree.titleX + 'px'
-  ttl.style.top = tree.titleY + 'px'
-  ttl.textContent = tree.title
+  ttl.style.left = title.x + 'px'
+  ttl.style.top = title.y + 'px'
+  ttl.textContent = title.text
   return ttl
 }
 
-export function mountScene(contentEl, { bounds = SAMPLE_BOUNDS, bursts = SAMPLE_BURSTS, trees = SAMPLE_TREES } = {}) {
+// forest is the runtime model (model/forest.js) the layout was computed
+// from — mountLayout reads each station's task record from it for the
+// card's actual content (title, status, note).
+export function mountLayout(contentEl, layout, forest) {
   contentEl.innerHTML = ''
-  contentEl.style.width = bounds.w + 'px'
-  contentEl.style.height = bounds.h + 'px'
+  contentEl.style.width = layout.bounds.w + 'px'
+  contentEl.style.height = layout.bounds.h + 'px'
 
   const svg = document.createElementNS(SVGNS, 'svg')
-  svg.setAttribute('width', bounds.w)
-  svg.setAttribute('height', bounds.h)
-  svg.setAttribute('viewBox', '0 0 ' + bounds.w + ' ' + bounds.h)
+  svg.setAttribute('width', layout.bounds.w)
+  svg.setAttribute('height', layout.bounds.h)
+  svg.setAttribute('viewBox', '0 0 ' + layout.bounds.w + ' ' + layout.bounds.h)
   svg.setAttribute('style', 'position:absolute;top:0;left:0;z-index:0;')
   ensureDefs(svg)
 
-  for (const b of bursts) svg.appendChild(buildBurst(b.x, b.y, b.scale, b.variant))
-
-  for (const tree of trees) {
-    for (const pts of tree.tracks) svg.appendChild(buildTrack(pts))
-    for (const [cx, cy] of tree.forks) svg.appendChild(buildForkMarker(cx, cy))
-    for (const [cx, cy] of tree.cursors) svg.appendChild(buildCursorMark(cx, cy))
-  }
+  for (const t of layout.tracks) svg.appendChild(buildTrack(t.points))
+  for (const j of layout.junctions) svg.appendChild(buildForkMarker(j.x, j.y))
+  for (const c of layout.cursors) svg.appendChild(buildCursorMark(c.x, c.y))
   contentEl.appendChild(svg)
 
-  for (const tree of trees) {
-    for (const [x, y] of tree.dots) contentEl.appendChild(buildDot(x, y))
-    for (const station of tree.stations) contentEl.appendChild(buildStationCard(station))
-    contentEl.appendChild(buildTitle(tree))
+  for (const d of layout.dots) contentEl.appendChild(buildDot(d.x, d.y))
+  for (const s of layout.stations) {
+    const task = forest.getTask(s.id)
+    contentEl.appendChild(buildStationBox(task, s.x, s.cardTop, { isCursor: s.cursor }))
   }
+  for (const t of layout.titles) contentEl.appendChild(buildTitleEl(t))
 
   // cards must be in the DOM (and thus have a measurable size) before their
   // silhouettes can be painted

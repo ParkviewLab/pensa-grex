@@ -1,0 +1,168 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Gary Frattarola <garycoding@gmail.com>
+
+import { describe, it, expect } from 'vitest'
+import { assignRows, junctionGaps, buildRowGrid, assignLanes } from './geometry.js'
+
+// A minimal stand-in for the buildForest() runtime model (model/forest.js),
+// exposing only what geometry.js actually reads: .trees and .getTask(id).
+function fakeForest(trees, taskDefs) {
+  const tasks = new Map(Object.entries(taskDefs).map(([id, t]) => [
+    id, { id, next: t.next || null, branches: t.branches || [], predecessorId: t.predecessorId ?? null },
+  ]))
+  return { trees, tasks, getTask: (id) => tasks.get(id) || null }
+}
+
+describe('assignRows', () => {
+  it('puts every root at row 0 and increments by 1 down a main line', () => {
+    const forest = fakeForest(
+      [{ id: 't1', rootTaskId: 'a' }],
+      { a: { next: 'b' }, b: { next: 'c' }, c: {} },
+    )
+    const row = assignRows(forest)
+    expect(row.get('a')).toBe(0)
+    expect(row.get('b')).toBe(1)
+    expect(row.get('c')).toBe(2)
+  })
+
+  it('starts a branch level with its parent\'s .next for at:"above"', () => {
+    const forest = fakeForest(
+      [{ id: 't1', rootTaskId: 'a' }],
+      { a: { next: 'b', branches: [{ child: 'x', side: 'left', at: 'above' }] }, b: {}, x: {} },
+    )
+    const row = assignRows(forest)
+    expect(row.get('a')).toBe(0)
+    expect(row.get('b')).toBe(1)
+    expect(row.get('x')).toBe(1) // level with b, not with a
+  })
+
+  it('starts a branch level with its own parent for at:"below"', () => {
+    const forest = fakeForest(
+      [{ id: 't1', rootTaskId: 'a' }],
+      { a: { next: 'b', branches: [] }, b: { branches: [{ child: 'x', side: 'left', at: 'below' }] }, x: {} },
+    )
+    const row = assignRows(forest)
+    expect(row.get('b')).toBe(1)
+    expect(row.get('x')).toBe(1) // level with b itself, one gap lower than b.next would be
+  })
+})
+
+describe('junctionGaps', () => {
+  it('reports the lower row of the gap a fork attaches to', () => {
+    const forest = fakeForest(
+      [{ id: 't1', rootTaskId: 'a' }],
+      { a: { next: 'b', branches: [{ child: 'x', side: 'left', at: 'above' }] }, b: {}, x: {} },
+    )
+    const row = assignRows(forest)
+    expect(junctionGaps(forest, row)).toEqual(new Set([0]))
+  })
+})
+
+describe('buildRowGrid', () => {
+  it('spaces rows by the tallest card at the upper row, plus the gap', () => {
+    const forest = fakeForest([{ id: 't1', rootTaskId: 'a' }], { a: { next: 'b' }, b: {} })
+    const row = assignRows(forest)
+    const sizes = new Map([['a', { cardW: 138, cardH: 50 }], ['b', { cardW: 138, cardH: 90 }]])
+    const { cardTopY } = buildRowGrid(forest, row, sizes, { rowGap: 20, junctionExtra: 30, baseY: 1000 })
+    expect(cardTopY.get(0)).toBe(1000)
+    expect(cardTopY.get(1)).toBe(1000 - (90 + 20)) // b's own height drives the pitch up to it
+  })
+
+  it('widens a gap that carries a fork junction', () => {
+    const withFork = fakeForest(
+      [{ id: 't1', rootTaskId: 'a' }],
+      { a: { next: 'b', branches: [{ child: 'x', side: 'left', at: 'above' }] }, b: {}, x: {} },
+    )
+    const withoutFork = fakeForest([{ id: 't1', rootTaskId: 'a' }], { a: { next: 'b' }, b: {} })
+    const sizes = new Map([['a', { cardW: 138, cardH: 50 }], ['b', { cardW: 138, cardH: 50 }], ['x', { cardW: 138, cardH: 50 }]])
+    const opts = { rowGap: 20, junctionExtra: 30, baseY: 0 }
+
+    const forkGrid = buildRowGrid(withFork, assignRows(withFork), sizes, opts)
+    const plainGrid = buildRowGrid(withoutFork, assignRows(withoutFork), sizes, opts)
+    const forkPitch = forkGrid.cardTopY.get(0) - forkGrid.cardTopY.get(1)
+    const plainPitch = plainGrid.cardTopY.get(0) - plainGrid.cardTopY.get(1)
+    expect(forkPitch).toBe(plainPitch + 30)
+  })
+
+  it('a taller card at a row opens that row\'s pitch, never overlapping the row below', () => {
+    const forest = fakeForest([{ id: 't1', rootTaskId: 'a' }], { a: { next: 'b' }, b: {} })
+    const row = assignRows(forest)
+    const tallSizes = new Map([['a', { cardW: 138, cardH: 50 }], ['b', { cardW: 138, cardH: 300 }]])
+    const { cardTopY } = buildRowGrid(forest, row, tallSizes, { rowGap: 20, junctionExtra: 30, baseY: 0 })
+    const bBottom = cardTopY.get(1) + 300
+    expect(bBottom).toBeLessThanOrEqual(cardTopY.get(0) - 20)
+  })
+})
+
+describe('assignLanes', () => {
+  it('puts every tree\'s trunk at lane 0', () => {
+    const forest = fakeForest(
+      [{ id: 't1', rootTaskId: 'a' }, { id: 't2', rootTaskId: 'p' }],
+      { a: {}, p: {} },
+    )
+    const row = assignRows(forest)
+    const { lane, lineOfTask } = assignLanes(forest, row)
+    expect(lane.get(lineOfTask.get('a'))).toBe(0)
+    expect(lane.get(lineOfTask.get('p'))).toBe(0)
+  })
+
+  it('alternates left (negative) then right (positive) by branch order when side is unset', () => {
+    const forest = fakeForest(
+      [{ id: 't1', rootTaskId: 'a' }],
+      {
+        a: { branches: [{ child: 'x1' }, { child: 'x2' }, { child: 'x3' }] },
+        x1: {}, x2: {}, x3: {},
+      },
+    )
+    const row = assignRows(forest)
+    const { lane, lineOfTask } = assignLanes(forest, row)
+    expect(lane.get(lineOfTask.get('x1'))).toBe(-1) // 1st: left
+    expect(lane.get(lineOfTask.get('x2'))).toBe(1) // 2nd: right
+    expect(lane.get(lineOfTask.get('x3'))).toBe(-2) // 3rd: left, next free left slot
+  })
+
+  it('honours an explicit side over the alternation fallback', () => {
+    const forest = fakeForest(
+      [{ id: 't1', rootTaskId: 'a' }],
+      { a: { branches: [{ child: 'x1', side: 'right' }] }, x1: {} },
+    )
+    const row = assignRows(forest)
+    const { lane, lineOfTask } = assignLanes(forest, row)
+    expect(lane.get(lineOfTask.get('x1'))).toBe(1)
+  })
+
+  it('reuses a lane for two branches whose rows never overlap', () => {
+    // a forks x1 (a single-task branch, occupying only row 1); b (further up
+    // the trunk) forks x2 (also a single-task branch, at row 3) — x1 and x2
+    // never coexist in the same row, so they should share lane -1.
+    const forest = fakeForest(
+      [{ id: 't1', rootTaskId: 'a' }],
+      {
+        a: { next: 'b', branches: [{ child: 'x1', side: 'left' }] },
+        b: { next: 'c', branches: [] },
+        c: { branches: [{ child: 'x2', side: 'left' }] },
+        x1: {}, x2: {},
+      },
+    )
+    const row = assignRows(forest)
+    const { lane, lineOfTask } = assignLanes(forest, row)
+    expect(lane.get(lineOfTask.get('x1'))).toBe(-1)
+    expect(lane.get(lineOfTask.get('x2'))).toBe(-1)
+  })
+
+  it('does not reuse a lane for two branches whose rows do overlap', () => {
+    // Both x1 and x2 fork off the same task a, so both start at row 1 and
+    // would collide if given the same lane.
+    const forest = fakeForest(
+      [{ id: 't1', rootTaskId: 'a' }],
+      {
+        a: { branches: [{ child: 'x1', side: 'left' }, { child: 'x2', side: 'left' }] },
+        x1: { next: 'x1b' }, x1b: {},
+        x2: {},
+      },
+    )
+    const row = assignRows(forest)
+    const { lane, lineOfTask } = assignLanes(forest, row)
+    expect(lane.get(lineOfTask.get('x1'))).not.toBe(lane.get(lineOfTask.get('x2')))
+  })
+})
