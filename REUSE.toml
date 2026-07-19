@@ -21,3 +21,13 @@ path = [
 ]
 SPDX-FileCopyrightText = "2026 Gary Frattarola <garycoding@gmail.com>"
 SPDX-License-Identifier = "AGPL-3.0-or-later"
+
+# Vitest test files — AGPL-3.0-or-later. These carry the same inline SPDX header
+# as the rest of src/**, but their punctuation-dense input arrays make
+# charset-normalizer (reuse's encoding detector in CI) misread the file and miss
+# the header, failing the lint non-deterministically. Asserting the licence here
+# makes compliance independent of the encoding heuristic; the inline headers stay.
+[[annotations]]
+path = ["src/**/*.test.js"]
+SPDX-FileCopyrightText = "2026 Gary Frattarola <garycoding@gmail.com>"
+SPDX-License-Identifier = "AGPL-3.0-or-later"
