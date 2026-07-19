@@ -49,7 +49,7 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
   border:1px solid var(--line); border-radius:10px; cursor:grab; user-select:none; }
 .viewport.dragging{ cursor:grabbing; }
 .world{ position:absolute; top:0; left:0; transform-origin:0 0; }
-.content{ position:relative; width:1320px; height:490px;
+.content{ position:relative; width:1320px; height:505px;
   background-image:radial-gradient(circle, var(--grid) 1px, transparent 1.4px); background-size:40px 40px; }
 
 .track{ fill:none; stroke:var(--line); stroke-width:2.5; stroke-linecap:round; stroke-linejoin:round; }
@@ -57,9 +57,9 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
 .burst line{ stroke:var(--burst-a); stroke-width:1.4; }
 .burst.b line{ stroke:var(--burst-b); }
 .burst{ opacity:.13; }
-.cursor-mark line{ stroke:var(--cursor); stroke-width:1.6; }
-.cursor-mark .ball{ fill:var(--cursor); }
-.cursor-mark .core{ fill:var(--cursor); }
+.cursor-mark line{ stroke:var(--ink); stroke-width:1.6; }
+.cursor-mark .ball{ fill:var(--ink); }
+.cursor-mark .core{ fill:var(--ink); }
 
 .dot{ position:absolute; width:11px; height:11px; border-radius:50%; background:var(--line);
   transform:translate(-50%,-50%); z-index:2; }
@@ -74,8 +74,6 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
 .cardbg{ position:absolute; inset:0; width:100%; height:100%; overflow:visible; z-index:0; pointer-events:none; }
 .cardbg .outer{ fill:var(--line); }
 .cardbg .inner{ fill:var(--panel); }
-.card.cursor .cardbg .outer{ fill:var(--cursor); }
-.card.cancel .cardbg .outer{ fill:var(--c-cancel); }
 .card .hd{ display:flex; align-items:center; gap:7px; }
 .card .lbl{ font-size:11.5px; line-height:1.18; color:var(--ink); }
 .card.cancel .lbl{ text-decoration:line-through; color:var(--muted); }
@@ -100,14 +98,14 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
 <div class="wrap">
   <p class="eyebrow">TaskForkStack &middot; subway forest &middot; atomic skin</p>
   <h1>Three trees, growing upward</h1>
-  <p class="lede">The subway forest with the atomic-age skin on a cool ground. A branch leaves its parent at a junction that sits in the open track between two stations, clear of the labels; added branches alternate left, right, left while the main line runs straight up; labels sit centered below each station. Flip the ground between azure and navy. Drag to pan, scroll to zoom, Fit frames the forest.</p>
+  <p class="lede">The subway forest with the atomic-age skin on a cool ground. A branch leaves its parent at a junction that sits in the open track between two stations, clear of the labels; added branches alternate left, right, left while the main line runs straight up; labels sit centered below each station, and each tree carries its name beneath its root. Switch between light and dark. Drag to pan, scroll to zoom, Fit frames the forest.</p>
 
   <div class="bar">
     <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:center;">
-      <span class="seglbl">Ground</span>
+      <span class="seglbl">Mode</span>
       <div class="seg" id="ground">
-        <button data-g="azure" class="on">Azure</button>
-        <button data-g="navy">Navy</button>
+        <button data-g="azure" class="on">Light</button>
+        <button data-g="navy">Dark</button>
       </div>
     </div>
     <div class="zoom">
@@ -121,7 +119,7 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
   <div class="viewport" id="viewport">
     <div class="world" id="world">
       <div class="content" id="content">
-        <svg width="1320" height="490" viewBox="0 0 1320 490" style="position:absolute;top:0;left:0;z-index:0;">
+        <svg width="1320" height="505" viewBox="0 0 1320 505" style="position:absolute;top:0;left:0;z-index:0;">
           <defs>
             <g id="sputnik">
               <line x1="0" y1="-13" x2="0" y2="13"/><line x1="-13" y1="0" x2="13" y2="0"/>
@@ -179,7 +177,7 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
         <div class="stbox" style="left:280px;top:55px;"><div class="card"><div class="hd"><span class="gl todo"></span><span class="lbl">Test restore</span></div><span class="tag">to do</span></div></div>
         <div class="stbox" style="left:110px;top:175px;"><div class="card note"><div class="hd"><span class="gl todo"></span><span class="lbl">Fix Plex transcoding</span></div><span class="tag">to do</span></div></div>
         <div class="stbox" style="left:450px;top:175px;"><div class="card cancel"><div class="hd"><span class="gl cancel"></span><span class="lbl">Try Btrfs snapshots</span></div><span class="tag">cancelled</span></div></div>
-        <div class="ttl" style="left:280px;top:452px;">Media server</div>
+        <div class="ttl" style="left:280px;top:483px;">Media server</div>
 
         <!-- ===== Tree B: Home network ===== -->
         <div class="dot" style="left:820px;top:400px;"></div>
@@ -191,7 +189,7 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
         <div class="stbox" style="left:820px;top:175px;"><div class="card cursor"><span class="here">&#9650; HERE</span><div class="hd"><span class="gl prog"></span><span class="lbl">Firewall rules</span></div><span class="tag">in progress</span></div></div>
         <div class="stbox" style="left:650px;top:175px;"><div class="card"><div class="hd"><span class="gl todo"></span><span class="lbl">Wi-Fi 7 APs</span></div><span class="tag">to do</span></div></div>
         <div class="stbox" style="left:650px;top:55px;"><div class="card"><div class="hd"><span class="gl todo"></span><span class="lbl">Roaming test</span></div><span class="tag">to do</span></div></div>
-        <div class="ttl" style="left:820px;top:452px;">Home network</div>
+        <div class="ttl" style="left:820px;top:483px;">Home network</div>
 
         <!-- ===== Tree C: Home automation ===== -->
         <div class="dot" style="left:1170px;top:400px;"></div>
@@ -201,7 +199,7 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
         <div class="stbox" style="left:1170px;top:295px;"><div class="card cursor"><span class="here">&#9650; HERE</span><div class="hd"><span class="gl prog"></span><span class="lbl">Zigbee hub</span></div><span class="tag">in progress</span></div></div>
         <div class="stbox" style="left:1170px;top:175px;"><div class="card"><div class="hd"><span class="gl todo"></span><span class="lbl">Door / window sensors</span></div><span class="tag">to do</span></div></div>
         <div class="stbox" style="left:1000px;top:175px;"><div class="card"><div class="hd"><span class="gl todo"></span><span class="lbl">Energy monitoring</span></div><span class="tag">to do</span></div></div>
-        <div class="ttl" style="left:1170px;top:452px;">Home automation</div>
+        <div class="ttl" style="left:1170px;top:483px;">Home automation</div>
       </div>
     </div>
   </div>
@@ -214,12 +212,12 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
     <span><i style="background:var(--cursor)"></i> branch cursor (sputnik &amp; HERE)</span>
     <span><i style="background:var(--line);border-radius:1px;transform:rotate(45deg)"></i> fork junction</span>
   </div>
-  <p class="hint">Each station is a screen; the current station on each branch (the &#9650; HERE marker) is a leaning trapezium. Outlines are heavier on the sides than top and bottom, with the right edge a little heavier than the left, for a hand-inked look. Drag to pan &middot; scroll to zoom &middot; Fit frames the forest.</p>
+  <p class="hint">Each station is a screen; the current station on each branch (the &#9650; HERE marker) is a leaning trapezium. The outline colour follows the task's status, and the current node is orange. Outlines are heavier on the sides, right a little heavier than left, for a hand-inked look. Drag to pan &middot; scroll to zoom &middot; Fit frames the forest.</p>
 </div>
 
 <script>
 (function(){
-  var CW=1320, CH=490;
+  var CW=1320, CH=505;
   var viewport=document.getElementById('viewport'),
       world=document.getElementById('world'),
       pct=document.getElementById('pct');
@@ -345,6 +343,10 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
       var d=buildShape(shape, w, h, sides);
       svg.querySelector('.outer').setAttribute('d', d.outer);
       svg.querySelector('.inner').setAttribute('d', d.inner);
+      // outline colour tracks the task's status; the current ("here") node is orange.
+      var gl=card.querySelector('.gl'), st='todo', names=['done','prog','todo','cancel'];
+      for(var k=0;k<names.length;k++){ if(gl && gl.classList.contains(names[k])) st=names[k]; }
+      svg.querySelector('.outer').style.fill = isCur ? 'var(--cursor)' : 'var(--c-'+st+')';
     });
   }
 
