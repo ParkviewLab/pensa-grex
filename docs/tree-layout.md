@@ -107,6 +107,25 @@ junction floated with nothing joining the parent up to it. The fix, in
 parent line's riser span, joining the nearer riser end to the junction. This also
 covers the mirror case of a fork below a line's first task.
 
+## Angled connectors
+
+By default the branch connector is an L: a horizontal leg from the trunk out to the
+branch lane, then a vertical riser into the branch card. Trees, and the subway map
+that inspired this one, angle their branches upward rather than leaving at a right
+angle, so the flat leg is tilted up 12° above horizontal (78° from the vertical
+trunk) over the *same* horizontal delta, followed by a short vertical riser. This is
+purely a connector-shape change in `layout.js`: only the middle elbow moves off
+`junctionY` toward the anchor; the lane, row, junction, and the fork diamond (still
+at `[parentX, junctionY]`) are untouched, so the packer's guarantees carry over.
+
+Because a rising leg reaches toward the branches inner to it, the non-crossing
+property is no longer guaranteed by construction; it becomes a property to validate.
+Two caps keep it safe: the rise never exceeds the room between the junction and the
+anchor (so the riser never inverts), and a `branchRiseMax` ceiling keeps a far,
+multi-lane leg from climbing into an inner branch. The angle and both caps are
+`DEFAULTS` in `layout.js`, and the `countCrossings` guard below runs over the tilted
+connectors, so a regression that made two legs cross fails the tests.
+
 ## Tests
 
 `geometry.test.js` checks the lane assignment directly (the higher-attaching
@@ -115,7 +134,9 @@ sub-branch cannot collide). `layout.test.js` carries the strongest guard: a
 `countCrossings` helper that decomposes every track into segments and asserts no
 two properly cross, run over the Wide tree (the case that first exposed the bug),
 the HomeLab fixture, and a deep both-sides nest; plus a tip-fork test that a stub
-connects the tip parent up to its junction.
+connects the tip parent up to its junction, and an angled-connector test that the
+elbow lifts off the junction (no steeper than 12°) while the diamond and the
+vertical riser are preserved.
 
 ## References
 

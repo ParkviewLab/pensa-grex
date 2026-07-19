@@ -304,3 +304,48 @@ describe('computeForestLayout — tip-fork connector', () => {
     expect(Math.abs(stub.points[0][1] - stub.points[1][1])).toBeGreaterThan(0)
   })
 })
+
+describe('computeForestLayout — angled branch connectors', () => {
+  // a is the trunk root (a -> b); a forks right to c, one row above. The branch
+  // connector's flat leg tilts up to c's lane, then a short vertical riser into c,
+  // while the junction diamond stays put at [a.x, junctionY].
+  const tilt = {
+    schema: 1, domain: 'T', trees: [{ id: 't', name: 'Tilt', rootTaskId: 'a' }],
+    tasks: {
+      a: mkTask('a', { next: 'b', branches: [{ child: 'c', side: 'right', at: 'above' }] }),
+      b: mkTask('b'),
+      c: mkTask('c'),
+    },
+  }
+
+  it('lifts the elbow to angle the leg up (<=12 deg), keeping the diamond and a vertical riser', () => {
+    const layout = layoutOf(tilt)
+    const j = layout.junctions[0]
+    const a = layout.stations.find((s) => s.id === 'a')
+    const c = layout.stations.find((s) => s.id === 'c')
+    const conn = layout.tracks.find((t) => t.points.length === 3) // the branch connector
+    expect(conn).toBeTruthy()
+    const [p0, p1, p2] = conn.points
+    // starts at the diamond, ends at the branch anchor
+    expect(Math.abs(p0[0] - a.x)).toBeLessThan(0.5)
+    expect(Math.abs(p0[1] - j.y)).toBeLessThan(0.5)
+    expect(Math.abs(p2[0] - c.x)).toBeLessThan(0.5)
+    expect(Math.abs(p2[1] - c.anchorY)).toBeLessThan(0.5)
+    // the elbow is at c's lane, lifted off junctionY toward the (higher) anchor,
+    // but not past it — so a vertical riser remains
+    expect(Math.abs(p1[0] - c.x)).toBeLessThan(0.5)
+    expect(p2[1]).toBeLessThan(p0[1]) // above-branch: anchor is higher (smaller y)
+    expect(p1[1]).toBeLessThan(p0[1]) // elbow lifted up from the junction
+    expect(p1[1]).toBeGreaterThan(p2[1]) // but short of the anchor (riser preserved)
+    // the flat leg is tilted and no steeper than 12 deg
+    const run = Math.abs(p1[0] - p0[0])
+    const rise = Math.abs(p1[1] - p0[1])
+    expect(run).toBeGreaterThan(0)
+    expect(rise).toBeGreaterThan(0)
+    expect(rise / run).toBeLessThanOrEqual(Math.tan((12 * Math.PI) / 180) + 1e-6)
+    // the last leg is a vertical riser, and the diamond did not move
+    expect(Math.abs(p1[0] - p2[0])).toBeLessThan(0.5)
+    expect(Math.abs(j.x - a.x)).toBeLessThan(0.5)
+    expect(countCrossings(layout)).toBe(0)
+  })
+})
