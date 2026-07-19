@@ -27,12 +27,14 @@ commitment — see the handbook's `documentation.md`.
   visual direction, held for the theming stage (skin comes after the grammar
   and data model).
 
-# 1. Project intent (`docs/northstar.md`)
+# 1. Done (M7, draft): project intent (`docs/northstar.md`)
 
-The repo was bootstrapped from the ParkviewLab handbook conventions before
-the app's actual purpose was written down. `docs/northstar.md` is optional
-but valuable once the intent is clear — worth writing as soon as
-TaskForkStack's shape settles.
+`docs/northstar.md` now exists: three complementary intents (the structure is
+the mental model; structure is legible at a glance; it is yours and local),
+their tensions, and seven derived axioms. It is a first draft synthesised from
+the settled design in `model_ideas.md`; it is the author's statement to refine,
+not final. A designed HTML companion (per the dual-track documentation
+convention) is proposed but not yet built.
 
 # 2. Done (M4): in-app license-notices viewer
 
@@ -41,8 +43,14 @@ carries `prepare-legal.mjs` and `clean-oss-licenses.mjs`, `package.json` has the
 `legal:*` scripts (folded into `build:dist`), `electron-builder.yml` ships
 `legal/` as `extraResources`, and `src/main/index.js` has a `Help → Open Source
 Licenses` window reading `legal/oss-licenses.json`. The `LICENSE_HIGHLIGHTS`
-list currently names Electron and JSON5; extend it as M6 adds CodeMirror,
-Marked, and KaTeX.
+list names Electron, JSON5, CodeMirror, Marked, and KaTeX (extended in M6).
+
+# 2a. Deferred: application icon
+
+`build:dist` reports "default Electron icon is used". A custom icon (an
+atomic-age mark fitting the theme) belongs under `build/` as
+`icon.icns` / `icon.ico` / `icon.png` for electron-builder to pick up.
+Cosmetic; worth doing before a public release.
 
 # 3. Deferred: code signing
 
