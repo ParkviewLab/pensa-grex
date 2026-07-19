@@ -29,7 +29,20 @@ function offscreenContainer() {
 // then reads wrong metrics on first paint.
 async function fontsReady() {
   if (document.fonts && document.fonts.ready) {
-    try { await document.fonts.ready } catch { /* proceed with best-effort metrics */ }
+    try {
+      // We measure the tree titles (League Spartan 800) and task labels (Boogaloo
+      // 400) for real, so explicitly load those bundled faces before measuring —
+      // document.fonts.ready alone can resolve before they are requested, which
+      // would measure fallback metrics on first paint and reflow when they swap in.
+      if (document.fonts.load) {
+        await Promise.all([
+          document.fonts.load('400 12px "League Spartan"'),
+          document.fonts.load('800 12px "League Spartan"'),
+          document.fonts.load('400 12px "Boogaloo"'),
+        ])
+      }
+      await document.fonts.ready
+    } catch { /* proceed with best-effort metrics */ }
   }
 }
 
