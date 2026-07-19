@@ -1,0 +1,109 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Gary Frattarola <garycoding@gmail.com>
+
+// The runtime forest model: takes a parsed (and, by convention, already
+// validated — see validate.js) forest object and builds task/tree lookups
+// plus the predecessor pointers the schema deliberately doesn't store (see
+// docs/model_ideas.md: "the predecessor is not stored — it is derived at
+// load, so the two can never disagree").
+
+// Build the runtime model. Does not mutate raw; task/tree records are
+// shallow-copied so callers can attach the derived fields below without
+// touching the parsed source.
+export function buildForest(raw) {
+  const tasks = new Map(Object.entries(raw.tasks).map(([id, t]) => [id, { ...t, branches: (t.branches || []).map((b) => ({ ...b })) }]))
+
+  for (const task of tasks.values()) {
+    task.predecessorId = null
+    task.predecessorKind = null // 'next' | 'branch'
+    task.branchSide = null
+    task.branchAt = null
+  }
+  for (const [id, task] of tasks) {
+    if (task.next && tasks.has(task.next)) {
+      const child = tasks.get(task.next)
+      child.predecessorId = id
+      child.predecessorKind = 'next'
+    }
+    for (const b of task.branches) {
+      if (!tasks.has(b.child)) continue
+      const child = tasks.get(b.child)
+      child.predecessorId = id
+      child.predecessorKind = 'branch'
+      child.branchSide = b.side
+      child.branchAt = b.at
+    }
+  }
+
+  const trees = (raw.trees || []).map((t) => ({ ...t }))
+
+  // Which tree a task belongs to: the tree whose root reaches it via .next
+  // or .branches (a fork stays within its tree; trees never share tasks).
+  const treeIdByTask = new Map()
+  for (const tree of trees) {
+    const stack = [tree.rootTaskId]
+    while (stack.length) {
+      const id = stack.pop()
+      if (treeIdByTask.has(id)) continue
+      treeIdByTask.set(id, tree.id)
+      const task = tasks.get(id)
+      if (!task) continue
+      if (task.next) stack.push(task.next)
+      for (const b of task.branches) stack.push(b.child)
+    }
+  }
+
+  function getTask(id) {
+    return tasks.get(id) || null
+  }
+
+  function getTree(id) {
+    return trees.find((t) => t.id === id) || null
+  }
+
+  function getTreeIdForTask(id) {
+    return treeIdByTask.get(id) || null
+  }
+
+  // The main-line chain starting at startId (a tree root or a branch child),
+  // following .next until a tip. This is a "line" / "stack" in the push/pop
+  // sense — see docs/model_ideas.md.
+  function getMainLineChain(startId) {
+    const chain = []
+    const seen = new Set()
+    let id = startId
+    while (id && tasks.has(id) && !seen.has(id)) {
+      seen.add(id)
+      chain.push(id)
+      id = tasks.get(id).next
+    }
+    return chain
+  }
+
+  function getBranchChildren(id) {
+    const task = tasks.get(id)
+    return task ? task.branches.map((b) => ({ ...b })) : []
+  }
+
+  // The task carrying "here" on the line starting at startId, or null if the
+  // branch has none (a line may have zero or one — see validate.js).
+  function getHereTaskId(startId) {
+    for (const id of getMainLineChain(startId)) {
+      if (tasks.get(id).here) return id
+    }
+    return null
+  }
+
+  return {
+    domain: raw.domain,
+    schema: raw.schema,
+    trees,
+    tasks,
+    getTask,
+    getTree,
+    getTreeIdForTask,
+    getMainLineChain,
+    getBranchChildren,
+    getHereTaskId,
+  }
+}

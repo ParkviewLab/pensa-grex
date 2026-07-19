@@ -57,3 +57,15 @@ ParkviewLab-org repo, this one doesn't inherit an org-level secret — it needs
 its own repo secret (`gh secret set ANTHROPIC_API_KEY`). The script degrades
 gracefully without it (placeholder text, release still ships), so this isn't
 blocking, just worth doing before the first real release.
+
+# 5. Deferred: `vitest` critical advisory (dev-only, UI server)
+
+`npm audit` flags a critical advisory in `vitest` ("arbitrary file read/execute
+when the Vitest UI server is listening"): [GHSA scored critical, fix requires
+`vitest@4.1.10`]. The fix is a major bump that would need `vite` 6+/7+/8+,
+which conflicts with `electron-vite@^2.3.0`'s peer requirement on `vite@^5` —
+a separate toolchain upgrade, not a data-model concern. The exploit needs the
+optional `vitest --ui` dev server running; this repo never adds a `--ui`
+script or invokes one (only `vitest run`, in `npm test` and CI), so the
+practical exposure is nil in normal use. Revisit when `electron-vite` and
+`vite` are ready to move together, or if the `--ui` server is ever wanted.
