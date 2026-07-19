@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- SPDX-FileCopyrightText: 2026 Gary Frattarola <garycoding@gmail.com> -->
 <!-- SPDX-License-Identifier: CC-BY-4.0 -->
-<html lang="en" data-ground="azure">
+<html lang="en" data-ground="azure" data-shape="screen">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -21,6 +21,9 @@
   --c-done:#37c2ba; --c-prog:#f27a44; --c-todo:#f0bd55; --c-cancel:#7590a0; --cursor:#f27a44;
   --burst-a:#37c2ba; --burst-b:#f0bd55;
 }
+:root[data-shape="screen"]{ --card-radius:16px; }
+:root[data-shape="tombstone"]{ --card-radius:22px 22px 6px 6px; }
+:root[data-shape="capsule"]{ --card-radius:999px; }
 html,body{ margin:0; background:var(--ground); }
 *{ box-sizing:border-box; }
 body{
@@ -33,6 +36,7 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
 .lede{ font-size:14px; line-height:1.6; color:var(--muted); margin:0 0 1.3rem; max-width:70ch; }
 
 .bar{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; flex-wrap:wrap; }
+.seglbl{ font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); }
 .seg{ display:inline-flex; border:1px solid var(--line); border-radius:999px; overflow:hidden; }
 .seg button{ font:inherit; font-size:12px; border:0; background:transparent; color:var(--muted); padding:6px 14px; cursor:pointer; }
 .seg button.on{ background:var(--ink); color:var(--ground); }
@@ -66,7 +70,7 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
   letter-spacing:.08em; text-transform:uppercase; color:var(--ink); white-space:nowrap; }
 
 .stbox{ position:absolute; transform:translateX(-50%); z-index:2; }
-.card{ position:relative; background:var(--panel); border:1px solid var(--line); border-radius:4px; padding:5px 9px;
+.card{ position:relative; background:var(--panel); border:1px solid var(--line); border-radius:var(--card-radius,16px); padding:5px 12px;
   width:138px; display:flex; flex-direction:column; gap:3px; }
 .card.cursor{ border:2px solid var(--cursor); padding:4px 8px; }
 .card.cancel{ border-style:dashed; }
@@ -74,7 +78,7 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
 .card .lbl{ font-size:11.5px; line-height:1.18; color:var(--ink); }
 .card.cancel .lbl{ text-decoration:line-through; color:var(--muted); }
 .card .tag{ font-size:8.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
-.card.note::after{ content:""; position:absolute; top:5px; right:5px; width:6px; height:6px; border-radius:50%; background:var(--c-todo); }
+.card.note::after{ content:""; position:absolute; top:8px; right:13px; width:6px; height:6px; border-radius:50%; background:var(--c-todo); }
 .here{ align-self:flex-start; font-size:8px; font-weight:800; letter-spacing:.14em; color:var(--ground);
   background:var(--cursor); padding:1px 5px; border-radius:3px; }
 
@@ -97,9 +101,18 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
   <p class="lede">The subway forest with the atomic-age skin on a cool ground. A branch leaves its parent at a junction that sits in the open track between two stations, clear of the labels; added branches alternate left, right, left while the main line runs straight up; labels sit centered below each station. Flip the ground between azure and navy. Drag to pan, scroll to zoom, Fit frames the forest.</p>
 
   <div class="bar">
-    <div class="seg" id="ground">
-      <button data-g="azure" class="on">Azure</button>
-      <button data-g="navy">Navy</button>
+    <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:center;">
+      <span class="seglbl">Ground</span>
+      <div class="seg" id="ground">
+        <button data-g="azure" class="on">Azure</button>
+        <button data-g="navy">Navy</button>
+      </div>
+      <span class="seglbl">Shape</span>
+      <div class="seg" id="shape">
+        <button data-s="screen" class="on">Screen</button>
+        <button data-s="tombstone">Tombstone</button>
+        <button data-s="capsule">Capsule</button>
+      </div>
     </div>
     <div class="zoom">
       <button class="btn icon" id="zout" title="Zoom out" aria-label="Zoom out">&minus;</button>
@@ -205,7 +218,7 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
     <span><i style="background:var(--cursor)"></i> branch cursor (sputnik &amp; HERE)</span>
     <span><i style="background:var(--line);border-radius:1px;transform:rotate(45deg)"></i> fork junction</span>
   </div>
-  <p class="hint">Drag to pan &middot; scroll to zoom &middot; Fit frames the forest. Fonts are system for now; a period display face is a later refinement.</p>
+  <p class="hint">Use the Shape control to try Googie station shapes. Drag to pan &middot; scroll to zoom &middot; Fit frames the forest. Fonts are system for now.</p>
 </div>
 
 <script>
@@ -254,6 +267,12 @@ h1{ font-size:23px; font-weight:800; letter-spacing:.01em; margin:0 0 .5rem; }
     var b=e.target.closest('button'); if(!b) return;
     document.documentElement.dataset.ground=b.dataset.g;
     Array.prototype.forEach.call(groundBar.children, function(c){ c.classList.toggle('on', c===b); });
+  });
+  var shapeBar=document.getElementById('shape');
+  shapeBar.addEventListener('click', function(e){
+    var b=e.target.closest('button'); if(!b) return;
+    document.documentElement.dataset.shape=b.dataset.s;
+    Array.prototype.forEach.call(shapeBar.children, function(c){ c.classList.toggle('on', c===b); });
   });
 
   window.addEventListener('resize', fit);
