@@ -20,4 +20,6 @@ contextBridge.exposeInMainWorld('taskforkstack', {
   writeNote:         (dir, file, text)   => ipcRenderer.invoke('tfs:write-note', dir, file, text),
   deleteNote:        (dir, file)         => ipcRenderer.invoke('tfs:delete-note', dir, file),
   openExternal:      (url)               => ipcRenderer.invoke('tfs:open-external', url),
+  getViewState:      (domain)            => ipcRenderer.invoke('tfs:get-view-state', domain),
+  setViewState:      (domain, state)     => ipcRenderer.invoke('tfs:set-view-state', domain, state),
 })

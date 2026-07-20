@@ -31,6 +31,7 @@ export function buildCard(task, { isCursor } = {}) {
   card.className = 'card'
   card.dataset.taskId = task.id
   if (isProject) card.classList.add('project')
+  if (task.collapsed) card.classList.add('collapsed')
   if (cursor) card.classList.add('cursor')
   if (!isProject && task.status === 'cancelled') card.classList.add('cancel')
   if (task.note) card.classList.add('note')

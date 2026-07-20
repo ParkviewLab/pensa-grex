@@ -41,6 +41,10 @@ const api = createApi()
 let currentLayout = null
 let currentRaw = null
 let currentDomainPath = null
+let currentDomainName = null
+// Ids of collapsed project nodes: client-local view state, kept apart from the
+// forest data (see docs/northstar.md axiom 8) and loaded per domain.
+let collapsedSet = new Set()
 
 // The note editor records a task's note filename on its first non-empty save, so
 // the note dot appears and the name is persisted in the forest.
@@ -135,7 +139,8 @@ async function seedSamples() {
 
 // Draw a runtime forest. On edits, fit is false so the map does not jump under
 // the user's pan/zoom; on opening a domain it frames the whole forest.
-async function render(forest, { fit = true } = {}) {
+async function render(raw, { fit = true } = {}) {
+  const forest = buildForest(pruneCollapsed(raw, collapsedSet))
   if (!forest.trees.length) {
     showEmpty('This domain has no tasks yet. Right-click the canvas to start a tree.')
     return
@@ -156,7 +161,7 @@ async function applyEdit(nextRaw) {
     return
   }
   currentRaw = nextRaw
-  await render(buildForest(nextRaw), { fit: false })
+  await render(nextRaw, { fit: false })
   api.saveForestDebounced(currentDomainPath, JSON5.stringify(nextRaw, null, 2))
 }
 
@@ -188,10 +193,13 @@ async function openDomain(path, name) {
   }
   currentRaw = raw
   currentDomainPath = path
+  currentDomainName = name
   if (migrated.changed) await api.saveForest(path, JSON5.stringify(raw, null, 2))
+  const vs = await api.getViewState(name)
+  collapsedSet = new Set(Array.isArray(vs.collapsed) ? vs.collapsed : [])
   await api.setLastDomain(name)
   updateDeleteButton()
-  await render(buildForest(raw), { fit: true })
+  await render(raw, { fit: true })
 }
 
 // A node is a root iff nothing points at it (no .next, no branch child). Roots
@@ -202,6 +210,51 @@ function isRootId(raw, id) {
     if ((t.branches || []).some((b) => b.child === id)) return false
   }
   return true
+}
+
+// Every id reachable from startId in raw (inclusive), following .next and branches.
+function subtreeIdsOf(raw, startId) {
+  const ids = new Set()
+  const stack = [startId]
+  while (stack.length) {
+    const id = stack.pop()
+    if (ids.has(id)) continue
+    ids.add(id)
+    const t = raw.tasks[id]
+    if (!t) continue
+    if (t.next) stack.push(t.next)
+    for (const b of t.branches || []) stack.push(b.child)
+  }
+  return ids
+}
+
+// A view-only copy of raw with each collapsed project node kept as a leaf: its
+// subtree removed and the node marked so the render draws it folded (its shadow).
+// Collapse is client-local (docs/northstar.md axiom 8), so this never touches
+// currentRaw or the saved forest; a collapsed id that is now a task is ignored.
+function pruneCollapsed(raw, collapsed) {
+  const ids = [...collapsed].filter((id) => raw.tasks[id] && raw.tasks[id].kind === 'project')
+  if (!ids.length) return raw
+  const remove = new Set()
+  for (const id of ids) for (const d of subtreeIdsOf(raw, id)) if (d !== id) remove.add(d)
+  const next = structuredClone(raw)
+  for (const id of ids) {
+    if (remove.has(id)) continue // this collapsed node is itself hidden inside another
+    next.tasks[id].collapsed = true
+    next.tasks[id].next = null
+    next.tasks[id].branches = []
+  }
+  for (const d of remove) delete next.tasks[d]
+  return next
+}
+
+// Fold or unfold a project node, persist the change to the client-local view
+// state, and re-render in place.
+function toggleCollapse(taskId) {
+  if (collapsedSet.has(taskId)) collapsedSet.delete(taskId)
+  else collapsedSet.add(taskId)
+  if (currentDomainName) api.setViewState(currentDomainName, { collapsed: [...collapsedSet] })
+  render(currentRaw, { fit: false })
 }
 
 // ---- editing flows (each dialog runs after the menu has closed) ----
@@ -287,6 +340,12 @@ function openTaskMenu(x, y, taskId) {
     items.push(isProject
       ? { label: 'Make task', onClick: () => applyEdit(M.convertKind(currentRaw, taskId)) }
       : { label: 'Make sub-project', onClick: () => applyEdit(M.convertKind(currentRaw, taskId)) })
+  }
+  // Collapse/expand folds a project node's subtree (client-local view state).
+  if (isProject) {
+    items.push(collapsedSet.has(taskId)
+      ? { label: 'Expand', onClick: () => toggleCollapse(taskId) }
+      : { label: 'Collapse', onClick: () => toggleCollapse(taskId) })
   }
   items.push({ label: 'Rename…', onClick: () => renameTask(taskId) })
   items.push({ separator: true })

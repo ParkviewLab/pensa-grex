@@ -117,6 +117,34 @@ export function setLastDomain(name) {
   return { ok: true }
 }
 
+function viewStatePath() {
+  return join(app.getPath('userData'), 'viewstate.json')
+}
+
+// Client-local view state (which project nodes are collapsed), keyed by domain
+// name. Disposable: a corrupt or missing file falls back to {} (unlike
+// settings.json, which we refuse to clobber). See docs/northstar.md axiom 8:
+// the view is the client's, kept out of the shared forest data.
+function readViewStateFile() {
+  try {
+    return JSON.parse(readFileSync(viewStatePath(), 'utf-8'))
+  } catch {
+    return {}
+  }
+}
+
+export function getViewState(domain) {
+  const s = readViewStateFile()[domain]
+  return { collapsed: Array.isArray(s && s.collapsed) ? s.collapsed : [] }
+}
+
+export function setViewState(domain, state) {
+  const all = readViewStateFile()
+  all[domain] = { collapsed: Array.isArray(state && state.collapsed) ? state.collapsed : [] }
+  atomicWrite(viewStatePath(), JSON.stringify(all, null, 2) + '\n')
+  return { ok: true }
+}
+
 function ensureLibraryRoot() {
   const root = getLibraryRoot()
   if (!existsSync(root)) mkdirSync(root, { recursive: true })

@@ -8,6 +8,7 @@ import pkg from '../../package.json'
 import {
   getSettings, setLastDomain, getLibraryRoot, setLibraryRoot,
   listDomains, createForest, deleteForest, loadForest, saveForest, readNote, writeNote, deleteNote,
+  getViewState, setViewState,
 } from './store.js'
 
 const isDev = !app.isPackaged
@@ -264,6 +265,8 @@ app.whenReady().then(() => {
   ipcMain.handle('tfs:open-external', (_e, url) => {
     if (typeof url === 'string' && /^https?:\/\//i.test(url)) shell.openExternal(url)
   })
+  ipcMain.handle('tfs:get-view-state', (_e, domain) => getViewState(domain))
+  ipcMain.handle('tfs:set-view-state', (_e, domain, state) => setViewState(domain, state))
 
   // Safety net: keep the window from navigating away from the app; open any
   // external URL that slips through in the system browser instead.
