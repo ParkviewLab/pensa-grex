@@ -12,7 +12,7 @@ import {
 } from './store.js'
 
 const isDev = !app.isPackaged
-const GITHUB_URL = 'https://github.com/garycoding/TaskForkStack'
+const GITHUB_URL = 'https://github.com/ParkviewLab/pensa-grex'
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -80,7 +80,7 @@ function openAboutWindow() {
   a:hover{text-decoration:underline}
 </style>
 <div class="wrap">
-  <h1>TaskForkStack</h1>
+  <h1>PensaGrex</h1>
   <div class="ver">Version ${pkg.version}</div>
   <div class="copy">© 2026 Gary Frattarola — AGPL-3.0-or-later, or commercial</div>
   <a href="${GITHUB_URL}" target="_blank" rel="noopener">Source code on GitHub</a>
@@ -89,7 +89,7 @@ function openAboutWindow() {
     width: 420, height: 280,
     resizable: false, minimizable: false, maximizable: false, fullscreenable: false,
     backgroundColor: '#111116',
-    title: 'About TaskForkStack',
+    title: 'About PensaGrex',
     webPreferences: { contextIsolation: true, sandbox: true },
   })
   _aboutWin.setMenuBarVisibility(false)
@@ -180,7 +180,7 @@ function openLicensesWindow() {
   .missing{padding:48px 0;text-align:center;color:rgba(255,255,255,.4);line-height:1.9}
   code{background:rgba(255,255,255,.08);padding:1px 6px;border-radius:3px}
 </style>
-<header><h1>Open Source Licenses</h1><div class="sub">TaskForkStack includes the open-source software below.</div></header>
+<header><h1>Open Source Licenses</h1><div class="sub">PensaGrex includes the open-source software below.</div></header>
 <main>${body}</main>`
 
   _licWin = new BrowserWindow({
@@ -243,10 +243,10 @@ app.whenReady().then(() => {
 
   // Persistence bridge: the renderer's whole view of disk. Handlers in store.js
   // re-derive and bounds-check every path against the library root.
-  ipcMain.handle('tfs:get-settings',    () => getSettings())
-  ipcMain.handle('tfs:set-last-domain', (_e, name) => setLastDomain(name))
-  ipcMain.handle('tfs:get-library-root', () => getLibraryRoot())
-  ipcMain.handle('tfs:choose-library-root', async () => {
+  ipcMain.handle('pensagrex:get-settings',    () => getSettings())
+  ipcMain.handle('pensagrex:set-last-domain', (_e, name) => setLastDomain(name))
+  ipcMain.handle('pensagrex:get-library-root', () => getLibraryRoot())
+  ipcMain.handle('pensagrex:choose-library-root', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog(win, {
       title: 'Choose a forest library folder',
       properties: ['openDirectory', 'createDirectory'],
@@ -254,22 +254,22 @@ app.whenReady().then(() => {
     if (canceled || !filePaths[0]) return { canceled: true }
     return setLibraryRoot(filePaths[0])
   })
-  ipcMain.handle('tfs:list-domains',  () => listDomains())
-  ipcMain.handle('tfs:create-forest', (_e, name) => createForest(name))
-  ipcMain.handle('tfs:delete-forest', (_e, dir) => deleteForest(dir))
-  ipcMain.handle('tfs:load-forest',   (_e, dir) => loadForest(dir))
-  ipcMain.handle('tfs:save-forest',   (_e, dir, text) => saveForest(dir, text))
-  ipcMain.handle('tfs:read-note',     (_e, dir, file) => readNote(dir, file))
-  ipcMain.handle('tfs:write-note',    (_e, dir, file, text) => writeNote(dir, file, text))
-  ipcMain.handle('tfs:delete-note',   (_e, dir, file) => deleteNote(dir, file))
-  ipcMain.handle('tfs:open-external', (_e, url) => {
+  ipcMain.handle('pensagrex:list-domains',  () => listDomains())
+  ipcMain.handle('pensagrex:create-forest', (_e, name) => createForest(name))
+  ipcMain.handle('pensagrex:delete-forest', (_e, dir) => deleteForest(dir))
+  ipcMain.handle('pensagrex:load-forest',   (_e, dir) => loadForest(dir))
+  ipcMain.handle('pensagrex:save-forest',   (_e, dir, text) => saveForest(dir, text))
+  ipcMain.handle('pensagrex:read-note',     (_e, dir, file) => readNote(dir, file))
+  ipcMain.handle('pensagrex:write-note',    (_e, dir, file, text) => writeNote(dir, file, text))
+  ipcMain.handle('pensagrex:delete-note',   (_e, dir, file) => deleteNote(dir, file))
+  ipcMain.handle('pensagrex:open-external', (_e, url) => {
     if (typeof url === 'string' && /^https?:\/\//i.test(url)) shell.openExternal(url)
   })
-  ipcMain.handle('tfs:get-view-state', (_e, domain) => getViewState(domain))
-  ipcMain.handle('tfs:set-view-state', (_e, domain, state) => setViewState(domain, state))
+  ipcMain.handle('pensagrex:get-view-state', (_e, domain) => getViewState(domain))
+  ipcMain.handle('pensagrex:set-view-state', (_e, domain, state) => setViewState(domain, state))
   // Export a project to a markdown file the user picks, anywhere on disk. The
   // save dialog is the trust boundary for this deliberately out-of-library write.
-  ipcMain.handle('tfs:export-markdown', async (_e, defaultName, text) => {
+  ipcMain.handle('pensagrex:export-markdown', async (_e, defaultName, text) => {
     if (typeof text !== 'string') return { error: 'export text must be a string' }
     const { canceled, filePath } = await dialog.showSaveDialog(win, {
       title: 'Export project to Markdown',
@@ -279,8 +279,8 @@ app.whenReady().then(() => {
     if (canceled || !filePath) return { canceled: true }
     return writeExport(filePath, text)
   })
-  ipcMain.handle('tfs:get-bookmarks', (_e, dir) => getBookmarks(dir))
-  ipcMain.handle('tfs:set-bookmarks', (_e, dir, text) => setBookmarks(dir, text))
+  ipcMain.handle('pensagrex:get-bookmarks', (_e, dir) => getBookmarks(dir))
+  ipcMain.handle('pensagrex:set-bookmarks', (_e, dir, text) => setBookmarks(dir, text))
 
   // Safety net: keep the window from navigating away from the app; open any
   // external URL that slips through in the system browser instead.

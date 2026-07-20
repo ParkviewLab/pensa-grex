@@ -24,7 +24,7 @@ h.rm = (p) => rmSync(p, { recursive: true, force: true })
 const store = await import('./store.js')
 
 beforeEach(() => {
-  h.userData = mkdtempSync(join(tmpdir(), 'tfs-store-'))
+  h.userData = mkdtempSync(join(tmpdir(), 'pensagrex-store-'))
   h.trashed = []
 })
 afterEach(() => {
@@ -37,7 +37,7 @@ describe('library root and settings', () => {
   })
 
   it('repoints the library root and persists it', () => {
-    const other = mkdtempSync(join(tmpdir(), 'tfs-lib-'))
+    const other = mkdtempSync(join(tmpdir(), 'pensagrex-lib-'))
     store.setLibraryRoot(other)
     expect(store.getLibraryRoot()).toBe(other)
     expect(store.getSettings().libraryRoot).toBe(other)

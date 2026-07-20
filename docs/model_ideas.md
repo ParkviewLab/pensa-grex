@@ -10,14 +10,13 @@ held in a chat log. A notebook that feeds the eventual `docs/northstar.md` and
 the data model, not a spec. Where something is settled it says so; open
 questions are marked.
 
-## The name, and the mental model
+## The mental model
 
-TaskForkStack is Task plus Fork plus Stack. A branch is a **stack**: tasks are
-**pushed** onto its tip and **popped** off it, and the tree grows by pushing at
-tips. A **fork** creates parallel stacks that diverge from a point on an
-existing stack. This is the author's stated reasoning for the word "stack," and
-it is decisive for the data model: the primary edit operations are push and pop
-at a tip, and fork at a point.
+The model is stack-and-fork. A branch is a **stack**: tasks are **pushed** onto
+its tip and **popped** off it, and the tree grows by pushing at tips. A **fork**
+creates parallel stacks that diverge from a point on an existing stack. This is
+decisive for the data model: the primary edit operations are push and pop at a
+tip, and fork at a point.
 
 ## Entities (draft)
 

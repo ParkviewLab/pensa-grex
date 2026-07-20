@@ -5,7 +5,7 @@
 // — every fill in the skin is a CSS variable, so no re-layout or re-measure
 // is needed (see docs/model_ideas.md).
 
-const STORE_KEY = 'tfs.ground'
+const STORE_KEY = 'pensagrex.ground'
 
 export function initTheme(segEl) {
   const root = document.documentElement

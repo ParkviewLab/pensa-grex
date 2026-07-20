@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 
-// A thin renderer-side wrapper over window.taskforkstack (the preload bridge).
+// A thin renderer-side wrapper over window.pensagrex (the preload bridge).
 // Two jobs beyond forwarding: it adds a per-domain debounced save so a burst of
 // edits collapses into one write (the same 500 ms cadence conception-space uses
 // for note autosave), and it provides an in-memory fallback so the built
@@ -92,7 +92,7 @@ function makeFallback() {
 }
 
 export function createApi() {
-  const raw = window.taskforkstack
+  const raw = window.pensagrex
   const base = raw && Object.keys(raw).length ? wrapRealBridge(raw) : makeFallback()
 
   // Set by the caller to be told when a debounced forest save fails, so a lost

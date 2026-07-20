@@ -5,8 +5,8 @@
 # Run after `npm run build`. Unsigned for now — macOS Gatekeeper and Windows
 # SmartScreen will warn on first launch until signing is wired up (see the
 # handbook's electron-tooling.md for how to add it later).
-appId: dev.garycoding.taskforkstack
-productName: TaskForkStack
+appId: ai.parkviewlab.pensa-grex
+productName: PensaGrex
 artifactName: ${name}-${version}-${arch}.${ext}
 directories:
   output: dist
@@ -45,5 +45,5 @@ extraResources:
     filter: ['**/*']
 publish:
   provider: github
-  owner: garycoding
-  repo: TaskForkStack
+  owner: ParkviewLab
+  repo: pensa-grex
