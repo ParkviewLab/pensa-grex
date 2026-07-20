@@ -57,6 +57,12 @@ jobs:
           node-version: 24.x
           cache: npm
       - run: npm ci
+      # Electron's prebuilt can extract only partially under `npm ci` on CI's
+      # Node (extract-zip/yauzl regression, electron/electron#51619), leaving the
+      # Chromium/Node licence notices out of node_modules/electron/dist; re-run
+      # its installer to finish the extraction before `npm run legal` asserts they
+      # are present (the `yauzl` override alone does not cover Electron 43).
+      - run: node node_modules/electron/install.js
       # Generate the legal/ notice bundle before packaging — electron-builder
       # ships it via extraResources, and legal/ is gitignored so it is absent on
       # a clean runner. Without this, installers build but carry no third-party
