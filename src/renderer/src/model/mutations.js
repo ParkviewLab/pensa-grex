@@ -375,13 +375,14 @@ export function pasteAsTree(raw, clip) {
 
 // ---- drag-and-drop moves ----
 //
-// Dropping a node onto a card grafts it there as a fresh fork (a new branch of
-// the target). This one "graft as a branch" rule serves both a single-task move
-// and a whole-subtree move: it is always valid, and it can never put anything
-// below the target, so the "nothing before the root" rule holds at every drop
-// target (a branch off a root leaves the root's base untouched). Finer main-line
-// insertion is deliberately out of scope for this pass. See
-// docs/interaction_model.md for the drop rule and the four moves.
+// Two drop rules. Dropping a node onto a CARD grafts it there as a fresh fork (a
+// new branch of the target). Dropping a node into the GAP between two nodes on a
+// line splices it into that gap (moveIntoLine). Neither can put anything below a
+// root, so the "nothing before the root" rule holds at every drop target. The
+// menu's "move up / move down" are the keyboard-free counterpart: a clean swap of
+// a node with its main-line neighbour that keeps its branches (moveUp/moveDown),
+// distinct from moveIntoLine, where a task travels alone. See
+// docs/interaction_model.md for the rules and moves.
 
 // Detach `id` from whatever points at it, cutting the incoming edge cleanly so
 // its whole subtree travels with it. A root (no predecessor) is dropped from
@@ -404,25 +405,15 @@ function graftBranch(next, targetId, id) {
   target.branches.push({ child: id, side: branchSide(target), at: 'above' })
 }
 
-/**
- * Move a single task node onto a target, as a new fork of the target. The moved
- * task leaves its children behind: they are spliced onto its predecessor in its
- * place (exactly as deleteTask's 'splice' mode does), so only the one node
- * travels. Its "here" cursor travels with it; a splice that merges two lines is
- * repaired by normalizeHeres. Refuses a project node (use moveSubtree) and a drop
- * onto itself.
- */
-export function moveTaskNode(raw, id, targetId) {
-  const next = clone(raw)
-  const task = requireTask(next, id)
-  requireTask(next, targetId)
-  if (id === targetId) throw new Error('cannot move a node onto itself')
-  if (task.kind !== 'task') throw new Error('moveTaskNode moves a task node; use moveSubtree for a project')
+// Splice a single task out of its line, leaving it detached and childless: its
+// successor (or, lacking one, its first fork) takes its slot under its
+// predecessor, with any remaining forks reattached to that new head — exactly the
+// reconnection deleteTask's 'splice' mode performs. The node keeps its identity;
+// only its edges are cleared, ready to be re-attached elsewhere.
+function spliceOutTask(next, id) {
+  const task = next.tasks[id]
   const pred = predecessorOf(next, id)
   if (!pred) throw new Error('a task node always has a predecessor')
-
-  // Reconnect the moved task's children (its successor, or its first fork) into
-  // its slot under its predecessor, carrying any remaining forks onto that head.
   const succ = task.next
   let head = null
   let leftover = task.branches
@@ -438,10 +429,36 @@ export function moveTaskNode(raw, id, targetId) {
   if (pred.kind === 'next') next.tasks[pred.id].next = head
   else if (head) next.tasks[pred.id].branches[pred.branchIndex].child = head
   else next.tasks[pred.id].branches.splice(pred.branchIndex, 1)
-
-  // The node travels alone: strip its children, then graft it onto the target.
   task.next = null
   task.branches = []
+}
+
+// The end of a node's main line: follow .next to the node whose .next is null.
+function mainLineTip(next, id) {
+  let cur = id
+  const seen = new Set()
+  while (next.tasks[cur] && next.tasks[cur].next && !seen.has(cur)) {
+    seen.add(cur)
+    cur = next.tasks[cur].next
+  }
+  return cur
+}
+
+/**
+ * Move a single task node onto a target, as a new fork of the target. The moved
+ * task leaves its children behind: they are spliced onto its predecessor in its
+ * place (exactly as deleteTask's 'splice' mode does), so only the one node
+ * travels. Its "here" cursor travels with it; a splice that merges two lines is
+ * repaired by normalizeHeres. Refuses a project node (use moveSubtree) and a drop
+ * onto itself.
+ */
+export function moveTaskNode(raw, id, targetId) {
+  const next = clone(raw)
+  const task = requireTask(next, id)
+  requireTask(next, targetId)
+  if (id === targetId) throw new Error('cannot move a node onto itself')
+  if (task.kind !== 'task') throw new Error('moveTaskNode moves a task node; use moveSubtree for a project')
+  spliceOutTask(next, id) // the node travels alone; its children stay on the line
   graftBranch(next, targetId, id)
   return normalizeHeres(next)
 }
@@ -501,4 +518,82 @@ export function reorderRoot(raw, rootId, index) {
   order.splice(Math.max(0, Math.min(index, order.length)), 0, rootId)
   next.rootOrder = order
   return next
+}
+
+/**
+ * Splice a node into the gap on a line just above `belowId` (between belowId and
+ * its current successor). A task travels alone (its children splice onto its old
+ * predecessor); a project node carries its whole subtree, whose main-line tip then
+ * continues onto belowId's old successor. Detaching first, then reading belowId's
+ * successor, keeps the rewiring correct even when belowId was the moved node's own
+ * neighbour (in which case the result is a no-op). Refuses inserting a subtree into
+ * its own line (a cycle) or above itself. "here" cursors travel; a merged line is
+ * repaired by normalizeHeres.
+ */
+export function moveIntoLine(raw, movedId, belowId) {
+  const next = clone(raw)
+  const moved = requireTask(next, movedId)
+  requireTask(next, belowId)
+  if (movedId === belowId) throw new Error('cannot insert a node above itself')
+  const isProject = moved.kind === 'project'
+  if (isProject && subtreeIds(next, movedId).has(belowId)) throw new Error('cannot insert a subtree into its own line')
+
+  let tipId
+  if (isProject) {
+    cutIncoming(next, movedId) // the whole subtree leaves its current place
+    tipId = mainLineTip(next, movedId) // its line will continue from here
+  } else {
+    spliceOutTask(next, movedId) // one task; its children stay behind
+    tipId = movedId
+  }
+  const below = next.tasks[belowId]
+  const oldNext = below.next
+  below.next = movedId
+  next.tasks[tipId].next = oldNext
+  return normalizeHeres(next)
+}
+
+// Swap aId with its main-line successor, keeping each node's own branches: the two
+// exchange positions on the line. aId's predecessor (main line or branch) is
+// repointed at the successor, which then points back at aId.
+function swapWithSuccessor(next, aId) {
+  const a = next.tasks[aId]
+  const bId = a.next
+  const b = next.tasks[bId]
+  const pred = predecessorOf(next, aId)
+  if (pred) {
+    if (pred.kind === 'next') next.tasks[pred.id].next = bId
+    else next.tasks[pred.id].branches[pred.branchIndex].child = bId
+  }
+  a.next = b.next
+  b.next = aId
+}
+
+/**
+ * Move a node one step toward the tip: swap it with its main-line successor,
+ * preserving both nodes' branches. Refuses a node with no successor, and a root
+ * (whose successor becoming the base would leave a non-project root).
+ */
+export function moveUp(raw, id) {
+  const next = clone(raw)
+  const node = requireTask(next, id)
+  if (!node.next) throw new Error('nothing above to swap with')
+  if (!predecessorOf(next, id)) throw new Error('cannot move a root up')
+  swapWithSuccessor(next, id)
+  return normalizeHeres(next)
+}
+
+/**
+ * Move a node one step toward the root: swap it with its main-line predecessor.
+ * Equivalent to moving that predecessor up. Refuses a node with no main-line
+ * predecessor (a line start), and a swap that would drop the node below a root.
+ */
+export function moveDown(raw, id) {
+  const next = clone(raw)
+  requireTask(next, id)
+  const pred = predecessorOf(next, id)
+  if (!pred || pred.kind !== 'next') throw new Error('no main-line predecessor to swap with')
+  if (!predecessorOf(next, pred.id)) throw new Error('cannot move below the root')
+  swapWithSuccessor(next, pred.id)
+  return normalizeHeres(next)
 }

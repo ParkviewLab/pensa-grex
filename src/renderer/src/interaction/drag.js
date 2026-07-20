@@ -5,13 +5,13 @@
 // that then moves past a small threshold begins a drag; a press that does not is
 // left to click / double-click. Panning is unaffected: it only starts on empty
 // canvas (viewport.js bails when the press lands on a card). While dragging, a
-// floating label follows the cursor and a valid drop target is highlighted. On
-// release the gesture is reported to onDrop(sourceId, targetId, clientX) — a card
-// under the cursor, or null for empty canvas — and the caller owns the mutation.
+// floating label follows the cursor; the caller resolves what the cursor is over
+// and draws the drop hint.
 //
-// This module is DOM mechanics only; the model rules (which move a drop means,
-// what is a valid target) live with the caller via the canDrop predicate. See
-// docs/interaction_model.md for the drop semantics and the four moves.
+// This module is DOM mechanics only. It reports the gesture in client coordinates
+// and leaves every model rule and all hit-testing to the caller: onProbe on each
+// move (update the hint), onDrop on release (apply the move), onCancel when a drag
+// is abandoned. See docs/interaction_model.md for the rules the caller applies.
 
 const THRESHOLD = 5 // px of pointer travel before a press becomes a drag
 
@@ -19,23 +19,10 @@ function sel(id) {
   return '[data-task-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]'
 }
 
-export function createDragController({ contentEl, viewportEl, canDrop, onDrop }) {
-  let state = null // { sourceId, startX, startY, dragging, preview, targetEl }
+export function createDragController({ contentEl, viewportEl, onProbe, onDrop, onCancel }) {
+  let state = null // { sourceId, startX, startY, dragging, preview }
 
   const cardEl = (id) => contentEl.querySelector(sel(id))
-
-  function cardIdFromPoint(x, y) {
-    const el = document.elementFromPoint(x, y)
-    const card = el && el.closest ? el.closest('[data-task-id]') : null
-    return card ? card.dataset.taskId : null
-  }
-
-  function clearTarget() {
-    if (state && state.targetEl) {
-      state.targetEl.classList.remove('drop-target')
-      state.targetEl = null
-    }
-  }
 
   function positionPreview(e) {
     if (state.preview) {
@@ -57,6 +44,17 @@ export function createDragController({ contentEl, viewportEl, canDrop, onDrop })
     positionPreview(e)
   }
 
+  function tearDown() {
+    if (state.preview) state.preview.remove()
+    const src = cardEl(state.sourceId)
+    if (src) src.classList.remove('drag-src')
+    viewportEl.classList.remove('drag-active')
+    window.removeEventListener('pointermove', onMove)
+    window.removeEventListener('pointerup', onUp)
+    window.removeEventListener('pointercancel', onCancelEvent)
+    state = null
+  }
+
   function onMove(e) {
     if (!state) return
     if (!state.dragging) {
@@ -64,17 +62,7 @@ export function createDragController({ contentEl, viewportEl, canDrop, onDrop })
       beginDrag(e)
     }
     positionPreview(e)
-    // The preview has pointer-events:none, so elementFromPoint reports the card beneath.
-    const targetId = cardIdFromPoint(e.clientX, e.clientY)
-    const valid = targetId && targetId !== state.sourceId && canDrop(state.sourceId, targetId)
-    const currentId = state.targetEl ? state.targetEl.dataset.taskId : null
-    if (currentId !== (valid ? targetId : null)) {
-      clearTarget()
-      if (valid) {
-        const el = cardEl(targetId)
-        if (el) { el.classList.add('drop-target'); state.targetEl = el }
-      }
-    }
+    onProbe(state.sourceId, e.clientX, e.clientY)
     e.preventDefault()
   }
 
@@ -82,33 +70,26 @@ export function createDragController({ contentEl, viewportEl, canDrop, onDrop })
     if (!state) return
     const wasDragging = state.dragging
     const sourceId = state.sourceId
-    const targetId = wasDragging ? cardIdFromPoint(e.clientX, e.clientY) : null
-    const clientX = e.clientX
-    cleanup()
-    if (wasDragging) onDrop(sourceId, targetId, clientX)
+    const cx = e.clientX, cy = e.clientY
+    tearDown()
+    if (wasDragging) onDrop(sourceId, cx, cy)
   }
 
-  function cleanup() {
+  function onCancelEvent() {
     if (!state) return
-    clearTarget()
-    if (state.preview) state.preview.remove()
-    const src = cardEl(state.sourceId)
-    if (src) src.classList.remove('drag-src')
-    viewportEl.classList.remove('drag-active')
-    window.removeEventListener('pointermove', onMove)
-    window.removeEventListener('pointerup', onUp)
-    window.removeEventListener('pointercancel', cleanup)
-    state = null
+    const wasDragging = state.dragging
+    tearDown()
+    if (wasDragging) onCancel()
   }
 
   function onDown(e) {
     if (e.button !== 0) return
     const card = e.target && e.target.closest ? e.target.closest('[data-task-id]') : null
     if (!card) return
-    state = { sourceId: card.dataset.taskId, startX: e.clientX, startY: e.clientY, dragging: false, preview: null, targetEl: null }
+    state = { sourceId: card.dataset.taskId, startX: e.clientX, startY: e.clientY, dragging: false, preview: null }
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
-    window.addEventListener('pointercancel', cleanup)
+    window.addEventListener('pointercancel', onCancelEvent)
   }
 
   contentEl.addEventListener('pointerdown', onDown)
@@ -116,7 +97,7 @@ export function createDragController({ contentEl, viewportEl, canDrop, onDrop })
   return {
     destroy() {
       contentEl.removeEventListener('pointerdown', onDown)
-      cleanup()
+      if (state) { const d = state.dragging; tearDown(); if (d) onCancel() }
     },
   }
 }
