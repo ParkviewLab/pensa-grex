@@ -380,7 +380,8 @@ export function pasteAsTree(raw, clip) {
 // and a whole-subtree move: it is always valid, and it can never put anything
 // below the target, so the "nothing before the root" rule holds at every drop
 // target (a branch off a root leaves the root's base untouched). Finer main-line
-// insertion is deliberately out of scope for this pass.
+// insertion is deliberately out of scope for this pass. See
+// docs/interaction_model.md for the drop rule and the four moves.
 
 // Detach `id` from whatever points at it, cutting the incoming edge cleanly so
 // its whole subtree travels with it. A root (no predecessor) is dropped from

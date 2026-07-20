@@ -3,7 +3,8 @@
 
 // The subway-map SVG layer: the sputnik (branch-cursor) and starburst
 // (atmosphere) marker symbols, track polylines, and fork-junction diamonds.
-// Ported from the design mock (docs/subway-forest-themed.html).
+// Ported from the design mock (docs/subway-forest-themed.html). The sputnik is
+// the Atomic Starburst "here" mark; see docs/node-visual-system.md.
 
 const SVGNS = 'http://www.w3.org/2000/svg'
 

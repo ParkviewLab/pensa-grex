@@ -81,3 +81,7 @@ to read, move, or keep your own data.
 6. The file is the source of truth, and it is the user's: plain JSON5 and markdown
    on disk, portable and legible without the app.
 7. Decoration that does not clarify is cut.
+8. View is not data: what a client has collapsed, where its camera rests, and its
+   zoom are that client's own state, kept out of the forest file; a named, saved
+   view may be shared with the data, but a client's live view is never written
+   into it.

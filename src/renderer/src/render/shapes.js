@@ -9,6 +9,9 @@
 // project node), keystone (kept, currently unassigned) — plus composable
 // decorators drawn behind the card: `orbits` (the atomic rings of a project) and
 // `shadow` (a filled echo, used when a project is collapsed; see PR C).
+//
+// See docs/node-visual-system.md for the shape grammar, the variable-weight
+// outline model, and the kind/state -> shape assignment policy.
 
 const SVGNS = 'http://www.w3.org/2000/svg'
 

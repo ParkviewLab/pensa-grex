@@ -29,6 +29,16 @@ but blind to connector crossings: growing one branch into a row occupied by a
 sibling pushed the sibling outward, and the sibling's horizontal connector then
 swept straight across the grown branch's lane.
 
+## The tree base and its name
+
+A tree's base is its **root node**, a project node with no incoming edge; the trunk
+line rises from it. The layout keys each tree on that root node's id (there is no
+separate tree record, and `rootOrder` only carries left-to-right ordering). The
+project's name is the root card's own label, so the former floating tree-title
+(the `.ttl` element that once sat below each tree) is gone: the name is drawn as a
+station, not as chrome beside one. None of this touches the branch-placement
+algorithm below; it only changes what sits at row zero and where the name lives.
+
 ## The established solution
 
 This is the well-studied "tidy tree" drawing problem, and its aesthetic
