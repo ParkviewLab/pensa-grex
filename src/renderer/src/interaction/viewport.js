@@ -48,6 +48,9 @@ export function createViewport({ viewportEl, worldEl, pctEl, getBounds, minScale
   }
   function onPointerDown(e) {
     if (e.button !== 0) return // left-button pans; right-button is for the menu
+    // A press that lands on a card is a drag-and-drop grab (interaction/drag.js),
+    // not a pan — pan is the empty-canvas gesture.
+    if (e.target && e.target.closest && e.target.closest('.card')) return
     dragging = true; sx = e.clientX; sy = e.clientY; stx = tx; sty = ty
     viewportEl.classList.add('dragging')
     viewportEl.setPointerCapture(e.pointerId)

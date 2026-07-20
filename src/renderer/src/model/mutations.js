@@ -372,3 +372,132 @@ export function pasteAsTree(raw, clip) {
   next.rootOrder.push(map(clip.rootId))
   return { next, notes }
 }
+
+// ---- drag-and-drop moves ----
+//
+// Dropping a node onto a card grafts it there as a fresh fork (a new branch of
+// the target). This one "graft as a branch" rule serves both a single-task move
+// and a whole-subtree move: it is always valid, and it can never put anything
+// below the target, so the "nothing before the root" rule holds at every drop
+// target (a branch off a root leaves the root's base untouched). Finer main-line
+// insertion is deliberately out of scope for this pass.
+
+// Detach `id` from whatever points at it, cutting the incoming edge cleanly so
+// its whole subtree travels with it. A root (no predecessor) is dropped from
+// rootOrder; a main-line child leaves its predecessor a tip; a branch child is
+// spliced out of its predecessor's branch list.
+function cutIncoming(next, id) {
+  const pred = predecessorOf(next, id)
+  if (!pred) {
+    next.rootOrder = (next.rootOrder || []).filter((rid) => rid !== id)
+  } else if (pred.kind === 'next') {
+    next.tasks[pred.id].next = null
+  } else {
+    next.tasks[pred.id].branches.splice(pred.branchIndex, 1)
+  }
+}
+
+// Graft `id` as a fresh fork off `targetId` (alternating side).
+function graftBranch(next, targetId, id) {
+  const target = next.tasks[targetId]
+  target.branches.push({ child: id, side: branchSide(target), at: 'above' })
+}
+
+/**
+ * Move a single task node onto a target, as a new fork of the target. The moved
+ * task leaves its children behind: they are spliced onto its predecessor in its
+ * place (exactly as deleteTask's 'splice' mode does), so only the one node
+ * travels. Its "here" cursor travels with it; a splice that merges two lines is
+ * repaired by normalizeHeres. Refuses a project node (use moveSubtree) and a drop
+ * onto itself.
+ */
+export function moveTaskNode(raw, id, targetId) {
+  const next = clone(raw)
+  const task = requireTask(next, id)
+  requireTask(next, targetId)
+  if (id === targetId) throw new Error('cannot move a node onto itself')
+  if (task.kind !== 'task') throw new Error('moveTaskNode moves a task node; use moveSubtree for a project')
+  const pred = predecessorOf(next, id)
+  if (!pred) throw new Error('a task node always has a predecessor')
+
+  // Reconnect the moved task's children (its successor, or its first fork) into
+  // its slot under its predecessor, carrying any remaining forks onto that head.
+  const succ = task.next
+  let head = null
+  let leftover = task.branches
+  if (succ) {
+    head = succ
+  } else if (task.branches.length) {
+    head = task.branches[0].child
+    leftover = task.branches.slice(1)
+  } else {
+    leftover = []
+  }
+  if (head) for (const b of leftover) next.tasks[head].branches.push({ child: b.child, side: b.side, at: b.at })
+  if (pred.kind === 'next') next.tasks[pred.id].next = head
+  else if (head) next.tasks[pred.id].branches[pred.branchIndex].child = head
+  else next.tasks[pred.id].branches.splice(pred.branchIndex, 1)
+
+  // The node travels alone: strip its children, then graft it onto the target.
+  task.next = null
+  task.branches = []
+  graftBranch(next, targetId, id)
+  return normalizeHeres(next)
+}
+
+/**
+ * Move a whole subtree (the node `rootId` and everything growing from it) onto a
+ * target, as a new fork of the target — graft/nest. The subtree's incoming edge
+ * is cut and the subtree re-attached intact, so every "here" inside it travels.
+ * Refuses a drop onto itself or onto one of its own descendants (which would
+ * detach a fragment and form a cycle).
+ */
+export function moveSubtree(raw, rootId, targetId) {
+  const next = clone(raw)
+  requireTask(next, rootId)
+  requireTask(next, targetId)
+  if (rootId === targetId) throw new Error('cannot move a node onto itself')
+  if (subtreeIds(next, rootId).has(targetId)) throw new Error('cannot graft a subtree onto its own descendant')
+  cutIncoming(next, rootId)
+  graftBranch(next, targetId, rootId)
+  return normalizeHeres(next)
+}
+
+/**
+ * Detach a sub-project into its own independent tree: cut its incoming edge and
+ * append it to rootOrder, so it becomes a structural root. Only a project node
+ * can be a root; refuses a task node and a node that is already a root.
+ */
+export function detachToTree(raw, id) {
+  const next = clone(raw)
+  const node = requireTask(next, id)
+  if (node.kind !== 'project') throw new Error('only a project node can become a root')
+  if (!predecessorOf(next, id)) throw new Error('node is already a root')
+  cutIncoming(next, id)
+  if (!Array.isArray(next.rootOrder)) next.rootOrder = []
+  next.rootOrder.push(id)
+  return next
+}
+
+/**
+ * Move a root to position `index` in the left-to-right tree order. rootOrder is
+ * advisory and may omit some roots (buildForest appends the unlisted by
+ * createdAt); this canonicalises it to the full current root order first, then
+ * places `rootId` at the clamped index, so the index is meaningful. Refuses a
+ * non-root node.
+ */
+export function reorderRoot(raw, rootId, index) {
+  const next = clone(raw)
+  requireTask(next, rootId)
+  if (predecessorOf(next, rootId)) throw new Error('reorderRoot expects a root node')
+  const isRoot = (id) => !predecessorOf(next, id)
+  const listed = (next.rootOrder || []).filter((id) => next.tasks[id] && isRoot(id))
+  const unlisted = Object.keys(next.tasks)
+    .filter((id) => isRoot(id) && !listed.includes(id))
+    .sort((a, b) => String(next.tasks[a].createdAt).localeCompare(String(next.tasks[b].createdAt)))
+  const order = [...listed, ...unlisted]
+  order.splice(order.indexOf(rootId), 1)
+  order.splice(Math.max(0, Math.min(index, order.length)), 0, rootId)
+  next.rootOrder = order
+  return next
+}
