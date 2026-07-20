@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<!-- SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai> -->
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PensaGrex &mdash; subway forest study</title>
+<style>
+:root{ --ink:#1a1a17; --soft:#6b6b64; --bg:#fbfbf8; }
+@media (prefers-color-scheme:dark){ :root{ --ink:#e8e8e4; --soft:#9a9a92; --bg:#151513; } }
+html,body{ margin:0; background:var(--bg); }
+*{ box-sizing:border-box; }
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  color:var(--ink); padding:2rem 1.5rem 3rem;
+}
+.wrap{ max-width:1000px; margin:0 auto; }
+.eyebrow{ font-size:11.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--soft); margin:0 0 .5rem; }
+h1{ font-size:22px; font-weight:500; margin:0 0 .5rem; }
+.lede{ font-size:14px; line-height:1.6; color:var(--soft); margin:0 0 1.3rem; max-width:70ch; }
+
+.bar{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; flex-wrap:wrap; }
+.tabs{ display:flex; gap:6px; font-size:12px; }
+.tabs b{ font-weight:600; border:1px solid var(--ink); padding:3px 11px; border-radius:999px; }
+.tabs s{ color:var(--soft); border:1px solid var(--soft); padding:3px 11px; border-radius:999px; text-decoration:none; opacity:.7; }
+.zoom{ display:flex; align-items:center; gap:6px; }
+.btn{ font:inherit; font-size:12px; line-height:1; border:1px solid var(--ink); background:transparent; color:var(--ink);
+  border-radius:5px; padding:6px 10px; cursor:pointer; }
+.btn:hover{ background:rgba(128,128,128,.12); }
+.btn.primary{ background:var(--ink); color:var(--bg); }
+.btn.icon{ width:30px; padding:6px 0; text-align:center; font-size:14px; }
+.pct{ font-size:11px; color:var(--soft); min-width:42px; text-align:center; font-variant-numeric:tabular-nums; }
+
+.viewport{ position:relative; height:520px; overflow:hidden; background:#ffffff;
+  border:1px solid rgba(0,0,0,.16); border-radius:9px; cursor:grab; user-select:none; }
+.viewport.dragging{ cursor:grabbing; }
+.world{ position:absolute; top:0; left:0; transform-origin:0 0; }
+.content{ position:relative; width:1340px; height:440px; color:#141412;
+  background-image:radial-gradient(circle, rgba(20,20,18,.07) 1px, transparent 1.4px);
+  background-size:40px 40px; }
+
+.track{ fill:none; stroke:#141412; stroke-width:2.5; }
+.dot{ position:absolute; width:12px; height:12px; background:#141412; transform:translate(-50%,-50%); z-index:2; }
+.ring{ position:absolute; width:23px; height:23px; border:2px solid #141412; transform:translate(-50%,-50%); z-index:1; }
+.ttl{ position:absolute; font-size:11px; font-weight:600; letter-spacing:.05em;
+  text-transform:uppercase; color:#141412; white-space:nowrap; }
+
+.stbox{ position:absolute; transform:translateY(-50%); z-index:2; }
+.card{ position:relative; background:#fff; border:1px solid #141412; border-radius:2px; padding:5px 8px;
+  width:134px; display:flex; flex-direction:column; gap:3px; }
+.card.cursor{ border-width:2px; padding:4px 7px; }
+.card.cancel{ border-style:dashed; }
+.card .hd{ display:flex; align-items:center; gap:6px; }
+.card .lbl{ font-size:11.5px; line-height:1.18; color:#141412; }
+.card.cancel .lbl{ text-decoration:line-through; color:#8a8a82; }
+.card .tag{ font-size:8.5px; letter-spacing:.09em; text-transform:uppercase; color:#7a7a72; }
+.card.note::after{ content:""; position:absolute; top:4px; right:4px; width:6px; height:6px; background:#141412; }
+.flag{ position:absolute; top:-8px; left:6px; background:#fff; padding:0 4px; font-size:8px; font-weight:700;
+  letter-spacing:.13em; color:#141412; white-space:nowrap; }
+
+.gl{ width:11px; height:11px; border:1.5px solid #141412; flex:none; }
+.gl.done{ background:#141412; }
+.gl.prog{ background:linear-gradient(90deg,#141412 0,#141412 50%,#fff 50%,#fff 100%); }
+.gl.todo{ background:#fff; }
+.gl.cancel{ background:#fff; border-style:dashed; }
+
+.hint{ font-size:11.5px; color:var(--soft); margin:9px 2px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">PensaGrex &middot; subway forest &middot; grammar study</p>
+  <h1>Three trees, growing upward</h1>
+  <p class="lede">The subway grammar, vertical and bottom-up: each root sits at the bottom, growth rises, tips are on top. Three trees stand side by side as one HomeLab forest. Drag to pan, scroll to zoom, or press Fit to frame the whole forest on one screen. Still black-and-white; the atomic-age skin comes later.</p>
+
+  <div class="bar">
+    <div class="tabs"><b>HomeLab</b><s>Work</s></div>
+    <div class="zoom">
+      <button class="btn icon" id="zout" title="Zoom out" aria-label="Zoom out">&minus;</button>
+      <span class="pct" id="pct">100%</span>
+      <button class="btn icon" id="zin" title="Zoom in" aria-label="Zoom in">+</button>
+      <button class="btn primary" id="fit">Fit</button>
+    </div>
+  </div>
+
+  <div class="viewport" id="viewport">
+    <div class="world" id="world">
+      <div class="content" id="content">
+        <svg width="1340" height="440" viewBox="0 0 1340 440" style="position:absolute;top:0;left:0;z-index:0;">
+          <!-- Tree A: Media server -->
+          <path class="track" d="M60,400 L60,120"/>
+          <path class="track" d="M60,320 L240,270 L240,220"/>
+          <path class="track" d="M60,320 L420,270 L420,220"/>
+          <!-- Tree B: Home network -->
+          <path class="track" d="M600,400 L600,220"/>
+          <path class="track" d="M600,320 L780,270 L780,120"/>
+          <!-- Tree C: Home automation -->
+          <path class="track" d="M980,400 L980,230"/>
+          <path class="track" d="M980,320 L1160,275 L1160,230"/>
+        </svg>
+
+        <!-- ===== Tree A ===== -->
+        <div class="dot" style="left:60px;top:400px;"></div>
+        <div class="ring" style="left:60px;top:320px;"></div>
+        <div class="dot" style="left:60px;top:320px;"></div>
+        <div class="dot" style="left:60px;top:220px;"></div>
+        <div class="dot" style="left:60px;top:120px;"></div>
+        <div class="dot" style="left:240px;top:220px;"></div>
+        <div class="dot" style="left:420px;top:220px;"></div>
+        <div class="stbox" style="left:72px;top:400px;"><div class="card"><div class="hd"><span class="gl done"></span><span class="lbl">Set up NAS</span></div><span class="tag">done</span></div></div>
+        <div class="stbox" style="left:72px;top:320px;"><div class="card cursor"><span class="flag">&#9650; HERE</span><div class="hd"><span class="gl prog"></span><span class="lbl">Migrate media library</span></div><span class="tag">in progress</span></div></div>
+        <div class="stbox" style="left:72px;top:220px;"><div class="card"><div class="hd"><span class="gl prog"></span><span class="lbl">Automate backups</span></div><span class="tag">in progress</span></div></div>
+        <div class="stbox" style="left:72px;top:120px;"><div class="card"><div class="hd"><span class="gl todo"></span><span class="lbl">Test restore</span></div><span class="tag">to do</span></div></div>
+        <div class="stbox" style="left:252px;top:220px;"><div class="card note"><div class="hd"><span class="gl todo"></span><span class="lbl">Fix Plex transcoding</span></div><span class="tag">to do</span></div></div>
+        <div class="stbox" style="left:432px;top:220px;"><div class="card cancel"><div class="hd"><span class="gl cancel"></span><span class="lbl">Try Btrfs snapshots</span></div><span class="tag">cancelled</span></div></div>
+        <div class="ttl" style="left:72px;top:422px;">Media server</div>
+
+        <!-- ===== Tree B ===== -->
+        <div class="dot" style="left:600px;top:400px;"></div>
+        <div class="dot" style="left:600px;top:320px;"></div>
+        <div class="ring" style="left:600px;top:220px;"></div>
+        <div class="dot" style="left:600px;top:220px;"></div>
+        <div class="dot" style="left:780px;top:220px;"></div>
+        <div class="dot" style="left:780px;top:120px;"></div>
+        <div class="stbox" style="left:612px;top:400px;"><div class="card"><div class="hd"><span class="gl done"></span><span class="lbl">Rack + patch panel</span></div><span class="tag">done</span></div></div>
+        <div class="stbox" style="left:612px;top:320px;"><div class="card"><div class="hd"><span class="gl done"></span><span class="lbl">VLAN segmentation</span></div><span class="tag">done</span></div></div>
+        <div class="stbox" style="left:612px;top:220px;"><div class="card cursor"><span class="flag">&#9650; HERE</span><div class="hd"><span class="gl prog"></span><span class="lbl">Firewall rules</span></div><span class="tag">in progress</span></div></div>
+        <div class="stbox" style="left:792px;top:220px;"><div class="card"><div class="hd"><span class="gl todo"></span><span class="lbl">Wi-Fi 7 APs</span></div><span class="tag">to do</span></div></div>
+        <div class="stbox" style="left:792px;top:120px;"><div class="card"><div class="hd"><span class="gl todo"></span><span class="lbl">Roaming test</span></div><span class="tag">to do</span></div></div>
+        <div class="ttl" style="left:612px;top:422px;">Home network</div>
+
+        <!-- ===== Tree C ===== -->
+        <div class="dot" style="left:980px;top:400px;"></div>
+        <div class="ring" style="left:980px;top:320px;"></div>
+        <div class="dot" style="left:980px;top:320px;"></div>
+        <div class="dot" style="left:980px;top:230px;"></div>
+        <div class="dot" style="left:1160px;top:230px;"></div>
+        <div class="stbox" style="left:992px;top:400px;"><div class="card"><div class="hd"><span class="gl done"></span><span class="lbl">Install Home Assistant</span></div><span class="tag">done</span></div></div>
+        <div class="stbox" style="left:992px;top:320px;"><div class="card cursor"><span class="flag">&#9650; HERE</span><div class="hd"><span class="gl prog"></span><span class="lbl">Zigbee hub</span></div><span class="tag">in progress</span></div></div>
+        <div class="stbox" style="left:992px;top:230px;"><div class="card"><div class="hd"><span class="gl todo"></span><span class="lbl">Door / window sensors</span></div><span class="tag">to do</span></div></div>
+        <div class="stbox" style="left:1172px;top:230px;"><div class="card"><div class="hd"><span class="gl todo"></span><span class="lbl">Energy monitoring</span></div><span class="tag">to do</span></div></div>
+        <div class="ttl" style="left:992px;top:422px;">Home automation</div>
+      </div>
+    </div>
+  </div>
+  <p class="hint">Drag empty space to pan &middot; scroll to zoom &middot; Fit frames the whole forest. The branch cursor (ringed station, &#9650; HERE) marks where you are on each tree; a tree may have none.</p>
+</div>
+
+<script>
+(function(){
+  var CW=1340, CH=440;
+  var viewport=document.getElementById('viewport'),
+      world=document.getElementById('world'),
+      pct=document.getElementById('pct');
+  var s=1, tx=0, ty=0, MIN=0.2, MAX=3;
+
+  function apply(){
+    world.style.transform='translate('+tx+'px,'+ty+'px) scale('+s+')';
+    pct.textContent=Math.round(s*100)+'%';
+  }
+  function clamp(v){ return Math.max(MIN, Math.min(MAX, v)); }
+
+  function fit(){
+    var vw=viewport.clientWidth, vh=viewport.clientHeight;
+    s=clamp(Math.min(vw/CW, vh/CH)*0.94);
+    tx=(vw-CW*s)/2; ty=(vh-CH*s)/2; apply();
+  }
+  function zoomAt(factor, cx, cy){
+    var ns=clamp(s*factor);
+    var wx=(cx-tx)/s, wy=(cy-ty)/s;
+    s=ns; tx=cx-wx*ns; ty=cy-wy*ns; apply();
+  }
+
+  document.getElementById('fit').addEventListener('click', fit);
+  document.getElementById('zin').addEventListener('click', function(){ zoomAt(1.2, viewport.clientWidth/2, viewport.clientHeight/2); });
+  document.getElementById('zout').addEventListener('click', function(){ zoomAt(1/1.2, viewport.clientWidth/2, viewport.clientHeight/2); });
+
+  viewport.addEventListener('wheel', function(e){
+    e.preventDefault();
+    var r=viewport.getBoundingClientRect();
+    zoomAt(e.deltaY<0?1.1:1/1.1, e.clientX-r.left, e.clientY-r.top);
+  }, {passive:false});
+
+  var drag=false, sx=0, sy=0, stx=0, sty=0;
+  viewport.addEventListener('pointerdown', function(e){
+    drag=true; sx=e.clientX; sy=e.clientY; stx=tx; sty=ty;
+    viewport.classList.add('dragging'); viewport.setPointerCapture(e.pointerId);
+  });
+  viewport.addEventListener('pointermove', function(e){
+    if(!drag) return; tx=stx+(e.clientX-sx); ty=sty+(e.clientY-sy); apply();
+  });
+  function endDrag(){ drag=false; viewport.classList.remove('dragging'); }
+  viewport.addEventListener('pointerup', endDrag);
+  viewport.addEventListener('pointercancel', endDrag);
+
+  window.addEventListener('resize', fit);
+  if(document.readyState!=='loading') fit(); else document.addEventListener('DOMContentLoaded', fit);
+  window.__fit=fit; window.__zoomAt=zoomAt;
+})();
+</script>
+</body>
+</html>

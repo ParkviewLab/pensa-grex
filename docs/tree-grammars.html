@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<!-- SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai> -->
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PensaGrex &mdash; tree grammar study</title>
+<style>
+:root{ --ink:#1a1a17; --soft:#6b6b64; --bg:#fbfbf8; }
+@media (prefers-color-scheme:dark){ :root{ --ink:#e8e8e4; --soft:#9a9a92; --bg:#151513; } }
+html,body{ margin:0; background:var(--bg); }
+.page{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  background:var(--bg); color:var(--ink);
+  margin:0; padding:2.25rem 1.25rem 4rem;
+}
+
+.page *{ box-sizing:border-box; }
+.intro{ max-width:600px; margin:0 auto 2.5rem; text-align:center; }
+.intro .eyebrow{ font-size:11.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--soft); margin:0 0 .55rem; }
+.intro h1{ font-size:24px; font-weight:500; margin:0 0 .7rem; text-wrap:balance; }
+.intro p{ font-size:14.5px; line-height:1.6; color:var(--soft); margin:0; }
+.intro .legend{ display:flex; flex-wrap:wrap; gap:14px 20px; justify-content:center; margin-top:1.4rem; font-size:12px; color:var(--soft); }
+.intro .legend span{ display:inline-flex; align-items:center; gap:7px; }
+
+.grouphd{ max-width:860px; margin:2.4rem auto 0; padding:0 4px; font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:var(--soft); border-bottom:1px solid var(--soft); padding-bottom:6px; opacity:.85; }
+.deck{ display:flex; flex-direction:column; gap:2.4rem; max-width:860px; margin:1.6rem auto 0; }
+.slot .lbl{ display:flex; align-items:baseline; gap:.55rem; margin:0 0 .7rem; padding:0 2px; }
+.slot .num{ font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:12px; color:var(--soft); }
+.slot .chip{ font-size:10px; font-weight:600; letter-spacing:.08em; border:1px solid var(--soft); color:var(--soft); border-radius:3px; padding:1px 5px; align-self:center; }
+.slot .name{ font-size:16px; font-weight:500; margin:0; }
+.slot .how{ font-size:12.5px; color:var(--soft); margin:.12rem 0 0; line-height:1.5; }
+
+/* ---- frame: a fixed white "drawing" surface, black ink, both themes ---- */
+.frame{ background:#ffffff; border:1px solid rgba(0,0,0,.14); border-radius:9px; overflow-x:auto; overflow-y:hidden; }
+.stage{ position:relative; color:#141412; padding:20px 22px; }
+svg.wires{ position:absolute; inset:0; z-index:0; pointer-events:none; overflow:visible; }
+.dom{ display:flex; gap:6px; margin-bottom:16px; font-size:11px; position:relative; z-index:2; }
+.dom b{ font-weight:600; border:1px solid #141412; padding:2px 9px; border-radius:3px; }
+.dom s{ color:#a5a59d; border:1px solid #d9d9d2; padding:2px 9px; border-radius:3px; text-decoration:none; }
+
+/* ---- shared node: card ---- */
+.nd{ position:absolute; z-index:1; background:#fff; border:1px solid #141412; border-radius:2px;
+  padding:7px 9px 7px; display:flex; flex-direction:column; gap:4px; }
+.nd .hd{ display:flex; align-items:center; gap:7px; }
+.nd .lbl{ font-size:12px; line-height:1.2; color:#141412; }
+.nd .tag{ font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:#7a7a72; }
+.nd.cursor{ border-width:2.5px; padding:5.5px 7.5px; }
+.nd.cancel{ border-style:dashed; }
+.nd.cancel .lbl{ text-decoration:line-through; color:#8a8a82; }
+.nd.note::after{ content:""; position:absolute; top:4px; right:4px; width:6px; height:6px; background:#141412; }
+.flag{ position:absolute; top:-9px; left:8px; z-index:3; background:#fff; padding:0 4px;
+  font-size:8.5px; font-weight:700; letter-spacing:.14em; color:#141412; white-space:nowrap; }
+
+/* ---- shared node: row ---- */
+.rw{ display:flex; align-items:center; gap:8px; font-size:12px; color:#141412; white-space:nowrap; }
+.rw .lbl{ overflow:hidden; text-overflow:ellipsis; }
+.rw .tag{ margin-left:auto; padding-left:12px; font-size:9px; letter-spacing:.09em; text-transform:uppercase; color:#7a7a72; }
+.rw.cancel .lbl{ text-decoration:line-through; color:#8a8a82; }
+
+/* ---- status glyph ---- */
+.gl{ width:11px; height:11px; border:1.5px solid #141412; flex:none; }
+.gl.done{ background:#141412; }
+.gl.prog{ background:linear-gradient(90deg,#141412 0,#141412 50%,#fff 50%,#fff 100%); }
+.gl.todo{ background:#fff; }
+.gl.cancel{ background:#fff; border-style:dashed; }
+.chev{ margin-left:auto; font-size:11px; color:#141412; padding-left:10px; }
+
+/* ---- H4 Miller ---- */
+.miller{ display:flex; gap:0; align-items:stretch; }
+.mcol{ width:196px; flex:none; border-right:1px solid #dcdcd4; padding:0 0 6px; }
+.mcol:first-child{ border-left:1px solid #dcdcd4; }
+.mcol .mhd{ font-size:9.5px; letter-spacing:.11em; text-transform:uppercase; color:#a5a59d; padding:8px 12px 9px; border-bottom:1px solid #ecece6; }
+.mrow{ position:relative; display:flex; align-items:center; gap:8px; font-size:12px; padding:8px 12px; }
+.mrow.sel{ background:#f1f1ec; }
+.mrow.sel::before{ content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:#141412; }
+.mrow .lbl{ overflow:hidden; text-overflow:ellipsis; }
+.mrow .cur{ font-size:8px; font-weight:700; letter-spacing:.12em; color:#141412; margin-left:6px; }
+
+/* ---- V2 outline ---- */
+.tree{ font-size:12px; }
+.kids{ margin-left:9px; border-left:1px solid #141412; }
+.li{ position:relative; }
+.li > .orow{ position:relative; display:flex; align-items:center; gap:8px; padding:6px 0 6px 18px; }
+.kids > .li > .orow::before{ content:""; position:absolute; left:0; top:50%; width:13px; height:1px; background:#141412; }
+.kids > .li:last-child::before{ content:""; position:absolute; left:-1px; top:calc(50% + 1px); bottom:0; width:1px; background:#fff; }
+.orow .lbl{ }
+.orow.cancel .lbl{ text-decoration:line-through; color:#8a8a82; }
+.orow .tag{ font-size:9px; letter-spacing:.09em; text-transform:uppercase; color:#7a7a72; padding-left:10px; }
+.orow.cur{ font-weight:500; }
+.orow .cur-mark{ font-size:8px; font-weight:700; letter-spacing:.12em; color:#141412; padding-left:8px; }
+.orow .note-d{ width:6px; height:6px; background:#141412; display:inline-block; margin-left:2px; }
+
+/* ---- V5 containment ---- */
+.box{ border:1px solid #141412; border-radius:3px; padding:8px 9px; }
+.box.cursor{ border-width:2.5px; padding:6.5px 7.5px; }
+.box .bhd{ display:flex; align-items:center; gap:7px; font-size:12px; }
+.box .bhd .tag{ margin-left:auto; font-size:9px; letter-spacing:.09em; text-transform:uppercase; color:#7a7a72; }
+.box.cancel .lbl{ text-decoration:line-through; color:#8a8a82; }
+.box .bkids{ margin-top:8px; display:flex; flex-direction:column; gap:8px; }
+.box .cur-mark{ font-size:8px; font-weight:700; letter-spacing:.12em; color:#141412; margin-left:6px; }
+.box .note-d{ width:6px; height:6px; background:#141412; display:inline-block; margin-left:4px; }
+
+/* ---- H5 icicle ---- */
+.ice{ position:absolute; border:1px solid #141412; background:#fff; padding:7px 9px; overflow:hidden; }
+.ice.cursor{ border-width:2.5px; }
+.ice.cancel{ border-style:dashed; }
+.ice .lbl{ font-size:11.5px; line-height:1.2; }
+.ice.cancel .lbl{ text-decoration:line-through; color:#8a8a82; }
+.ice .tag{ font-size:8.5px; letter-spacing:.09em; text-transform:uppercase; color:#7a7a72; margin-top:3px; }
+.ice .hd{ display:flex; align-items:center; gap:6px; }
+.ice.note::after{ content:""; position:absolute; top:4px; right:4px; width:6px; height:6px; background:#141412; }
+
+/* ---- subway stations ---- */
+.st{ position:absolute; z-index:2; width:11px; height:11px; background:#141412; transform:translate(-50%,-50%); }
+.st.ring{ width:11px; height:11px; }
+.stbox{ position:absolute; z-index:2; transform:translate(-50%,0); }
+.stbox .rw{ background:#fff; }
+.ringmark{ position:absolute; z-index:1; width:20px; height:20px; border:2px solid #141412; transform:translate(-50%,-50%); }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <div class="intro">
+    <p class="eyebrow">PensaGrex &middot; tree grammar study</p>
+    <h1>Ten ways to draw the same tree</h1>
+    <p>One skin for all ten, so the only difference is the layout language itself. Every panel shows the identical HomeLab forest: a done setup, an in-progress step that holds the branch cursor, then a three-way fork &mdash; a to-do with a note, an in-progress sub-stack, and a cancelled dead end.</p>
+    <div class="legend">
+      <span><span class="gl done"></span> done</span>
+      <span><span class="gl prog"></span> in progress</span>
+      <span><span class="gl todo"></span> to do</span>
+      <span><span class="gl cancel"></span> cancelled</span>
+      <span><span style="width:11px;height:11px;border:2.5px solid #888;display:inline-block"></span> branch cursor</span>
+      <span><span style="width:7px;height:7px;background:currentColor;display:inline-block"></span> has a note</span>
+    </div>
+  </div>
+
+  <div class="grouphd">Horizontal &mdash; the tree grows left to right</div>
+  <div class="deck">
+
+    <!-- ============ H1 sideways node-link ============ -->
+    <div class="slot">
+      <div class="lbl"><span class="num">01</span><span class="chip">H</span><p class="name">Sideways node-link</p></div>
+      <p class="how">Parent on the left, children fan out to the right on elbow connectors. The org chart, turned on its side.</p>
+      <div class="frame"><div class="stage" id="h1" style="width:800px;height:420px;">
+        <div class="dom"><b>HomeLab</b><s>Work</s></div>
+        <svg class="wires"></svg>
+        <div class="nd" data-id="nas" style="left:12px;top:188px;width:150px;"><div class="hd"><span class="gl done"></span><span class="lbl">Set up NAS</span></div><span class="tag">done</span></div>
+        <div class="nd cursor" data-id="mig" style="left:212px;top:186px;width:158px;"><span class="flag">&#9656; HERE</span><div class="hd"><span class="gl prog"></span><span class="lbl">Migrate media library</span></div><span class="tag">in progress</span></div>
+        <div class="nd note" data-id="fix" style="left:430px;top:40px;width:170px;"><div class="hd"><span class="gl todo"></span><span class="lbl">Fix Plex transcoding</span></div><span class="tag">to do</span></div>
+        <div class="nd" data-id="bak" style="left:430px;top:188px;width:170px;"><div class="hd"><span class="gl prog"></span><span class="lbl">Automate backups</span></div><span class="tag">in progress</span></div>
+        <div class="nd cancel" data-id="bt" style="left:430px;top:330px;width:170px;"><div class="hd"><span class="gl cancel"></span><span class="lbl">Try Btrfs snapshots</span></div><span class="tag">cancelled</span></div>
+        <div class="nd" data-id="tr" style="left:632px;top:188px;width:150px;"><div class="hd"><span class="gl todo"></span><span class="lbl">Test restore</span></div><span class="tag">to do</span></div>
+      </div></div>
+    </div>
+
+    <!-- ============ H2 gantt swimlanes ============ -->
+    <div class="slot">
+      <div class="lbl"><span class="num">02</span><span class="chip">H</span><p class="name">Gantt swim-lanes</p></div>
+      <p class="how">One lane per branch, tasks laid left to right in order. A fork drops new lanes at the split column, tied back with a bracket.</p>
+      <div class="frame"><div class="stage" id="h2" style="width:760px;height:300px;">
+        <div class="dom"><b>HomeLab</b><s>Work</s></div>
+        <svg class="wires" style="z-index:0;">
+          <path d="M334,61 H344 M344,61 V273 M344,141 H354 M344,219 H354 M344,273 H354" stroke="#141412" stroke-width="1" fill="none"/>
+        </svg>
+        <div class="nd" data-id="nas" style="left:14px;top:40px;width:150px;"><div class="hd"><span class="gl done"></span><span class="lbl">Set up NAS</span></div><span class="tag">done</span></div>
+        <div class="nd cursor" data-id="mig" style="left:184px;top:38px;width:150px;"><span class="flag">&#9656; HERE</span><div class="hd"><span class="gl prog"></span><span class="lbl">Migrate media library</span></div><span class="tag">in progress</span></div>
+        <div class="nd note" data-id="fix" style="left:354px;top:118px;width:170px;"><div class="hd"><span class="gl todo"></span><span class="lbl">Fix Plex transcoding</span></div><span class="tag">to do</span></div>
+        <div class="nd" data-id="bak" style="left:354px;top:196px;width:170px;"><div class="hd"><span class="gl prog"></span><span class="lbl">Automate backups</span></div><span class="tag">in progress</span></div>
+        <div class="nd" data-id="tr" style="left:560px;top:196px;width:170px;"><div class="hd"><span class="gl todo"></span><span class="lbl">Test restore</span></div><span class="tag">to do</span></div>
+        <div class="nd cancel" data-id="bt" style="left:354px;top:250px;width:170px;"><div class="hd"><span class="gl cancel"></span><span class="lbl">Try Btrfs snapshots</span></div><span class="tag">cancelled</span></div>
+      </div></div>
+    </div>
+
+    <!-- ============ H3 subway ============ -->
+    <div class="slot">
+      <div class="lbl"><span class="num">03</span><span class="chip">H</span><p class="name">Subway line</p></div>
+      <p class="how">Each branch is a continuous track; tasks are stations along it. A fork peels new parallel tracks off the split point.</p>
+      <div class="frame"><div class="stage" id="h3" style="width:760px;height:250px;">
+        <div class="dom"><b>HomeLab</b><s>Work</s></div>
+        <svg class="wires" style="z-index:0;">
+          <path d="M28,150 H300" stroke="#141412" stroke-width="2.5" fill="none"/>
+          <path d="M300,150 L356,96 M300,150 L356,150 M300,150 L356,204" stroke="#141412" stroke-width="2.5" fill="none"/>
+          <path d="M356,96 H740" stroke="#141412" stroke-width="2.5" fill="none"/>
+          <path d="M356,150 H740" stroke="#141412" stroke-width="2.5" fill="none"/>
+          <path d="M356,204 H740" stroke="#141412" stroke-width="2.5" fill="none"/>
+        </svg>
+        <div class="st" style="left:100px;top:150px;"></div>
+        <div class="ringmark" style="left:236px;top:150px;"></div>
+        <div class="st" style="left:236px;top:150px;"></div>
+        <div class="st" style="left:470px;top:96px;"></div>
+        <div class="st" style="left:470px;top:150px;"></div>
+        <div class="st" style="left:660px;top:150px;"></div>
+        <div class="st" style="left:470px;top:204px;"></div>
+        <div class="stbox" style="left:100px;top:104px;"><div class="rw"><span class="gl done"></span><span class="lbl">Set up NAS</span></div></div>
+        <div class="stbox" style="left:236px;top:98px;"><div class="rw"><span class="cur" style="font-size:8px;font-weight:700;letter-spacing:.12em">&#9656;HERE&nbsp;</span><span class="gl prog"></span><span class="lbl">Migrate media library</span></div></div>
+        <div class="stbox" style="left:470px;top:50px;"><div class="rw"><span class="gl todo"></span><span class="lbl">Fix Plex transcoding</span><span class="note-d" style="width:6px;height:6px;background:#141412;display:inline-block;margin-left:2px"></span></div></div>
+        <div class="stbox" style="left:470px;top:114px;"><div class="rw"><span class="gl prog"></span><span class="lbl">Automate backups</span></div></div>
+        <div class="stbox" style="left:660px;top:114px;"><div class="rw"><span class="gl todo"></span><span class="lbl">Test restore</span></div></div>
+        <div class="stbox" style="left:470px;top:216px;"><div class="rw cancel"><span class="gl cancel"></span><span class="lbl">Try Btrfs snapshots</span></div></div>
+      </div></div>
+    </div>
+
+    <!-- ============ H4 miller ============ -->
+    <div class="slot">
+      <div class="lbl"><span class="num">04</span><span class="chip">H</span><p class="name">Miller columns</p></div>
+      <p class="how">One column per depth; open a task and its children appear in the next column. You drill a single path; the forest lives in column one.</p>
+      <div class="frame"><div class="stage" id="h4" style="width:786px;">
+        <div class="dom"><b>HomeLab</b><s>Work</s></div>
+        <div class="miller">
+          <div class="mcol">
+            <div class="mhd">HomeLab &middot; trees</div>
+            <div class="mrow sel"><span class="gl done"></span><span class="lbl">Set up NAS</span><span class="chev">&#8250;</span></div>
+          </div>
+          <div class="mcol">
+            <div class="mhd">in Set up NAS</div>
+            <div class="mrow sel"><span class="gl prog"></span><span class="lbl">Migrate media library</span><span class="cur">&#9656;HERE</span><span class="chev">&#8250;</span></div>
+          </div>
+          <div class="mcol">
+            <div class="mhd">in Migrate media library</div>
+            <div class="mrow"><span class="gl todo"></span><span class="lbl">Fix Plex transcoding</span><span class="note-d" style="width:6px;height:6px;background:#141412;display:inline-block;margin-left:6px"></span></div>
+            <div class="mrow sel"><span class="gl prog"></span><span class="lbl">Automate backups</span><span class="chev">&#8250;</span></div>
+            <div class="mrow"><span class="gl cancel"></span><span class="lbl" style="text-decoration:line-through;color:#8a8a82">Try Btrfs snapshots</span></div>
+          </div>
+          <div class="mcol">
+            <div class="mhd">in Automate backups</div>
+            <div class="mrow"><span class="gl todo"></span><span class="lbl">Test restore</span></div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+    <!-- ============ H5 icicle ============ -->
+    <div class="slot">
+      <div class="lbl"><span class="num">05</span><span class="chip">H</span><p class="name">Icicle partition</p></div>
+      <p class="how">Space-filling bands: a task's height is its share of the subtree; children sit flush to its right. No connectors &mdash; adjacency is parentage.</p>
+      <div class="frame"><div class="stage" id="h5" style="width:800px;height:360px;">
+        <div class="ice" data-id="nas" style="left:8px;top:8px;width:184px;height:332px;"><div class="hd"><span class="gl done"></span><span class="lbl">Set up NAS</span></div><div class="tag">done</div></div>
+        <div class="ice cursor" data-id="mig" style="left:196px;top:8px;width:190px;height:332px;"><div class="hd"><span class="gl prog"></span><span class="lbl">Migrate media library</span></div><div class="tag">in progress &middot; &#9656; HERE</div></div>
+        <div class="ice note" data-id="fix" style="left:390px;top:8px;width:402px;height:106px;"><div class="hd"><span class="gl todo"></span><span class="lbl">Fix Plex transcoding</span></div><div class="tag">to do</div></div>
+        <div class="ice" data-id="bak" style="left:390px;top:118px;width:196px;height:112px;"><div class="hd"><span class="gl prog"></span><span class="lbl">Automate backups</span></div><div class="tag">in progress</div></div>
+        <div class="ice" data-id="tr" style="left:590px;top:118px;width:202px;height:112px;"><div class="hd"><span class="gl todo"></span><span class="lbl">Test restore</span></div><div class="tag">to do</div></div>
+        <div class="ice cancel" data-id="bt" style="left:390px;top:234px;width:402px;height:106px;"><div class="hd"><span class="gl cancel"></span><span class="lbl">Try Btrfs snapshots</span></div><div class="tag">cancelled</div></div>
+      </div></div>
+    </div>
+
+  </div>
+
+  <div class="grouphd">Vertical &mdash; the tree grows top to bottom</div>
+  <div class="deck">
+
+    <!-- ============ V1 org chart ============ -->
+    <div class="slot">
+      <div class="lbl"><span class="num">06</span><span class="chip">V</span><p class="name">Org-chart tree</p></div>
+      <p class="how">Parent on top, children below on elbow connectors. The familiar top-down tree.</p>
+      <div class="frame"><div class="stage" id="v1" style="width:640px;height:420px;">
+        <div class="dom"><b>HomeLab</b><s>Work</s></div>
+        <svg class="wires"></svg>
+        <div class="nd" data-id="nas" style="left:236px;top:20px;width:168px;"><div class="hd"><span class="gl done"></span><span class="lbl">Set up NAS</span></div><span class="tag">done</span></div>
+        <div class="nd cursor" data-id="mig" style="left:232px;top:112px;width:176px;"><span class="flag">&#9656; HERE</span><div class="hd"><span class="gl prog"></span><span class="lbl">Migrate media library</span></div><span class="tag">in progress</span></div>
+        <div class="nd note" data-id="fix" style="left:20px;top:232px;width:168px;"><div class="hd"><span class="gl todo"></span><span class="lbl">Fix Plex transcoding</span></div><span class="tag">to do</span></div>
+        <div class="nd" data-id="bak" style="left:236px;top:232px;width:168px;"><div class="hd"><span class="gl prog"></span><span class="lbl">Automate backups</span></div><span class="tag">in progress</span></div>
+        <div class="nd cancel" data-id="bt" style="left:452px;top:232px;width:168px;"><div class="hd"><span class="gl cancel"></span><span class="lbl">Try Btrfs snapshots</span></div><span class="tag">cancelled</span></div>
+        <div class="nd" data-id="tr" style="left:236px;top:336px;width:168px;"><div class="hd"><span class="gl todo"></span><span class="lbl">Test restore</span></div><span class="tag">to do</span></div>
+      </div></div>
+    </div>
+
+    <!-- ============ V2 outline ============ -->
+    <div class="slot">
+      <div class="lbl"><span class="num">07</span><span class="chip">V</span><p class="name">Indented outline</p></div>
+      <p class="how">A file-tree list: indentation is depth, guide lines join parent to child. The densest, most text-forward option.</p>
+      <div class="frame"><div class="stage" id="v2" style="width:560px;">
+        <div class="dom"><b>HomeLab</b><s>Work</s></div>
+        <div class="tree">
+          <div class="li">
+            <div class="orow"><span class="gl done"></span><span class="lbl">Set up NAS</span><span class="tag">done</span></div>
+            <div class="kids">
+              <div class="li">
+                <div class="orow cur"><span class="gl prog"></span><span class="lbl">Migrate media library</span><span class="cur-mark">&#9656; HERE</span><span class="tag">in progress</span></div>
+                <div class="kids">
+                  <div class="li"><div class="orow"><span class="gl todo"></span><span class="lbl">Fix Plex transcoding</span><span class="note-d"></span><span class="tag">to do</span></div></div>
+                  <div class="li">
+                    <div class="orow"><span class="gl prog"></span><span class="lbl">Automate backups</span><span class="tag">in progress</span></div>
+                    <div class="kids">
+                      <div class="li"><div class="orow"><span class="gl todo"></span><span class="lbl">Test restore</span><span class="tag">to do</span></div></div>
+                    </div>
+                  </div>
+                  <div class="li"><div class="orow cancel"><span class="gl cancel"></span><span class="lbl">Try Btrfs snapshots</span><span class="tag">cancelled</span></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+    <!-- ============ V3 commit graph ============ -->
+    <div class="slot">
+      <div class="lbl"><span class="num">08</span><span class="chip">V</span><p class="name">Commit graph</p></div>
+      <p class="how">A git-style rail on the left carries the branching; the task details sit in an aligned list on the right.</p>
+      <div class="frame"><div class="stage" id="v3" style="width:640px;height:420px;">
+        <div class="dom"><b>HomeLab</b><s>Work</s></div>
+        <svg class="wires" style="z-index:0;">
+          <path d="M30,40 V304" stroke="#141412" stroke-width="1.75" fill="none"/>
+          <path d="M30,100 H74 V168" stroke="#141412" stroke-width="1.75" fill="none"/>
+          <path d="M30,100 H118 V372" stroke="#141412" stroke-width="1.75" fill="none"/>
+          <path d="M30,40 H168 M30,100 H168 M74,168 H168 M30,236 H168 M30,304 H168 M118,372 H168" stroke="#cfcfc8" stroke-width="1" fill="none"/>
+        </svg>
+        <div class="st" style="left:30px;top:40px;"></div>
+        <div class="ringmark" style="left:30px;top:100px;"></div>
+        <div class="st" style="left:30px;top:100px;"></div>
+        <div class="st" style="left:74px;top:168px;"></div>
+        <div class="st" style="left:30px;top:236px;"></div>
+        <div class="st" style="left:30px;top:304px;"></div>
+        <div class="st" style="left:118px;top:372px;"></div>
+        <div class="rw" style="position:absolute;left:180px;top:32px;width:440px;"><span class="gl done"></span><span class="lbl">Set up NAS</span><span class="tag">done</span></div>
+        <div class="rw" style="position:absolute;left:180px;top:92px;width:440px;font-weight:500;"><span class="gl prog"></span><span class="lbl">Migrate media library</span><span class="cur-mark" style="font-size:8px;font-weight:700;letter-spacing:.12em;color:#141412;padding-left:8px">&#9656; HERE</span><span class="tag">in progress</span></div>
+        <div class="rw" style="position:absolute;left:180px;top:160px;width:440px;"><span class="gl todo"></span><span class="lbl">Fix Plex transcoding</span><span class="note-d" style="width:6px;height:6px;background:#141412;display:inline-block;margin-left:6px"></span><span class="tag">to do</span></div>
+        <div class="rw" style="position:absolute;left:180px;top:228px;width:440px;"><span class="gl prog"></span><span class="lbl">Automate backups</span><span class="tag">in progress</span></div>
+        <div class="rw" style="position:absolute;left:180px;top:296px;width:440px;"><span class="gl todo"></span><span class="lbl">Test restore</span><span class="tag">to do</span></div>
+        <div class="rw cancel" style="position:absolute;left:180px;top:364px;width:440px;"><span class="gl cancel"></span><span class="lbl">Try Btrfs snapshots</span><span class="tag">cancelled</span></div>
+      </div></div>
+    </div>
+
+    <!-- ============ V4 flow split ============ -->
+    <div class="slot">
+      <div class="lbl"><span class="num">09</span><span class="chip">V</span><p class="name">Flow split</p></div>
+      <p class="how">A single trunk drops down; at a fork a distribution bar splits it into parallel stacks, each continuing on its own.</p>
+      <div class="frame"><div class="stage" id="v4" style="width:640px;height:400px;">
+        <div class="dom"><b>HomeLab</b><s>Work</s></div>
+        <svg class="wires" style="z-index:0;">
+          <path d="M320,62 V100" stroke="#141412" stroke-width="1" fill="none"/>
+          <path d="M320,146 V188" stroke="#141412" stroke-width="1" fill="none"/>
+          <path d="M105,188 H535" stroke="#141412" stroke-width="1" fill="none"/>
+          <path d="M105,188 V210 M320,188 V210 M535,188 V210" stroke="#141412" stroke-width="1" fill="none"/>
+          <path d="M320,256 V300" stroke="#141412" stroke-width="1" fill="none"/>
+        </svg>
+        <div class="nd" data-id="nas" style="left:235px;top:16px;width:170px;"><div class="hd"><span class="gl done"></span><span class="lbl">Set up NAS</span></div><span class="tag">done</span></div>
+        <div class="nd cursor" data-id="mig" style="left:231px;top:98px;width:178px;"><span class="flag">&#9656; HERE</span><div class="hd"><span class="gl prog"></span><span class="lbl">Migrate media library</span></div><span class="tag">in progress</span></div>
+        <div class="nd note" data-id="fix" style="left:20px;top:210px;width:170px;"><div class="hd"><span class="gl todo"></span><span class="lbl">Fix Plex transcoding</span></div><span class="tag">to do</span></div>
+        <div class="nd" data-id="bak" style="left:235px;top:210px;width:170px;"><div class="hd"><span class="gl prog"></span><span class="lbl">Automate backups</span></div><span class="tag">in progress</span></div>
+        <div class="nd cancel" data-id="bt" style="left:450px;top:210px;width:170px;"><div class="hd"><span class="gl cancel"></span><span class="lbl">Try Btrfs snapshots</span></div><span class="tag">cancelled</span></div>
+        <div class="nd" data-id="tr" style="left:235px;top:300px;width:170px;"><div class="hd"><span class="gl todo"></span><span class="lbl">Test restore</span></div><span class="tag">to do</span></div>
+      </div></div>
+    </div>
+
+    <!-- ============ V5 containment ============ -->
+    <div class="slot">
+      <div class="lbl"><span class="num">10</span><span class="chip">V</span><p class="name">Nested boxes</p></div>
+      <p class="how">Children are drawn inside their parent; depth reads as containment. A fork is one box holding several.</p>
+      <div class="frame"><div class="stage" id="v5" style="width:560px;">
+        <div class="dom"><b>HomeLab</b><s>Work</s></div>
+        <div class="box">
+          <div class="bhd"><span class="gl done"></span><span class="lbl">Set up NAS</span><span class="tag">done</span></div>
+          <div class="bkids">
+            <div class="box cursor">
+              <div class="bhd"><span class="gl prog"></span><span class="lbl">Migrate media library</span><span class="cur-mark">&#9656; HERE</span><span class="tag">in progress</span></div>
+              <div class="bkids">
+                <div class="box"><div class="bhd"><span class="gl todo"></span><span class="lbl">Fix Plex transcoding</span><span class="note-d"></span><span class="tag">to do</span></div></div>
+                <div class="box">
+                  <div class="bhd"><span class="gl prog"></span><span class="lbl">Automate backups</span><span class="tag">in progress</span></div>
+                  <div class="bkids">
+                    <div class="box"><div class="bhd"><span class="gl todo"></span><span class="lbl">Test restore</span><span class="tag">to do</span></div></div>
+                  </div>
+                </div>
+                <div class="box cancel"><div class="bhd"><span class="gl cancel"></span><span class="lbl">Try Btrfs snapshots</span><span class="tag">cancelled</span></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(function(){
+  function wire(id, edges, orient){
+    var stage=document.getElementById(id); if(!stage) return;
+    var svg=stage.querySelector('svg.wires'); if(!svg) return;
+    while(svg.firstChild) svg.removeChild(svg.firstChild);
+    var r0=stage.getBoundingClientRect();
+    edges.forEach(function(e){
+      var a=stage.querySelector('[data-id="'+e[0]+'"]'), b=stage.querySelector('[data-id="'+e[1]+'"]');
+      if(!a||!b) return;
+      var ra=a.getBoundingClientRect(), rb=b.getBoundingClientRect(), d;
+      if(orient==='h'){
+        var x1=ra.right-r0.left, y1=ra.top-r0.top+ra.height/2,
+            x2=rb.left-r0.left,  y2=rb.top-r0.top+rb.height/2, mx=(x1+x2)/2;
+        d='M'+x1+','+y1+' H'+mx+' V'+y2+' H'+x2;
+      } else {
+        var X1=ra.left-r0.left+ra.width/2, Y1=ra.bottom-r0.top,
+            X2=rb.left-r0.left+rb.width/2, Y2=rb.top-r0.top, my=(Y1+Y2)/2;
+        d='M'+X1+','+Y1+' V'+my+' H'+X2+' V'+Y2;
+      }
+      var p=document.createElementNS('http://www.w3.org/2000/svg','path');
+      p.setAttribute('d',d); p.setAttribute('fill','none');
+      p.setAttribute('stroke','#141412'); p.setAttribute('stroke-width','1');
+      svg.appendChild(p);
+    });
+  }
+  function draw(){
+    wire('h1', [['nas','mig'],['mig','fix'],['mig','bak'],['mig','bt'],['bak','tr']], 'h');
+    wire('v1', [['nas','mig'],['mig','fix'],['mig','bak'],['mig','bt'],['bak','tr']], 'v');
+  }
+  if(document.readyState!=='loading') draw(); else document.addEventListener('DOMContentLoaded', draw);
+  window.addEventListener('resize', draw);
+  window.addEventListener('load', draw);
+})();
+</script>
+</body>
+</html>

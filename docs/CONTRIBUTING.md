@@ -1,5 +1,5 @@
 <!--
-SPDX-FileCopyrightText: 2026 Gary Frattarola <garycoding@gmail.com>
+SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 SPDX-License-Identifier: CC-BY-4.0
 -->
 
@@ -8,7 +8,7 @@ SPDX-License-Identifier: CC-BY-4.0
 > The authoritative, org-wide version of these conventions is the
 > [ParkviewLab handbook](https://github.com/ParkviewLab/handbook).
 
-TaskForkStack follows the ParkviewLab conventions, adapted for a repo outside
+PensaGrex follows the ParkviewLab conventions, adapted for a repo outside
 the ParkviewLab org (no org-inherited secrets, no org-level PyPI/npm trusted
 publishers). The essentials:
 
@@ -53,7 +53,7 @@ npm run build            # electron-vite build — a fast smoke-test
 uvx --from "reuse[charset-normalizer]" reuse lint
 ```
 
-TaskForkStack is plain JavaScript today (no TypeScript or test suite yet), so
+PensaGrex is plain JavaScript today (no TypeScript or test suite yet), so
 CI runs ESLint + the electron-vite build. A PR **can't be merged until the
 required checks pass** (the build check, REUSE, and the version guard — see the
 handbook's `ci.md`).
@@ -67,10 +67,19 @@ box shows `pkg.version`); never hard-code it elsewhere, and never type it on a
 
 ## Licensing
 
-TaskForkStack is **dual-licensed**: code is **AGPL-3.0-or-later** (a
+PensaGrex is **dual-licensed**: code is **AGPL-3.0-or-later** (a
 commercial license is available — see [`../LICENSING.md`](../LICENSING.md)), docs
 are **CC-BY-4.0**. Every new file needs an SPDX header or a `REUSE.toml` entry,
 or `reuse lint` breaks: code/config/CI → `AGPL-3.0-or-later`, docs → `CC-BY-4.0`.
+
+## Documenting adopted algorithms
+
+When we implement a known algorithm or a variant of one, write it up in a
+markdown document in this `docs/` directory: the problem, the algorithm and its
+lineage with citations, and how our variant differs. Add a code comment at the
+implementation pointing to that document, so the reasoning is not buried in the
+code. The first example is [`tree-layout.md`](tree-layout.md) (the non-crossing
+branch layout).
 
 ## AI contributors
 

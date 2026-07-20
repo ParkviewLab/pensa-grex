@@ -1,0 +1,11 @@
+Copyright (C) 1990, 2004, 2005 Gerard D.C. Kuiken
+
+Copying and distribution of this file, with or without modification, are
+permitted in any medium without royalty provided the copyright notice and this
+notice are preserved.
+
+These are the American English (en-US) hyphenation patterns from the TeX
+hyph-utf8 project (file hyph-en-us), based on the plain-TeX patterns by
+Donald E. Knuth with the TUGboat hyphenation-exception log folded in. They are
+an all-permissive licence: use, modification, and redistribution (including in
+proprietary works) are permitted so long as this notice is preserved.

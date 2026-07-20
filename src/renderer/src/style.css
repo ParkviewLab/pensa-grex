@@ -1,19 +1,220 @@
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
-/* SPDX-FileCopyrightText: 2026 Gary Frattarola <garycoding@gmail.com> */
+/* SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai> */
 
-html, body {
-  margin: 0;
-  height: 100%;
-  background: #111116;
-  color: #e9e9ec;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+/* Cool-ground atomic skin, two grounds (light azure / dark navy) sharing one
+   accent palette. Ported from the design mock docs/subway-forest-themed.html
+   (on the doc-design-studies branch). */
+/* Bundled mid-century typefaces, self-hosted (no network, strict CSP): League
+   Spartan for UI and body text, Boogaloo for task names and the app title. Both
+   SIL OFL 1.1 — see LICENSES/OFL-1.1.txt and REUSE.toml. Vite hashes these woff2
+   into out/renderer/assets/ at build (same path as the KaTeX fonts). */
+@font-face{font-family:'League Spartan';font-style:normal;font-weight:100 900;font-display:swap;src:url('./assets/fonts/LeagueSpartan-latin-ext.woff2') format('woff2');unicode-range:U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;}
+@font-face{font-family:'League Spartan';font-style:normal;font-weight:100 900;font-display:swap;src:url('./assets/fonts/LeagueSpartan-latin.woff2') format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+@font-face{font-family:'Boogaloo';font-style:normal;font-weight:400;font-display:swap;src:url('./assets/fonts/Boogaloo-latin.woff2') format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+
+/* Font roles. Defined ground-independent: typefaces do not vary by ground. */
+:root{
+  --font-ui:'League Spartan',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --font-display:'Boogaloo','League Spartan',sans-serif;
 }
 
-#app {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
+:root[data-ground="azure"]{
+  --ground:#d3e6ef; --panel:#f8f3e8; --ink:#173242; --line:#365b6c; --muted:#5f7d8b;
+  --grid:rgba(23,50,66,.10);
+  --c-done:#1f8f8a; --c-prog:#d75f2e; --c-todo:#d9a53a; --c-cancel:#8aa0ab; --c-project:#7d54a6; --cursor:#d75f2e;
+  --burst-a:#1f8f8a; --burst-b:#d9a53a; --here-ink:var(--ink);
 }
+:root[data-ground="navy"]{
+  --ground:#0f2334; --panel:#1a3a54; --ink:#e8f1f6; --line:#6fb6c9; --muted:#93b3c2;
+  --grid:rgba(111,182,201,.13);
+  --c-done:#37c2ba; --c-prog:#f27a44; --c-todo:#f0bd55; --c-cancel:#7590a0; --c-project:#bd93e6; --cursor:#f27a44;
+  --burst-a:#37c2ba; --burst-b:#f0bd55; --here-ink:var(--ground);
+}
+
+*{ box-sizing:border-box; }
+html,body{ margin:0; height:100%; }
+body{
+  font-family:var(--font-ui);
+  color:var(--ink); background:var(--ground);
+}
+
+#app{ height:100vh; display:flex; flex-direction:column; background:var(--ground); }
+
+.topbar{
+  flex:0 0 auto; display:flex; align-items:center; justify-content:space-between;
+  gap:12px; padding:9px 14px; border-bottom:1px solid var(--line);
+}
+.tb-left,.tb-right{ display:flex; align-items:center; gap:12px; }
+.brand{ font-family:var(--font-display); font-size:13px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); }
+.domain{ font:inherit; font-size:12px; color:var(--ink); background:transparent; border:1px solid var(--line);
+  border-radius:5px; padding:5px 9px; cursor:pointer; }
+.domain:disabled{ cursor:default; opacity:.75; }
+.domain option{ color:#173242; }
+.seglbl{ font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); }
+
+.seg{ display:inline-flex; border:1px solid var(--line); border-radius:999px; overflow:hidden; }
+.seg button{ font:inherit; font-size:12px; border:0; background:transparent; color:var(--muted); padding:6px 14px; cursor:pointer; }
+.seg button.on{ background:var(--ink); color:var(--ground); }
+
+.zoom{ display:flex; align-items:center; gap:6px; }
+.btn{ font:inherit; font-size:12px; line-height:1; border:1px solid var(--line); background:transparent; color:var(--ink);
+  border-radius:5px; padding:6px 10px; cursor:pointer; }
+.btn:hover{ background:color-mix(in srgb, var(--line) 16%, transparent); }
+.btn.primary{ background:var(--ink); color:var(--ground); border-color:var(--ink); }
+.btn.icon{ width:30px; padding:6px 0; text-align:center; font-size:14px; }
+.btn.danger{ color:var(--c-prog); border-color:color-mix(in srgb, var(--c-prog) 55%, var(--line)); }
+.btn.danger:hover{ background:color-mix(in srgb, var(--c-prog) 16%, transparent); }
+.btn:disabled{ opacity:.4; cursor:default; }
+.btn:disabled:hover{ background:transparent; }
+.pct{ font-size:11px; color:var(--muted); min-width:42px; text-align:center; font-variant-numeric:tabular-nums; }
+
+.viewport{
+  position:relative; flex:1 1 auto; overflow:hidden; background:var(--ground);
+  cursor:grab; user-select:none;
+  background-image:radial-gradient(circle, var(--grid) 1px, transparent 1.4px);
+  background-size:40px 40px;
+}
+.viewport.dragging{ cursor:grabbing; }
+.viewport.drag-active{ cursor:grabbing; }
+/* Drag-and-drop: the grabbed card dims, a valid drop target is ringed, and a
+   small label follows the cursor. */
+.card.drag-src{ opacity:.4; }
+.card.drop-target{ outline:2px solid var(--cursor); outline-offset:4px; border-radius:10px; }
+.drag-preview{ position:fixed; z-index:70; transform:translate(12px,12px); pointer-events:none;
+  background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:6px;
+  padding:4px 9px; font-family:var(--font-display); font-size:12px; letter-spacing:.02em;
+  box-shadow:0 4px 14px rgba(0,0,0,.28); white-space:nowrap; max-width:220px; overflow:hidden;
+  text-overflow:ellipsis; }
+/* The insertion caret: a bar across a line gap marking where a dragged node will
+   splice in. Positioned in world space (in .content), so it scales with zoom. */
+.insert-caret{ position:absolute; z-index:3; transform:translate(-50%,-50%); pointer-events:none;
+  width:150px; height:4px; border-radius:2px; background:var(--cursor);
+  box-shadow:0 0 0 1px color-mix(in srgb, var(--cursor) 35%, transparent); }
+.world{ position:absolute; top:0; left:0; transform-origin:0 0; }
+.content{ position:relative; }
+
+.empty{
+  position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  color:var(--muted); font-size:14px; letter-spacing:.02em; pointer-events:none;
+}
+
+/* The subway map: tracks, fork junctions, the sputnik cursor mark, station
+   dots, tree-name titles, and station cards. Ported from the design mock. */
+.track{ fill:none; stroke:var(--line); stroke-width:2.5; stroke-linecap:round; stroke-linejoin:round; }
+/* The vertical spine between stacked nodes is drawn slightly heavier than a fork
+   connector, so the main line of a stack reads before its branches. */
+.track.riser{ stroke-width:3; }
+.track.branch{ stroke-width:2.3; }
+.fork{ fill:var(--line); }
+.burst line{ stroke:var(--burst-a); stroke-width:1.4; }
+.burst.b line{ stroke:var(--burst-b); }
+.burst{ opacity:.13; }
+/* The sputnik dots live in a <use> shadow tree, so descendant selectors like
+   `.cursor-mark .ball` do not reach them (a well-known SVG <use> limitation);
+   the circles then fall back to the default black and vanish on the navy
+   ground. Set fill on the <use> itself and it inherits into the cloned circles,
+   so var(--ink) keeps the dots readable on both grounds: light on navy, dark on
+   azure. */
+.cursor-mark{ fill:var(--ink); stroke:var(--ink); }
+
+.dot{ position:absolute; width:11px; height:11px; border-radius:50%; background:var(--line);
+  transform:translate(-50%,-50%); z-index:2; }
+.ttl{ position:absolute; transform:translateX(-50%); text-align:center; font-size:11px; font-weight:800;
+  letter-spacing:.08em; text-transform:uppercase; color:var(--ink); white-space:nowrap; }
+
+.stbox{ position:absolute; transform:translateX(-50%); z-index:2; }
+.card{ position:relative; background:transparent; padding:11px 16px;
+  width:188px; display:flex; flex-direction:column; gap:3px; }
+.card.cursor{ padding-left:24px; padding-right:24px; }
+.card > .hd, .card > .tag, .card > .here{ position:relative; z-index:1; }
+.cardbg{ position:absolute; inset:0; width:100%; height:100%; overflow:visible; z-index:0; pointer-events:none; }
+.cardbg .outer{ fill:var(--line); }
+.cardbg .inner{ fill:var(--panel); }
+.card .hd{ display:flex; align-items:center; gap:7px; }
+.card .lbl{ font-family:var(--font-display); font-size:15px; line-height:1.2; color:var(--ink);
+  overflow-wrap:break-word; }
+.card.cancel .lbl{ text-decoration:line-through; color:var(--muted); }
+.card .tag{ font-size:8.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
+.card.note::after{ content:""; position:absolute; top:9px; right:15px; width:6px; height:6px; border-radius:50%; background:var(--c-todo); z-index:1; }
+/* The HERE pill's background is set per-task to the status colour in render/card.js;
+   --here-ink is the ground's dark tone so the label stays legible on any status colour. */
+.here{ align-self:flex-start; font-size:8px; font-weight:800; letter-spacing:.14em; color:var(--here-ink);
+  background:var(--cursor); padding:1px 5px; border-radius:3px; }
+
+.gl{ width:11px; height:11px; border-radius:50%; flex:none; }
+.gl.done{ background:var(--c-done); }
+.gl.prog{ background:var(--c-prog); }
+.gl.todo{ background:transparent; border:2px solid var(--c-todo); }
+.gl.cancel{ background:transparent; border:1.5px dashed var(--c-cancel); }
+.gl.project{ background:var(--c-project); }
+
+/* Right-click menu (interaction/contextMenu.js). */
+.menu{ position:fixed; z-index:50; min-width:190px; background:var(--panel); color:var(--ink);
+  border:1px solid var(--line); border-radius:8px; padding:5px;
+  box-shadow:0 10px 30px rgba(0,0,0,.28); font-size:12.5px; user-select:none; }
+.menu.submenu{ position:absolute; left:100%; top:-6px; margin-left:3px; display:none; }
+.menu-item.has-sub:hover > .submenu{ display:block; }
+.menu-sep{ height:1px; background:var(--line); opacity:.5; margin:5px 6px; }
+.menu-item{ position:relative; display:flex; align-items:center; gap:6px; padding:6px 10px;
+  border-radius:5px; cursor:pointer; white-space:nowrap; }
+.menu-item:hover{ background:color-mix(in srgb, var(--line) 20%, transparent); }
+.menu-item.disabled{ opacity:.4; cursor:default; }
+.menu-item.disabled:hover{ background:transparent; }
+.menu-check{ width:12px; text-align:center; color:var(--muted); font-size:11px; }
+.menu-label{ flex:1; }
+.menu-arrow{ color:var(--muted); margin-left:10px; }
+
+/* Themed modal dialogs (ui/dialog.js): title entry and the delete choice. */
+.modal-backdrop{ position:fixed; inset:0; z-index:60; background:rgba(0,0,0,.35);
+  display:flex; align-items:center; justify-content:center; }
+.modal{ min-width:320px; max-width:min(90vw,440px); background:var(--panel); color:var(--ink);
+  border:1px solid var(--line); border-radius:12px; padding:18px 20px;
+  box-shadow:0 20px 60px rgba(0,0,0,.4); }
+.modal-title{ font-size:14px; font-weight:800; letter-spacing:.02em; margin-bottom:10px; }
+.modal-label{ display:block; font-size:10px; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--muted); margin-bottom:5px; }
+.modal-message{ font-size:12.5px; line-height:1.5; margin-bottom:4px; }
+.modal-input{ width:100%; font:inherit; font-size:13px; color:var(--ink); background:var(--ground);
+  border:1px solid var(--line); border-radius:6px; padding:8px 10px; }
+.modal-input:focus{ outline:2px solid var(--cursor); outline-offset:0; border-color:var(--cursor); }
+.modal-actions{ display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
+.modal-btn{ font:inherit; font-size:12px; border:1px solid var(--line); background:transparent;
+  color:var(--ink); border-radius:6px; padding:7px 14px; cursor:pointer; }
+.modal-btn:hover{ background:color-mix(in srgb, var(--line) 16%, transparent); }
+.modal-btn.primary{ background:var(--ink); color:var(--ground); border-color:var(--ink); }
+.modal-btn.danger{ background:var(--c-prog); color:var(--ground); border-color:var(--c-prog); }
+
+/* Per-task note editor (notes/noteEditor.js): a right-docked panel with a
+   rendered-markdown view and a CodeMirror editor revealed beside it on Edit. */
+.note-backdrop{ position:fixed; inset:0; z-index:70; background:rgba(0,0,0,.28); display:flex; justify-content:flex-end; }
+.note-backdrop.hidden{ display:none; }
+.note-panel{ width:min(840px,94vw); height:100%; background:var(--ground); border-left:1px solid var(--line);
+  display:flex; flex-direction:column; box-shadow:-14px 0 44px rgba(0,0,0,.26); }
+.note-head{ flex:0 0 auto; display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--line); }
+.note-title{ flex:1; font-size:14px; font-weight:800; letter-spacing:.02em; color:var(--ink);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.note-toggle{ font:inherit; font-size:12px; border:1px solid var(--line); background:transparent; color:var(--ink);
+  border-radius:6px; padding:5px 13px; cursor:pointer; }
+.note-panel.edit .note-toggle{ background:var(--ink); color:var(--ground); border-color:var(--ink); }
+.note-close{ font:inherit; font-size:13px; border:1px solid var(--line); background:transparent; color:var(--ink);
+  border-radius:6px; width:30px; height:30px; cursor:pointer; }
+.note-content{ flex:1; display:flex; min-height:0; }
+.note-editor{ flex:1; min-width:0; display:none; border-right:1px solid var(--line); overflow:hidden; }
+.note-panel.edit .note-editor{ display:block; }
+.note-editor .cm-editor{ height:100%; }
+.note-body{ flex:1; min-width:0; overflow:auto; padding:20px 24px; color:var(--ink); font-size:14px; line-height:1.62; }
+
+/* Rendered-markdown typography (kept modest; three-colour palette only). */
+.note-body > :first-child{ margin-top:0; }
+.note-body h1,.note-body h2,.note-body h3{ font-weight:800; letter-spacing:.01em; line-height:1.25; margin:1.4em 0 .5em; }
+.note-body h1{ font-size:1.5em; } .note-body h2{ font-size:1.28em; } .note-body h3{ font-size:1.1em; }
+.note-body p,.note-body ul,.note-body ol,.note-body blockquote,.note-body pre,.note-body table{ margin:0 0 .85em; }
+.note-body a{ color:var(--c-done); text-decoration:none; } .note-body a:hover{ text-decoration:underline; }
+.note-body code{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.88em;
+  background:color-mix(in srgb, var(--line) 16%, transparent); padding:1px 5px; border-radius:4px; }
+.note-body pre{ background:color-mix(in srgb, var(--line) 14%, transparent); padding:12px 14px; border-radius:8px; overflow:auto; }
+.note-body pre code{ background:none; padding:0; }
+.note-body blockquote{ border-left:3px solid var(--line); margin-left:0; padding-left:14px; color:var(--muted); }
+.note-body table{ border-collapse:collapse; } .note-body th,.note-body td{ border:1px solid var(--line); padding:5px 10px; }
+.note-body hr{ border:0; border-top:1px solid var(--line); margin:1.4em 0; }
+.note-body img{ max-width:100%; }

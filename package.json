@@ -1,16 +1,16 @@
 {
-  "name": "taskforkstack",
+  "name": "pensa-grex",
   "version": "0.1.0-dev0",
-  "description": "TaskForkStack desktop app",
-  "author": "Gary Frattarola <garycoding@gmail.com>",
+  "description": "PensaGrex desktop app",
+  "author": "Gary Frattarola <garyf@parkviewlab.ai>",
   "license": "AGPL-3.0-or-later",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/garycoding/TaskForkStack.git"
+    "url": "git+https://github.com/ParkviewLab/pensa-grex.git"
   },
-  "homepage": "https://github.com/garycoding/TaskForkStack#readme",
+  "homepage": "https://github.com/ParkviewLab/pensa-grex#readme",
   "bugs": {
-    "url": "https://github.com/garycoding/TaskForkStack/issues"
+    "url": "https://github.com/ParkviewLab/pensa-grex/issues"
   },
   "main": "out/main/index.js",
   "scripts": {
@@ -18,18 +18,36 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "lint": "eslint .",
-    "build:dist": "electron-vite build && electron-builder"
+    "test": "vitest run",
+    "legal:prepare": "node scripts/prepare-legal.mjs",
+    "legal:notices": "generate-license-file --input ./package.json --output ./legal/THIRD-PARTY-NOTICES.txt --overwrite --eol lf --ci",
+    "legal:list": "license-checker-rseidelsohn --production --json --out ./legal/oss-licenses.json && node scripts/clean-oss-licenses.mjs",
+    "legal": "npm run legal:prepare && npm run legal:notices && npm run legal:list",
+    "build:dist": "npm run legal && electron-vite build && electron-builder"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "electron": "^34.3.0",
+    "electron": "^43.1.1",
     "electron-builder": "^26.15.3",
-    "electron-vite": "^2.3.0",
+    "electron-vite": "^5.0.0",
     "eslint": "^10.5.0",
+    "generate-license-file": "^4.2.1",
     "globals": "^17.6.0",
-    "vite": "^5.0.0"
+    "license-checker-rseidelsohn": "^5.0.1",
+    "vite": "^7.3.6",
+    "vitest": "^4.1.10"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@codemirror/lang-markdown": "^6.5.1",
+    "@codemirror/state": "^6.7.1",
+    "codemirror": "^6.0.2",
+    "dompurify": "^3.4.12",
+    "hypher": "^0.2.5",
+    "json5": "^2.2.3",
+    "katex": "^0.17.0",
+    "marked": "^18.0.6",
+    "marked-katex-extension": "^5.1.10"
+  },
   "overrides": {
     "yauzl": "^3.3.1"
   }

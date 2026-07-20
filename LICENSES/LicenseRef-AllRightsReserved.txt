@@ -1,0 +1,17 @@
+LicenseRef-AllRightsReserved
+
+Copyright © 2026 Gary Frattarola <garyf@parkviewlab.ai>
+All rights reserved.
+
+This license applies only to files that explicitly reference
+"LicenseRef-AllRightsReserved" through an SPDX-License-Identifier tag or the
+project's REUSE.toml — namely the ParkviewLab logo and brand assets.
+
+These files are NOT covered by the conception-space project's open-source
+license (AGPL-3.0-or-later). They are proprietary works and brand assets of
+Gary Frattarola / ParkviewLab.
+
+No permission is granted to use, reproduce, modify, adapt, or distribute
+these files, except for verbatim redistribution as an unmodified part of the
+conception-space repository. No trademark or brand license is granted. For
+any other use, contact garyf@parkviewlab.ai.
