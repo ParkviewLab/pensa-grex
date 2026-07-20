@@ -83,3 +83,27 @@ overflow the card box.
 "project" from colour alone, before any label. See
 [`src/renderer/src/style.css`](../src/renderer/src/style.css) for the two-ground
 token definitions.
+
+## Label hyphenation
+
+Cards are a fixed 188px wide. A multi-word label wraps at its spaces, but a long
+single word (a coined term, an identifier) has nowhere to break and would run past
+the card edge. So the drawn label is passed through soft-hyphenation
+([`src/renderer/src/text/hyphenate.js`](../src/renderer/src/text/hyphenate.js)):
+the Liang/TeX hyphenation algorithm (the `hypher` engine, BSD-3-Clause) run over
+the standard American-English patterns
+([`text/hyphen-en-us.js`](../src/renderer/src/text/hyphen-en-us.js), the
+`hyph-en-us` patterns under Gerard Kuiken's all-permissive notice) inserts soft
+hyphens (U+00AD) at syllable boundaries. Those are invisible until a word must
+wrap, at which point one shows as a real hyphen, so "Supercalifragilistic­…" breaks
+at syllables inside the card instead of overflowing.
+
+This is chosen over the browser's own `hyphens: auto`, which Chromium supports
+unevenly across operating systems; the pattern computation is offline and
+deterministic on every platform. Only the drawn label is hyphenated, so the forest
+data keeps its clean titles, and because both measurement and render build the card
+through the same `buildCard`, the measured size always matches what is drawn. An
+`overflow-wrap: break-word` on the label is the last resort, for a token with no
+syllable break at all (a hash, a URL), so nothing can overflow even then. The lane
+pitch (`laneStep` in `layout.js`) tracks the card width, so widening the card is a
+paired change with the lane spacing.

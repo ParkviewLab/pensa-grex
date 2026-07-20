@@ -8,6 +8,8 @@
 // "here" cursor; a project node ("sub-project") shows neither — it wears the
 // reserved project colour (see render/shapes.js) and carries the project's name.
 
+import { softHyphenate } from '../text/hyphenate.js'
+
 const STATUS_GLYPH = { todo: 'todo', 'in-progress': 'prog', completed: 'done', cancelled: 'cancel' }
 const STATUS_TAG = { todo: 'to do', 'in-progress': 'in progress', completed: 'done', cancelled: 'cancelled' }
 
@@ -52,7 +54,9 @@ export function buildCard(task, { isCursor } = {}) {
   gl.className = isProject ? 'gl project' : 'gl ' + statusGlyphClass(task.status)
   const lbl = document.createElement('span')
   lbl.className = 'lbl'
-  lbl.textContent = task.title
+  // Soft-hyphenate the drawn label so a long word breaks at a syllable inside the
+  // card instead of overflowing; the data keeps its clean title.
+  lbl.textContent = softHyphenate(task.title)
   hd.appendChild(gl)
   hd.appendChild(lbl)
   card.appendChild(hd)
