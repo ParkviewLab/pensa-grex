@@ -22,4 +22,5 @@ contextBridge.exposeInMainWorld('taskforkstack', {
   openExternal:      (url)               => ipcRenderer.invoke('tfs:open-external', url),
   getViewState:      (domain)            => ipcRenderer.invoke('tfs:get-view-state', domain),
   setViewState:      (domain, state)     => ipcRenderer.invoke('tfs:set-view-state', domain, state),
+  exportMarkdown:    (defaultName, text) => ipcRenderer.invoke('tfs:export-markdown', defaultName, text),
 })

@@ -24,6 +24,7 @@ import { openContextMenu, closeContextMenu } from './interaction/contextMenu.js'
 import { promptText, chooseAction } from './ui/dialog.js'
 import { createNoteEditor } from './notes/noteEditor.js'
 import * as M from './model/mutations.js'
+import { serializeProject } from './export/markdown.js'
 import homelabFixtureRaw from './model/fixtures/homelab.forest.json5?raw'
 import workFixtureRaw from './model/fixtures/work.forest.json5?raw'
 
@@ -262,21 +263,27 @@ function toggleCollapse(taskId) {
   render(currentRaw, { fit: false })
 }
 
-// Snapshot a project's subtree (records and note contents) into the in-session
-// clipboard. Taken by value at copy time, so it is unaffected by later edits or a
-// domain switch; note text is read now rather than referenced by file.
-async function copyProject(taskId) {
-  const tasks = {}
+// Read the note contents of a subtree into an { id: content } map, taken by value
+// so it is a snapshot independent of later edits. Shared by copy and export.
+async function collectSubtreeNotes(taskId) {
   const notes = {}
   for (const id of subtreeIdsOf(currentRaw, taskId)) {
     const rec = currentRaw.tasks[id]
-    tasks[id] = structuredClone(rec)
     if (rec.note) {
       const r = await api.readNote(currentDomainPath, rec.note)
       notes[id] = (r && r.content) || ''
     }
   }
-  clipboard = { rootId: taskId, tasks, notes }
+  return notes
+}
+
+// Snapshot a project's subtree (records and note contents) into the in-session
+// clipboard. Taken by value at copy time, so it is unaffected by later edits or a
+// domain switch; note text is read now rather than referenced by file.
+async function copyProject(taskId) {
+  const tasks = {}
+  for (const id of subtreeIdsOf(currentRaw, taskId)) tasks[id] = structuredClone(currentRaw.tasks[id])
+  clipboard = { rootId: taskId, tasks, notes: await collectSubtreeNotes(taskId) }
 }
 
 // Paste the clipboard into the open domain as a new tree: fresh ids, kept
@@ -287,6 +294,18 @@ async function pasteTreeFlow() {
   const { next, notes } = M.pasteAsTree(currentRaw, clipboard)
   for (const n of notes) await api.writeNote(currentDomainPath, n.file, n.content)
   applyEdit(next)
+}
+
+// Export a project's subtree to a markdown outline the user saves where they
+// choose. One-way: the file is a rendered copy, with no path back into the forest.
+async function exportProjectFlow(taskId) {
+  const notes = await collectSubtreeNotes(taskId)
+  const md = serializeProject(currentRaw, taskId, notes)
+  const base = (currentRaw.tasks[taskId].title || 'project').trim() || 'project'
+  const res = await api.exportMarkdown(base + '.md', md)
+  if (res && res.error) {
+    await chooseAction({ title: 'Export failed', message: res.error, actions: [{ label: 'OK', value: null }] })
+  }
 }
 
 // ---- editing flows (each dialog runs after the menu has closed) ----
@@ -380,6 +399,8 @@ function openTaskMenu(x, y, taskId) {
       : { label: 'Collapse', onClick: () => toggleCollapse(taskId) })
     // Copy the project's subtree for pasting as a new tree, here or in another domain.
     items.push({ label: 'Copy', onClick: () => copyProject(taskId) })
+    // Export the project's subtree to a markdown outline (one-way).
+    items.push({ label: 'Export to Markdown…', onClick: () => exportProjectFlow(taskId) })
   }
   items.push({ label: 'Rename…', onClick: () => renameTask(taskId) })
   items.push({ separator: true })

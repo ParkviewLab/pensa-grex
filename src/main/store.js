@@ -289,3 +289,20 @@ export function deleteNote(dirPath, file) {
     return { error: e.message }
   }
 }
+
+// Write an exported markdown file to a user-chosen absolute path. Unlike
+// saveForest and writeNote, this deliberately writes OUTSIDE the library root:
+// export is a one-way "save a copy anywhere", whose trust boundary is the user's
+// explicit choice in the native save dialog (the tfs:export-markdown handler in
+// index.js), not the library bound. Still atomic, so an interrupted write never
+// truncates an existing file at the target.
+export function writeExport(absPath, text) {
+  if (typeof absPath !== 'string' || !absPath) return { error: 'no export path' }
+  if (typeof text !== 'string') return { error: 'export text must be a string' }
+  try {
+    atomicWrite(absPath, text)
+    return { ok: true, path: absPath }
+  } catch (e) {
+    return { error: e.message }
+  }
+}

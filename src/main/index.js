@@ -8,7 +8,7 @@ import pkg from '../../package.json'
 import {
   getSettings, setLastDomain, getLibraryRoot, setLibraryRoot,
   listDomains, createForest, deleteForest, loadForest, saveForest, readNote, writeNote, deleteNote,
-  getViewState, setViewState,
+  getViewState, setViewState, writeExport,
 } from './store.js'
 
 const isDev = !app.isPackaged
@@ -267,6 +267,18 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('tfs:get-view-state', (_e, domain) => getViewState(domain))
   ipcMain.handle('tfs:set-view-state', (_e, domain, state) => setViewState(domain, state))
+  // Export a project to a markdown file the user picks, anywhere on disk. The
+  // save dialog is the trust boundary for this deliberately out-of-library write.
+  ipcMain.handle('tfs:export-markdown', async (_e, defaultName, text) => {
+    if (typeof text !== 'string') return { error: 'export text must be a string' }
+    const { canceled, filePath } = await dialog.showSaveDialog(win, {
+      title: 'Export project to Markdown',
+      defaultPath: typeof defaultName === 'string' && defaultName ? defaultName : 'project.md',
+      filters: [{ name: 'Markdown', extensions: ['md'] }],
+    })
+    if (canceled || !filePath) return { canceled: true }
+    return writeExport(filePath, text)
+  })
 
   // Safety net: keep the window from navigating away from the app; open any
   // external URL that slips through in the system browser instead.

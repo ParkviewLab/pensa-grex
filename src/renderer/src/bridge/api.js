@@ -30,6 +30,7 @@ function wrapRealBridge(bridge) {
     openExternal:      (url) => bridge.openExternal(url),
     getViewState:      (domain) => bridge.getViewState(domain),
     setViewState:      (domain, state) => bridge.setViewState(domain, state),
+    exportMarkdown:    (defaultName, text) => bridge.exportMarkdown(defaultName, text),
   }
 }
 
@@ -69,6 +70,19 @@ function makeFallback() {
     openExternal:      async (url) => { window.open(url, '_blank', 'noopener') },
     getViewState:      async (domain) => viewState.get(domain) || { collapsed: [] },
     setViewState:      async (domain, state) => { viewState.set(domain, { collapsed: (state && state.collapsed) || [] }); return { ok: true } },
+    // No native dialog without Electron: save via a browser download, the honest
+    // no-app equivalent of writing the file to a place the user chose.
+    exportMarkdown:    async (defaultName, text) => {
+      const url = URL.createObjectURL(new Blob([text], { type: 'text/markdown' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = (typeof defaultName === 'string' && defaultName) ? defaultName : 'project.md'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 0)
+      return { ok: true, path: a.download }
+    },
   }
 }
 
