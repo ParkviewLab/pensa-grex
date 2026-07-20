@@ -4,6 +4,16 @@ All notable changes to this project are recorded here.
 
 ## [Unreleased]
 
+## [v1.0.2] - 2026-07-20
+
+### Highlights
+
+This is a maintenance release with no user-visible changes, removing an inert yauzl dependency override left over from the Electron 34 era that no longer applies under Electron 43's extraction path.
+
+### Docs
+
+- V1.0.1 [skip ci] (942e8da)
+
 ## [v1.0.1] - 2026-07-20
 
 ### Highlights
