@@ -332,3 +332,43 @@ export function deleteTask(raw, taskId, mode = 'subtree') {
   for (const id of doomed) delete next.tasks[id]
   return next
 }
+
+/**
+ * Paste a copied project into `raw` as a fresh, independent tree. Every id in the
+ * clip is regenerated (so a paste never collides with the source and the same
+ * clip may be pasted repeatedly), each node is stamped with a new createdAt, and
+ * any "here" cursor is cleared — a pasted tree opens with no cursor. Notes travel
+ * by content, not by file: a node that carried a note is given a fresh note file
+ * named for its new id, and that file's text is returned in `notes` for the
+ * caller to write into the destination domain. The clip's (mapped) root id is
+ * appended to rootOrder, so the pasted tree lands to the right of the rest.
+ *
+ * `clip` is { rootId, tasks: { oldId: record }, notes: { oldId: content } }, the
+ * snapshot bridge/api.js gathers at copy time. Returns { next, notes } where
+ * notes is [{ file, content }]. Pure: neither `raw` nor `clip` is mutated.
+ */
+export function pasteAsTree(raw, clip) {
+  const next = clone(raw)
+  if (!Array.isArray(next.rootOrder)) next.rootOrder = []
+  const idMap = new Map()
+  for (const oldId of Object.keys(clip.tasks)) idMap.set(oldId, mintTaskId())
+  const map = (id) => idMap.get(id) || id
+  const stamp = nowISO()
+  const notes = []
+  for (const [oldId, rec] of Object.entries(clip.tasks)) {
+    const newId = idMap.get(oldId)
+    const node = structuredClone(rec)
+    node.id = newId
+    node.createdAt = stamp
+    if (node.next) node.next = map(node.next)
+    node.branches = (node.branches || []).map((b) => ({ ...b, child: map(b.child) }))
+    if ('here' in node) node.here = false
+    if (node.note) {
+      node.note = newId + '.md'
+      notes.push({ file: node.note, content: (clip.notes && clip.notes[oldId]) || '' })
+    }
+    next.tasks[newId] = node
+  }
+  next.rootOrder.push(map(clip.rootId))
+  return { next, notes }
+}

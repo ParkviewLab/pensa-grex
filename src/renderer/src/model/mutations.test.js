@@ -5,7 +5,7 @@ import { describe, it, expect } from 'vitest'
 import { validateForest } from './validate.js'
 import {
   setTitle, setNote, setStatus, makeHere, clearHere, addTree, convertKind,
-  addTaskAbove, addTaskBelow, addBranchAbove, addBranchBelow, deleteTask,
+  addTaskAbove, addTaskBelow, addBranchAbove, addBranchBelow, deleteTask, pasteAsTree,
 } from './mutations.js'
 
 // A small valid forest: project root r -> m1(here) -> m2, with a fork b1 -> b2 off m1.
@@ -276,5 +276,71 @@ describe('deleteTask — splice', () => {
     expect(out.tasks.r.here).toBe(false) // cleared
     expect(out.tasks.b0.here).toBe(true) // kept (tip-most)
     valid(out)
+  })
+})
+
+describe('pasteAsTree', () => {
+  // A clip mirroring base()'s shape, with one completed task and one carrying a
+  // note, so the paste can be checked to keep statuses, clear cursors, and carry
+  // notes by content: r(project) -> m1(here) -> m2(completed); fork b1 -> b2(note).
+  const clip = () => ({
+    rootId: 'r',
+    tasks: {
+      r:  { id: 'r',  title: 'Proj', kind: 'project', createdAt: 'old', note: null, next: 'm1', branches: [] },
+      m1: { id: 'm1', title: 'm1', kind: 'task', status: 'todo', createdAt: 'old', completedAt: null, note: null, here: true, next: 'm2', branches: [{ child: 'b1', side: 'left', at: 'above' }] },
+      m2: { id: 'm2', title: 'm2', kind: 'task', status: 'completed', createdAt: 'old', completedAt: '2026-02-02T00:00:00Z', note: null, here: false, next: null, branches: [] },
+      b1: { id: 'b1', title: 'b1', kind: 'task', status: 'todo', createdAt: 'old', completedAt: null, note: null, here: false, next: 'b2', branches: [] },
+      b2: { id: 'b2', title: 'b2', kind: 'task', status: 'todo', createdAt: 'old', completedAt: null, note: 'b2.md', here: false, next: null, branches: [] },
+    },
+    notes: { b2: '# b2 note\n' },
+  })
+  const empty = () => ({ schema: 2, domain: 'T', rootOrder: [], tasks: {} })
+  const byTitle = (raw) => Object.fromEntries(Object.values(raw.tasks).map((t) => [t.title, t]))
+
+  it('pastes a copied project as a fresh, valid tree with regenerated ids', () => {
+    const { next } = pasteAsTree(empty(), clip())
+    expect(Object.keys(next.tasks)).toHaveLength(5)
+    // Every id is new (none of the clip's literal ids survive) and the mapped
+    // root is appended to rootOrder as a project node.
+    expect(['r', 'm1', 'm2', 'b1', 'b2'].some((id) => next.tasks[id])).toBe(false)
+    expect(next.rootOrder).toHaveLength(1)
+    expect(next.tasks[next.rootOrder[0]].kind).toBe('project')
+    valid(next)
+  })
+
+  it('keeps statuses, clears here cursors, and stamps a fresh createdAt', () => {
+    const { next } = pasteAsTree(empty(), clip())
+    const t = byTitle(next)
+    expect(t.m2.status).toBe('completed')
+    expect(t.m2.completedAt).toBe('2026-02-02T00:00:00Z') // completion travels
+    expect(t.m1.here).toBe(false) // cursor cleared on paste
+    expect(t.m1.createdAt).not.toBe('old') // re-stamped
+  })
+
+  it('rewires edges through the id map', () => {
+    const { next } = pasteAsTree(empty(), clip())
+    const t = byTitle(next)
+    expect(t.Proj.next).toBe(t.m1.id)
+    expect(t.m1.next).toBe(t.m2.id)
+    expect(t.m1.branches[0].child).toBe(t.b1.id)
+    expect(t.b1.next).toBe(t.b2.id)
+  })
+
+  it('carries a note by content into a fresh file named for the new id', () => {
+    const { next, notes } = pasteAsTree(empty(), clip())
+    const t = byTitle(next)
+    expect(t.b2.note).toBe(t.b2.id + '.md')
+    expect(notes).toEqual([{ file: t.b2.id + '.md', content: '# b2 note\n' }])
+  })
+
+  it('does not mutate the clip, so the same copy can be pasted again disjointly', () => {
+    const c = clip()
+    const first = pasteAsTree(empty(), c)
+    expect(c.tasks.m1.here).toBe(true) // clip untouched
+    const second = pasteAsTree(first.next, c) // paste again into the result
+    expect(second.next.rootOrder).toHaveLength(2)
+    expect(Object.keys(second.next.tasks)).toHaveLength(10) // two disjoint trees
+    expect(second.next.rootOrder[0]).not.toBe(second.next.rootOrder[1])
+    valid(second.next)
   })
 })

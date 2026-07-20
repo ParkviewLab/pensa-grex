@@ -45,6 +45,11 @@ let currentDomainName = null
 // Ids of collapsed project nodes: client-local view state, kept apart from the
 // forest data (see docs/northstar.md axiom 8) and loaded per domain.
 let collapsedSet = new Set()
+// The in-session clipboard: a snapshot of a copied project (its subtree records
+// and note contents), taken at copy time so it is independent of later edits and
+// survives a domain switch. Renderer-local and non-persistent — it does not
+// outlive the app, and never touches the forest data.
+let clipboard = null
 
 // The note editor records a task's note filename on its first non-empty save, so
 // the note dot appears and the name is persisted in the forest.
@@ -257,6 +262,33 @@ function toggleCollapse(taskId) {
   render(currentRaw, { fit: false })
 }
 
+// Snapshot a project's subtree (records and note contents) into the in-session
+// clipboard. Taken by value at copy time, so it is unaffected by later edits or a
+// domain switch; note text is read now rather than referenced by file.
+async function copyProject(taskId) {
+  const tasks = {}
+  const notes = {}
+  for (const id of subtreeIdsOf(currentRaw, taskId)) {
+    const rec = currentRaw.tasks[id]
+    tasks[id] = structuredClone(rec)
+    if (rec.note) {
+      const r = await api.readNote(currentDomainPath, rec.note)
+      notes[id] = (r && r.content) || ''
+    }
+  }
+  clipboard = { rootId: taskId, tasks, notes }
+}
+
+// Paste the clipboard into the open domain as a new tree: fresh ids, kept
+// statuses, cleared here cursors, fresh note files. Notes are written first so
+// the note dots resolve to real files once the pasted forest is rendered.
+async function pasteTreeFlow() {
+  if (!clipboard || !currentRaw) return
+  const { next, notes } = M.pasteAsTree(currentRaw, clipboard)
+  for (const n of notes) await api.writeNote(currentDomainPath, n.file, n.content)
+  applyEdit(next)
+}
+
 // ---- editing flows (each dialog runs after the menu has closed) ----
 
 async function renameTask(taskId) {
@@ -346,6 +378,8 @@ function openTaskMenu(x, y, taskId) {
     items.push(collapsedSet.has(taskId)
       ? { label: 'Expand', onClick: () => toggleCollapse(taskId) }
       : { label: 'Collapse', onClick: () => toggleCollapse(taskId) })
+    // Copy the project's subtree for pasting as a new tree, here or in another domain.
+    items.push({ label: 'Copy', onClick: () => copyProject(taskId) })
   }
   items.push({ label: 'Rename…', onClick: () => renameTask(taskId) })
   items.push({ separator: true })
@@ -363,7 +397,10 @@ function openTaskMenu(x, y, taskId) {
 }
 
 function openCanvasMenu(x, y) {
-  openContextMenu(x, y, [{ label: 'New tree…', onClick: () => addTreeFlow() }])
+  const items = [{ label: 'New tree…', onClick: () => addTreeFlow() }]
+  // Paste a previously copied project as a new tree in this domain.
+  if (clipboard) items.push({ label: 'Paste as new tree', onClick: () => pasteTreeFlow() })
+  openContextMenu(x, y, items)
 }
 
 viewportEl.addEventListener('contextmenu', (e) => {
