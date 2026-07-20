@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # electron-builder — packages the electron-vite build (out/) into platform
 # installers: .dmg (macOS), NSIS .exe (Windows), .AppImage + .deb (Linux).
-# Run after `npm run build`. Unsigned for now — macOS Gatekeeper and Windows
-# SmartScreen will warn on first launch until signing is wired up (see the
-# handbook's electron-tooling.md for how to add it later).
+# Run after `npm run build`. macOS is signed (Developer ID Application) and
+# notarized; Windows and Linux ship unsigned (Windows SmartScreen may warn on
+# first launch). See the handbook's electron-tooling.md.
 appId: ai.parkviewlab.pensa-grex
 productName: PensaGrex
 artifactName: ${name}-${version}-${arch}.${ext}
@@ -21,6 +21,12 @@ files:
 mac:
   category: public.app-category.productivity
   target: dmg
+  hardenedRuntime: true
+  # Signed with a Developer ID Application cert (CSC_LINK / CSC_KEY_PASSWORD) and
+  # notarized via an App Store Connect API key (APPLE_API_KEY / _ID / _ISSUER),
+  # wired in release-electron.yml's macOS job. Notarization activates from those
+  # env vars; electron-builder applies its default Electron entitlements under the
+  # hardened runtime, so no custom entitlements plist is needed.
 win:
   target: nsis
 nsis:
