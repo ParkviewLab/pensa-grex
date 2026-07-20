@@ -52,21 +52,22 @@ atomic-age mark fitting the theme) belongs under `build/` as
 `icon.icns` / `icon.ico` / `icon.png` for electron-builder to pick up.
 Cosmetic; worth doing before a public release.
 
-# 3. Deferred: code signing
+# 3. macOS code signing (wired; Windows deferred)
 
-`electron-builder.yml` ships unsigned (macOS Gatekeeper / Windows SmartScreen
-will warn on first launch). Signing needs a Developer ID cert + notarization
-credentials (mac) and a code-signing cert (win) wired into
-`.github/workflows/release-electron.yml` as repo secrets — worth doing before
-a first public release, not before.
+The release job signs macOS (Developer ID Application) and notarizes via an App
+Store Connect API key, mirroring conception-space; it reads five repo secrets:
+`CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_API_KEY_B64`, `APPLE_API_KEY_ID`, and
+`APPLE_API_ISSUER`. These are not org-level, so they must be present on this repo
+(or promoted to org secrets) for the signed build to succeed. Windows still ships
+unsigned (SmartScreen may warn on first launch); a Windows code-signing cert
+remains deferred.
 
-# 4. `ANTHROPIC_API_KEY` repo secret
+# 4. `ANTHROPIC_API_KEY` (resolved)
 
-The changelog job's Highlights paragraph needs `ANTHROPIC_API_KEY`. Unlike a
-ParkviewLab-org repo, this one doesn't inherit an org-level secret — it needs
-its own repo secret (`gh secret set ANTHROPIC_API_KEY`). The script degrades
-gracefully without it (placeholder text, release still ships), so this isn't
-blocking, just worth doing before the first real release.
+The changelog job's Highlights paragraph needs `ANTHROPIC_API_KEY`. Now that this
+repo lives in the ParkviewLab org it inherits the org-level secret (the v1.0.0
+changelog Highlights confirmed it), so no repo secret is needed. The script still
+degrades gracefully to placeholder text if the key is ever absent.
 
 # 5. Deferred: decorative background starbursts
 
