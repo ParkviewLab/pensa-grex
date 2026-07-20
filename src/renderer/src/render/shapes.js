@@ -124,15 +124,19 @@ export function renderCard(cardEl) {
   svg.querySelector('.outer').setAttribute('d', d.outer)
   svg.querySelector('.inner').setAttribute('d', d.inner)
 
-  const statusNames = ['done', 'prog', 'todo', 'cancel']
-  const glyph = cardEl.querySelector('.gl')
+  // A project node wears the reserved project colour; a task wears its status
+  // colour (recovered from the status-glyph class). The current ("here") card
+  // takes no dedicated cursor colour — its here-ness is the trapezium shape, the
+  // heavier outline, and the sputnik mark instead.
   let status = 'todo'
-  for (const name of statusNames) {
-    if (glyph && glyph.classList.contains(name)) { status = name; break }
+  if (cardEl.classList.contains('project')) {
+    status = 'project'
+  } else {
+    const glyph = cardEl.querySelector('.gl')
+    for (const name of ['done', 'prog', 'todo', 'cancel']) {
+      if (glyph && glyph.classList.contains(name)) { status = name; break }
+    }
   }
-  // The current ("here") card no longer takes a dedicated cursor colour: it wears
-  // its own status colour like any card, and its here-ness is carried by the wider
-  // trapezium shape, the heavier outline, and the sputnik mark instead.
   svg.querySelector('.outer').style.fill = 'var(--c-' + status + ')'
 }
 

@@ -2,11 +2,11 @@
 // SPDX-FileCopyrightText: 2026 Gary Frattarola <garycoding@gmail.com>
 
 // The pure layout engine: forest model + measured sizes -> pixel positions
-// for every station, dot, cursor, track, junction, and tree title, plus the
-// overall canvas bounds. No DOM — see layout/measure.js for where the sizes
-// this consumes come from, and docs/model_ideas.md for the rules this
-// implements (bottom-up growth, junctions in the open gap between stations,
-// left/right alternation, a tree's name below its root).
+// for every station, dot, cursor, track, and junction, plus the overall canvas
+// bounds. No DOM — see layout/measure.js for where the sizes this consumes come
+// from, and docs/model_ideas.md for the rules this implements (bottom-up growth,
+// junctions in the open gap between stations, left/right alternation). A
+// project's name lives on its root-node card, so there is no separate tree title.
 
 import { assignRows, buildRowGrid, assignLanes } from './geometry.js'
 
@@ -16,7 +16,6 @@ const DEFAULTS = {
   junctionExtra: 30, // extra clearance in a gap that carries a fork junction
   baseY: 0, // row 0's card-top y, before the final shift to positive bounds
   anchorGap: 14, // how far a dot/sputnik sits above its own row's card top
-  titleGap: 20, // gap between a root card's bottom and its tree title
   treeGap: 90, // horizontal gap between two trees' bounding boxes
   margin: 40, // canvas margin on every side
   // Branch connectors angle upward at ONE constant slope: every leg rises this much
@@ -25,11 +24,11 @@ const DEFAULTS = {
   branchTiltTan: Math.tan((12 * Math.PI) / 180), // 12° above horizontal = 78° from the vertical trunk
 }
 
-export function computeForestLayout(forest, sizes, titleSizes, opts = {}) {
+export function computeForestLayout(forest, sizes, opts = {}) {
   const o = { ...DEFAULTS, ...opts }
 
   if (forest.trees.length === 0) {
-    return { stations: [], dots: [], cursors: [], tracks: [], junctions: [], titles: [], bounds: { w: o.margin * 2, h: o.margin * 2 } }
+    return { stations: [], dots: [], cursors: [], tracks: [], junctions: [], bounds: { w: o.margin * 2, h: o.margin * 2 } }
   }
 
   const row = assignRows(forest)
@@ -98,12 +97,11 @@ export function computeForestLayout(forest, sizes, titleSizes, opts = {}) {
     return { x, top, cardW, cardH, left: x - cardW / 2, right: x + cardW / 2, bottom: top + cardH }
   }
 
-  // ---- per-tree bounding box (pre-packing space), title footprint included ----
+  // ---- per-tree bounding box (pre-packing space) ----
   const tasksByTree = new Map(forest.trees.map((t) => [t.id, []]))
   for (const id of forest.tasks.keys()) tasksByTree.get(forest.getTreeIdForTask(id)).push(id)
 
   const treeBBox = new Map()
-  const treeTitleY = new Map()
   for (const tree of forest.trees) {
     let minX = Infinity, maxX = -Infinity, maxBottom = -Infinity
     for (const id of tasksByTree.get(tree.id)) {
@@ -112,13 +110,6 @@ export function computeForestLayout(forest, sizes, titleSizes, opts = {}) {
       maxX = Math.max(maxX, box.right)
       maxBottom = Math.max(maxBottom, box.bottom)
     }
-    const rootBox = cardBox(tree.rootTaskId)
-    const titleY = rootBox.bottom + o.titleGap
-    const { titleW = 0, titleH = 0 } = titleSizes.get(tree.id) || {}
-    minX = Math.min(minX, rootBox.x - titleW / 2)
-    maxX = Math.max(maxX, rootBox.x + titleW / 2)
-    maxBottom = Math.max(maxBottom, titleY + titleH)
-    treeTitleY.set(tree.id, titleY)
     treeBBox.set(tree.id, { minX, maxX, maxBottom })
   }
 
@@ -209,19 +200,9 @@ export function computeForestLayout(forest, sizes, titleSizes, opts = {}) {
   }
   const junctions = Array.from(junctionByKey.values())
 
-  // ---- tree titles ----
-  const titles = forest.trees.map((tree) => ({
-    treeId: tree.id, text: tree.name, x: finalX(tree.rootTaskId), y: treeTitleY.get(tree.id),
-  }))
-  for (const t of titles) maxY = Math.max(maxY, t.y + (titleSizes.get(t.treeId)?.titleH || 0))
-
   // ---- shift everything so the smallest x/y lands at (margin, margin) ----
   let minX = Infinity, maxX = -Infinity
   for (const s of stations) { minX = Math.min(minX, s.x - s.cardW / 2); maxX = Math.max(maxX, s.x + s.cardW / 2) }
-  for (const t of titles) {
-    const w = titleSizes.get(t.treeId)?.titleW || 0
-    minX = Math.min(minX, t.x - w / 2); maxX = Math.max(maxX, t.x + w / 2)
-  }
   const dx = o.margin - minX
   const dy = o.margin - minY
   const shiftX = (x) => x + dx
@@ -232,9 +213,8 @@ export function computeForestLayout(forest, sizes, titleSizes, opts = {}) {
   for (const c of cursors) { c.x = shiftX(c.x); c.y = shiftY(c.y) }
   for (const j of junctions) { j.x = shiftX(j.x); j.y = shiftY(j.y) }
   for (const tr of tracks) tr.points = tr.points.map(([x, y]) => [shiftX(x), shiftY(y)])
-  for (const t of titles) { t.x = shiftX(t.x); t.y = shiftY(t.y) }
 
   const bounds = { w: maxX - minX + 2 * o.margin, h: maxY - minY + 2 * o.margin }
 
-  return { stations, dots, cursors, tracks, junctions, titles, bounds }
+  return { stations, dots, cursors, tracks, junctions, bounds }
 }

@@ -6,11 +6,22 @@ import JSON5 from 'json5'
 import fixtureRaw from './fixtures/homelab.forest.json5?raw'
 import { validateForest } from './validate.js'
 
+// A task node with sensible defaults.
 function task(overrides) {
   return {
-    id: 'k_x', title: 'X', status: 'todo',
+    id: 'k_x', title: 'X', kind: 'task', status: 'todo',
     createdAt: '2026-01-01T00:00:00Z', completedAt: null,
     note: null, here: false, next: null, branches: [],
+    ...overrides,
+  }
+}
+
+// A project node (a root, or a mid-tree sub-project) with sensible defaults.
+function project(overrides) {
+  return {
+    id: 'p_x', title: 'P', kind: 'project',
+    createdAt: '2026-01-01T00:00:00Z',
+    note: null, next: null, branches: [],
     ...overrides,
   }
 }
@@ -25,26 +36,26 @@ describe('validateForest — the HomeLab fixture', () => {
 })
 
 describe('validateForest — invariants', () => {
-  it('rejects a cycle and flags the root that receives the back-edge', () => {
+  it('rejects a reachable cycle (and the extra incoming edge it creates)', () => {
     const raw = {
-      schema: 1, domain: 'D',
-      trees: [{ id: 't1', name: 'T', rootTaskId: 'a' }],
+      schema: 2, domain: 'D', rootOrder: ['p'],
       tasks: {
+        p: project({ id: 'p', next: 'a' }),
         a: task({ id: 'a', next: 'b' }),
-        b: task({ id: 'b', next: 'a' }),
+        b: task({ id: 'b', next: 'a' }), // back-edge to a
       },
     }
     const { ok, errors } = validateForest(raw)
     expect(ok).toBe(false)
-    expect(errors.some((e) => e.includes('incoming edge'))).toBe(true)
+    expect(errors.some((e) => e.includes('more than one incoming edge'))).toBe(true)
     expect(errors.some((e) => e.includes('cycle detected'))).toBe(true)
   })
 
   it('rejects a task with more than one incoming edge', () => {
     const raw = {
-      schema: 1, domain: 'D',
-      trees: [{ id: 't1', name: 'T', rootTaskId: 'a' }],
+      schema: 2, domain: 'D', rootOrder: ['p'],
       tasks: {
+        p: project({ id: 'p', next: 'a' }),
         a: task({ id: 'a', next: 'c', branches: [{ child: 'b', side: 'left', at: 'above' }] }),
         b: task({ id: 'b', next: 'c' }), // b also points its .next at c
         c: task({ id: 'c' }),
@@ -57,51 +68,46 @@ describe('validateForest — invariants', () => {
 
   it('rejects a reference to a task that does not exist', () => {
     const raw = {
-      schema: 1, domain: 'D',
-      trees: [{ id: 't1', name: 'T', rootTaskId: 'a' }],
-      tasks: { a: task({ id: 'a', next: 'ghost' }) },
+      schema: 2, domain: 'D', rootOrder: ['p'],
+      tasks: {
+        p: project({ id: 'p', next: 'a' }),
+        a: task({ id: 'a', next: 'ghost' }),
+      },
     }
     const { ok, errors } = validateForest(raw)
     expect(ok).toBe(false)
     expect(errors.some((e) => e.includes('unknown task "ghost"'))).toBe(true)
   })
 
-  it('rejects a declared root that has an incoming edge', () => {
+  it('rejects a root that is not a project node', () => {
     const raw = {
-      schema: 1, domain: 'D',
-      trees: [
-        { id: 't1', name: 'T1', rootTaskId: 'a' },
-        { id: 't2', name: 'T2', rootTaskId: 'b' }, // b is also a's next — not a real root
-      ],
-      tasks: {
-        a: task({ id: 'a', next: 'b' }),
-        b: task({ id: 'b' }),
-      },
+      schema: 2, domain: 'D', rootOrder: ['a'],
+      tasks: { a: task({ id: 'a', next: 'b' }), b: task({ id: 'b' }) }, // a has no incoming edge but is a task
     }
     const { ok, errors } = validateForest(raw)
     expect(ok).toBe(false)
-    expect(errors.some((e) => e.includes('root task "b" has an incoming edge'))).toBe(true)
+    expect(errors.some((e) => e.includes('root node "a" must be a project node'))).toBe(true)
   })
 
-  it('rejects a task unreachable from any tree root', () => {
+  it('rejects nodes in a detached cycle as unreachable', () => {
     const raw = {
-      schema: 1, domain: 'D',
-      trees: [{ id: 't1', name: 'T', rootTaskId: 'a' }],
+      schema: 2, domain: 'D', rootOrder: ['p'],
       tasks: {
+        p: project({ id: 'p', next: 'a' }),
         a: task({ id: 'a' }),
-        orphan: task({ id: 'orphan' }), // no incoming edge, not a root
+        c: task({ id: 'c', next: 'd' }), // c and d only reference each other
+        d: task({ id: 'd', next: 'c' }),
       },
     }
     const { ok, errors } = validateForest(raw)
     expect(ok).toBe(false)
-    expect(errors.some((e) => e.includes('"orphan" is unreachable'))).toBe(true)
+    expect(errors.some((e) => e.includes('is not reachable from any root'))).toBe(true)
   })
 
   it('rejects an invalid status', () => {
     const raw = {
-      schema: 1, domain: 'D',
-      trees: [{ id: 't1', name: 'T', rootTaskId: 'a' }],
-      tasks: { a: task({ id: 'a', status: 'someday' }) },
+      schema: 2, domain: 'D', rootOrder: ['p'],
+      tasks: { p: project({ id: 'p', next: 'a' }), a: task({ id: 'a', status: 'someday' }) },
     }
     const { ok, errors } = validateForest(raw)
     expect(ok).toBe(false)
@@ -110,13 +116,10 @@ describe('validateForest — invariants', () => {
 
   it('rejects completed without completedAt, and completedAt without completed', () => {
     const raw = {
-      schema: 1, domain: 'D',
-      trees: [
-        { id: 't1', name: 'T1', rootTaskId: 'a' },
-        { id: 't2', name: 'T2', rootTaskId: 'b' },
-      ],
+      schema: 2, domain: 'D', rootOrder: ['p'],
       tasks: {
-        a: task({ id: 'a', status: 'completed', completedAt: null }),
+        p: project({ id: 'p', next: 'a' }),
+        a: task({ id: 'a', status: 'completed', completedAt: null, next: 'b' }),
         b: task({ id: 'b', status: 'todo', completedAt: '2026-01-02T00:00:00Z' }),
       },
     }
@@ -126,11 +129,35 @@ describe('validateForest — invariants', () => {
     expect(errors.some((e) => e.includes('"b" has completedAt but is not completed'))).toBe(true)
   })
 
+  it('rejects a project node that carries a status', () => {
+    const raw = {
+      schema: 2, domain: 'D', rootOrder: ['p'],
+      tasks: { p: project({ id: 'p', status: 'todo', next: 'a' }), a: task({ id: 'a' }) },
+    }
+    const { ok, errors } = validateForest(raw)
+    expect(ok).toBe(false)
+    expect(errors.some((e) => e.includes('project node "p" must not have a status'))).toBe(true)
+  })
+
+  it('rejects a mid-tree project node that is marked "here"', () => {
+    const raw = {
+      schema: 2, domain: 'D', rootOrder: ['p'],
+      tasks: {
+        p: project({ id: 'p', next: 'a' }),
+        a: task({ id: 'a', next: 'q' }),
+        q: project({ id: 'q', here: true }),
+      },
+    }
+    const { ok, errors } = validateForest(raw)
+    expect(ok).toBe(false)
+    expect(errors.some((e) => e.includes('project node "q" must not be "here"'))).toBe(true)
+  })
+
   it('rejects more than one "here" on the same branch', () => {
     const raw = {
-      schema: 1, domain: 'D',
-      trees: [{ id: 't1', name: 'T', rootTaskId: 'a' }],
+      schema: 2, domain: 'D', rootOrder: ['p'],
       tasks: {
+        p: project({ id: 'p', next: 'a' }),
         a: task({ id: 'a', here: true, next: 'b' }),
         b: task({ id: 'b', here: true }),
       },
@@ -142,9 +169,9 @@ describe('validateForest — invariants', () => {
 
   it('allows one "here" per branch, several across a forked tree', () => {
     const raw = {
-      schema: 1, domain: 'D',
-      trees: [{ id: 't1', name: 'T', rootTaskId: 'a' }],
+      schema: 2, domain: 'D', rootOrder: ['p'],
       tasks: {
+        p: project({ id: 'p', next: 'a' }),
         a: task({ id: 'a', next: 'b' }),
         b: task({ id: 'b', here: true, branches: [{ child: 'c', side: 'left', at: 'above' }] }),
         c: task({ id: 'c', here: true }), // a different branch — allowed

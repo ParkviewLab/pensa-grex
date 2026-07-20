@@ -20,15 +20,6 @@ function buildDot(x, y) {
   return dot
 }
 
-function buildTitleEl(title) {
-  const ttl = document.createElement('div')
-  ttl.className = 'ttl'
-  ttl.style.left = title.x + 'px'
-  ttl.style.top = title.y + 'px'
-  ttl.textContent = title.text
-  return ttl
-}
-
 // forest is the runtime model (model/forest.js) the layout was computed
 // from — mountLayout reads each station's task record from it for the
 // card's actual content (title, status, note).
@@ -54,7 +45,6 @@ export function mountLayout(contentEl, layout, forest) {
     const task = forest.getTask(s.id)
     contentEl.appendChild(buildStationBox(task, s.x, s.cardTop, { isCursor: s.cursor }))
   }
-  for (const t of layout.titles) contentEl.appendChild(buildTitleEl(t))
 
   // cards must be in the DOM (and thus have a measurable size) before their
   // silhouettes can be painted

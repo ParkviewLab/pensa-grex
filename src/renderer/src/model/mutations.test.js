@@ -4,22 +4,25 @@
 import { describe, it, expect } from 'vitest'
 import { validateForest } from './validate.js'
 import {
-  setTitle, setNote, setStatus, makeHere, clearHere, addTree,
+  setTitle, setNote, setStatus, makeHere, clearHere, addTree, convertKind,
   addTaskAbove, addTaskBelow, addBranchAbove, addBranchBelow, deleteTask,
 } from './mutations.js'
 
-// A small valid forest: main line r -> m1(here) -> m2, with a fork b1 -> b2 off m1.
+// A small valid forest: project root r -> m1(here) -> m2, with a fork b1 -> b2 off m1.
 function base() {
   const t = (id, over = {}) => ({
-    id, title: id, status: 'todo', createdAt: '2026-01-01T00:00:00Z', completedAt: null,
+    id, title: id, kind: 'task', status: 'todo', createdAt: '2026-01-01T00:00:00Z', completedAt: null,
     note: null, here: false, next: null, branches: [], ...over,
   })
+  const p = (id, over = {}) => ({
+    id, title: id, kind: 'project', createdAt: '2026-01-01T00:00:00Z', note: null, next: null, branches: [], ...over,
+  })
   return {
-    schema: 1,
+    schema: 2,
     domain: 'T',
-    trees: [{ id: 't1', name: 'Tree', rootTaskId: 'r' }],
+    rootOrder: ['r'],
     tasks: {
-      r: t('r', { status: 'completed', completedAt: '2026-01-02T00:00:00Z', next: 'm1' }),
+      r: p('r', { next: 'm1' }),
       m1: t('m1', { here: true, next: 'm2', branches: [{ child: 'b1', side: 'left', at: 'above' }] }),
       m2: t('m2'),
       b1: t('b1', { next: 'b2' }),
@@ -63,6 +66,33 @@ describe('setTitle / setStatus', () => {
     expect(() => setStatus(input, 'm2', 'bogus')).toThrow()
     expect(input.tasks.m2.status).toBe('todo')
   })
+
+  it('refuses to set a status on a project node', () => {
+    expect(() => setStatus(base(), 'r', 'todo')).toThrow()
+  })
+})
+
+describe('convertKind', () => {
+  it('turns a task into a project node, discarding status and cursor', () => {
+    const out = convertKind(base(), 'm1') // m1 is a task, and is "here"
+    expect(out.tasks.m1.kind).toBe('project')
+    expect(out.tasks.m1.status).toBeUndefined()
+    expect(out.tasks.m1.here).toBeUndefined()
+    expect(out.tasks.m1.next).toBe('m2') // keeps its edges and children
+    valid(out)
+  })
+
+  it('turns a project node back into a task, resetting to todo (lossy round-trip)', () => {
+    const toProject = convertKind(base(), 'm2')
+    const back = convertKind(toProject, 'm2')
+    expect(back.tasks.m2.kind).toBe('task')
+    expect(back.tasks.m2.status).toBe('todo')
+    valid(back)
+  })
+
+  it('refuses to change the kind of a root node', () => {
+    expect(() => convertKind(base(), 'r')).toThrow()
+  })
 })
 
 describe('makeHere / clearHere', () => {
@@ -85,16 +115,20 @@ describe('makeHere / clearHere', () => {
     expect(out.tasks.m1.here).toBe(false)
     valid(out)
   })
+
+  it('refuses to set "here" on a project node', () => {
+    expect(() => makeHere(base(), 'r')).toThrow()
+  })
 })
 
 describe('addTree', () => {
-  it('starts a new tree with its own root, and works from an empty forest', () => {
-    const empty = { schema: 1, domain: 'T', trees: [], tasks: {} }
+  it('starts a new project with its own project-node root, and works from an empty forest', () => {
+    const empty = { schema: 2, domain: 'T', rootOrder: [], tasks: {} }
     const out = addTree(empty, 'Fresh')
-    expect(out.trees).toHaveLength(1)
-    expect(out.trees[0].name).toBe('Fresh')
-    const rootId = out.trees[0].rootTaskId
+    expect(out.rootOrder).toHaveLength(1)
+    const rootId = out.rootOrder[0]
     expect(out.tasks[rootId].title).toBe('Fresh')
+    expect(out.tasks[rootId].kind).toBe('project')
     valid(out)
   })
 })
@@ -118,13 +152,8 @@ describe('addTask', () => {
     valid(out)
   })
 
-  it('below a root makes the new task the root', () => {
-    const before = base()
-    const out = addTaskBelow(before, 'r', 'N')
-    const n = newId(before, out)
-    expect(out.trees[0].rootTaskId).toBe(n)
-    expect(out.tasks[n].next).toBe('r')
-    valid(out)
+  it('refuses to add a task below a root node', () => {
+    expect(() => addTaskBelow(base(), 'r', 'N')).toThrow()
   })
 
   it('below a branch child stays on that branch', () => {
@@ -157,11 +186,8 @@ describe('addBranch', () => {
     valid(out)
   })
 
-  it('records a fork below a root as at:above (a root has no gap below it)', () => {
-    const before = base()
-    const out = addBranchBelow(before, 'r', 'A')
-    expect(out.tasks.r.branches[0].at).toBe('above')
-    valid(out)
+  it('refuses to add a branch below a root node', () => {
+    expect(() => addBranchBelow(base(), 'r', 'A')).toThrow()
   })
 })
 
@@ -180,9 +206,9 @@ describe('deleteTask — subtree', () => {
     valid(out)
   })
 
-  it('removes a whole tree when its root is deleted', () => {
+  it('removes the whole project when its root is deleted', () => {
     const out = deleteTask(base(), 'r', 'subtree')
-    expect(out.trees).toEqual([])
+    expect(out.rootOrder).toEqual([])
     expect(ids(out)).toEqual([])
     valid(out)
   })
@@ -215,10 +241,10 @@ describe('deleteTask — splice', () => {
     valid(out)
   })
 
-  it('promotes the successor to root when a root is spliced', () => {
+  it('deleting a root removes the whole project, even in splice mode', () => {
     const out = deleteTask(base(), 'r', 'splice')
-    expect(out.tasks.r).toBeUndefined()
-    expect(out.trees[0].rootTaskId).toBe('m1')
+    expect(ids(out)).toEqual([])
+    expect(out.rootOrder).toEqual([])
     valid(out)
   })
 
@@ -233,14 +259,15 @@ describe('deleteTask — splice', () => {
   })
 
   it('keeps only the tip-most cursor when a splice merges two cursored lines', () => {
-    // r(here) -> t ; t forks to b0(here). Splice t: b0 is promoted onto r's line,
-    // which would carry two cursors — the tip-most (b0) survives.
+    // p(project) -> r(here) -> t ; t forks to b0(here). Splice t: b0 is promoted onto
+    // r's line, which would carry two cursors — the tip-most (b0) survives.
     const raw = {
-      schema: 1, domain: 'T', trees: [{ id: 't1', name: 'Tree', rootTaskId: 'r' }],
+      schema: 2, domain: 'T', rootOrder: ['p'],
       tasks: {
-        r: { id: 'r', title: 'r', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: true, next: 't', branches: [] },
-        t: { id: 't', title: 't', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: null, branches: [{ child: 'b0', side: 'left', at: 'above' }] },
-        b0: { id: 'b0', title: 'b0', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: true, next: null, branches: [] },
+        p: { id: 'p', title: 'p', kind: 'project', createdAt: 'x', note: null, next: 'r', branches: [] },
+        r: { id: 'r', title: 'r', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: true, next: 't', branches: [] },
+        t: { id: 't', title: 't', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: null, branches: [{ child: 'b0', side: 'left', at: 'above' }] },
+        b0: { id: 'b0', title: 'b0', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: true, next: null, branches: [] },
       },
     }
     valid(raw)

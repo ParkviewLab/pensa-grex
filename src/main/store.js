@@ -154,7 +154,7 @@ export function createForest(name) {
   if (!dir) return { error: 'invalid domain name' }
   if (existsSync(dir)) return { error: `a domain named "${name}" already exists` }
   mkdirSync(dir, { recursive: true })
-  const skeleton = `{\n  schema: 1,\n  domain: ${JSON.stringify(name)},\n  trees: [],\n  tasks: {},\n}\n`
+  const skeleton = `{\n  schema: 2,\n  domain: ${JSON.stringify(name)},\n  rootOrder: [],\n  tasks: {},\n}\n`
   atomicWrite(join(dir, FOREST_FILE), skeleton)
   return { name, path: dir }
 }
