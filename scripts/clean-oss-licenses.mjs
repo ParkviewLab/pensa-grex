@@ -24,10 +24,12 @@ const raw = JSON.parse(await readFile(file, 'utf-8'))
 const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf-8'))
 const selfKey = `${pkg.name}@${pkg.version}`
 
-// Self-hosted fonts are bundled assets, not npm deps, so license-checker never
-// sees them; add them here so the in-app viewer credits them (OFL-1.1 text ships
-// via LICENSES/OFL-1.1.txt; see REUSE.toml for the per-file annotations).
-const bundledFonts = [
+// Bundled assets and vendored source are not npm deps, so license-checker never
+// sees them; add them here so the in-app viewer still credits them. Their license
+// texts ship via LICENSES/ (OFL-1.1.txt, LicenseRef-Kuiken.txt); see REUSE.toml
+// and each file's SPDX header. (The hypher engine that drives the hyphenation is
+// a normal npm dep, so it is listed automatically.)
+const bundledAssets = [
   {
     name: 'League Spartan',
     version: 'bundled',
@@ -39,6 +41,13 @@ const bundledFonts = [
     version: 'bundled',
     license: 'OFL-1.1',
     repository: 'https://github.com/google/fonts/tree/main/ofl/boogaloo',
+  },
+  {
+    // Vendored en-US hyphenation patterns (src/renderer/src/text/hyphen-en-us.js).
+    name: 'en-US hyphenation patterns (hyph-en-us)',
+    version: 'bundled',
+    license: 'LicenseRef-Kuiken (all-permissive) © Gerard D.C. Kuiken',
+    repository: 'https://ctan.org/pkg/hyph-utf8',
   },
 ]
 
@@ -53,7 +62,7 @@ const list = Object.entries(raw)
       repository: cleanRepo(v.repository),
     }
   })
-  .concat(bundledFonts)
+  .concat(bundledAssets)
   .sort((a, b) => a.name.localeCompare(b.name))
 
 await writeFile(file, JSON.stringify(list, null, 2) + '\n')
