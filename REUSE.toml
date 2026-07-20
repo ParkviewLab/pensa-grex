@@ -48,9 +48,11 @@ path = ["src/renderer/src/assets/fonts/Boogaloo-latin.woff2"]
 SPDX-FileCopyrightText = 'Copyright (c) 2011, John Vargas Beltran (www.johnvargasbeltran.com|john.vargasbeltran@gmail.com), with Reserved Font Name "Boogaloo".'
 SPDX-License-Identifier = "OFL-1.1"
 
-# App icon — ParkviewLab brand mark (B&W placeholder), all rights reserved.
-# icon.svg is the regen source; icon.png (1024²) is what electron-builder uses.
+# App icon — PensaGrex atomic-age mark (a three-orbit atom over a Googie task
+# screen), all rights reserved. icon.svg (azure/day) is the regen source and is
+# what electron-builder expands into the platform .icns/.ico/PNG; icon.png (1024²)
+# is rendered from it; icon-night.svg is the navy alternate, kept for future use.
 [[annotations]]
-path = ["build/icon.png", "build/icon.svg"]
+path = ["build/icon.png", "build/icon.svg", "build/icon-night.svg"]
 SPDX-FileCopyrightText = "2026 Gary Frattarola <garyf@parkviewlab.ai>"
 SPDX-License-Identifier = "LicenseRef-AllRightsReserved"
