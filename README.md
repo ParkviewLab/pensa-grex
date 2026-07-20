@@ -3,7 +3,7 @@ SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 SPDX-License-Identifier: CC-BY-4.0
 -->
 
-# TaskForkStack
+# PensaGrex
 
 A Googie-themed desktop app that keeps track of what you are doing as a forest of
 task trees, one forest per domain (HomeLab, Work, and so on). You push a task onto
@@ -33,7 +33,7 @@ npm run build:dist   # platform installers (.dmg / NSIS / AppImage + .deb) in di
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 [![REUSE compliant](https://img.shields.io/badge/REUSE-compliant-green.svg)](https://reuse.software)
 
-TaskForkStack is **dual-licensed**: the code is free software under **AGPL-3.0-or-later** by default,
+PensaGrex is **dual-licensed**: the code is free software under **AGPL-3.0-or-later** by default,
 with a **commercial license** available as an alternative (for closed-source use without the AGPL's
 obligations). Documentation is **CC-BY-4.0**.
 

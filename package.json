@@ -1,16 +1,16 @@
 {
-  "name": "taskforkstack",
+  "name": "pensa-grex",
   "version": "0.1.0-dev0",
-  "description": "TaskForkStack desktop app",
+  "description": "PensaGrex desktop app",
   "author": "Gary Frattarola <garyf@parkviewlab.ai>",
   "license": "AGPL-3.0-or-later",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/garycoding/TaskForkStack.git"
+    "url": "git+https://github.com/ParkviewLab/pensa-grex.git"
   },
-  "homepage": "https://github.com/garycoding/TaskForkStack#readme",
+  "homepage": "https://github.com/ParkviewLab/pensa-grex#readme",
   "bugs": {
-    "url": "https://github.com/garycoding/TaskForkStack/issues"
+    "url": "https://github.com/ParkviewLab/pensa-grex/issues"
   },
   "main": "out/main/index.js",
   "scripts": {

@@ -52,7 +52,7 @@ three warm accents**, used consistently.
 - A clean, legible **sans for the UI body** — the interface stays readable;
   the retro character lives in ornament and colour, not in the working text.
 
-## How it could map onto TaskForkStack (sketch, not decided)
+## How it could map onto PensaGrex (sketch, not decided)
 
 - The **fork point** as a starburst or atom hub.
 - The **branch cursor** as a sputnik / atomic marker (it must read

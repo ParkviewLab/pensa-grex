@@ -5,7 +5,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 # Licensing
 
-TaskForkStack is **dual-licensed**, and different parts of the repository
+PensaGrex is **dual-licensed**, and different parts of the repository
 carry different licenses. This file is the human-readable guide; the exact,
 machine-readable license texts live in [`LICENSES/`](LICENSES/) — one file per
 license, as required by the [REUSE](https://reuse.software) specification.
@@ -25,7 +25,7 @@ Full text: [`LICENSE`](LICENSE) (also `LICENSES/AGPL-3.0-or-later.txt`).
 ## The commercial option
 
 If you cannot or prefer not to comply with the AGPL — for example to embed
-TaskForkStack in a closed-source product, or to avoid the source-disclosure
+PensaGrex in a closed-source product, or to avoid the source-disclosure
 obligation — a **separate commercial license** is available from the copyright
 holder.
 

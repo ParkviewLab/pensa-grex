@@ -1,6 +1,6 @@
 name: Test
 
-# Electron-app CI — lint, unit tests, and a build smoke-test. TaskForkStack is
+# Electron-app CI — lint, unit tests, and a build smoke-test. PensaGrex is
 # plain JavaScript (no TypeScript), so there is no typecheck tier; the pure
 # model/layout modules are unit-tested with Vitest as of M2. See the
 # handbook's ci.md / node-tooling.md.

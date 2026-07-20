@@ -3,7 +3,7 @@ SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 SPDX-License-Identifier: CC-BY-4.0
 -->
 
-# TaskForkStack — northstar
+# PensaGrex — northstar
 
 The canonical statement of what this project is for. Design decisions and
 feature proposals are weighed against it. Where it and the code disagree, this
@@ -11,7 +11,7 @@ document is the authority, and the code is the thing to fix.
 
 ## What it is
 
-TaskForkStack keeps track of what you are doing: a live, evolving forest of task
+PensaGrex keeps track of what you are doing: a live, evolving forest of task
 trees, one forest per domain (HomeLab, Work, and so on). You push a task onto the
 tip of a stack, pop it when it is done, and fork a parallel stack when the work
 diverges. A cursor you set by hand ("here") marks where you are on each branch.
@@ -20,7 +20,7 @@ diverges. A cursor you set by hand ("here") marks where you are on each branch.
 
 Most task tools are flat lists or nested checklists. Neither matches how a piece
 of work actually grows: you are somewhere specific, tasks stack up ahead of you,
-and every so often the work forks. TaskForkStack is built so that the tool's
+and every so often the work forks. PensaGrex is built so that the tool's
 structure is that structure, and so that you can see it at a glance.
 
 ## Three intents

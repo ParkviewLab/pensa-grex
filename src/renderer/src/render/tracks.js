@@ -17,8 +17,8 @@ function el(tag, attrs) {
 // Idempotently ensure svgEl has the <defs> with the #sputnik and #starburst
 // symbol groups. Safe to call more than once; a second call is a no-op.
 export function ensureDefs(svgEl) {
-  if (svgEl.querySelector('defs#tfs-defs')) return
-  const defs = el('defs', { id: 'tfs-defs' })
+  if (svgEl.querySelector('defs#pensagrex-defs')) return
+  const defs = el('defs', { id: 'pensagrex-defs' })
 
   // The "here" mark: an atomic starburst — solid rays of irregular length at
   // irregular angles, each tipped with a ball, around a solid centre (Googie,

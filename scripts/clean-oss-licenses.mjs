@@ -5,7 +5,7 @@
 // array the in-app "Open Source Licenses" viewer reads.
 //
 // Runs after `license-checker-rseidelsohn --production --json` writes the raw map
-// to legal/oss-licenses.json. The raw map (a) lists TaskForkStack itself (the
+// to legal/oss-licenses.json. The raw map (a) lists PensaGrex itself (the
 // AGPL root, not a third-party dep) and (b) embeds absolute local build paths
 // (/Users/…, /home/runner/…) that must not ship. This rewrites it to a sorted
 // array of { name, version, license, repository } — third-party packages only.
