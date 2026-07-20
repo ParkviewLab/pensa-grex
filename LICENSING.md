@@ -38,9 +38,7 @@ holder.
 | Source code, build scripts, configuration, lockfiles | **`AGPL-3.0-or-later`** — or the commercial license above |
 | Documentation (`docs/`, `README.md`, this file) | **`CC-BY-4.0`** |
 | Bundled typefaces (`src/renderer/src/assets/fonts/`) | **`OFL-1.1`** (SIL Open Font License) — see below |
-
-A future brand/logo asset would be all-rights-reserved (`LicenseRef-AllRightsReserved`),
-matching the ParkviewLab convention this repo follows — added if/when one exists.
+| ParkviewLab logo and brand assets (the app icon, `build/icon.*`) | **All rights reserved** (`LicenseRef-AllRightsReserved`) — *not* covered by the AGPL or the commercial grant |
 
 ### Bundled typefaces
 
