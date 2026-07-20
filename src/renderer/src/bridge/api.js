@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Gary Frattarola <garycoding@gmail.com>
+// SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 
 // A thin renderer-side wrapper over window.taskforkstack (the preload bridge).
 // Two jobs beyond forwarding: it adds a per-domain debounced save so a burst of

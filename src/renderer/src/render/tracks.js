@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Gary Frattarola <garycoding@gmail.com>
+// SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 
 // The subway-map SVG layer: the sputnik (branch-cursor) and starburst
 // (atmosphere) marker symbols, track polylines, and fork-junction diamonds.

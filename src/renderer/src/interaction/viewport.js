@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Gary Frattarola <garycoding@gmail.com>
+// SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 
 // The pan/zoom/fit engine, ported from the design mock
 // (docs/subway-forest-themed.html). A viewport (fixed, clipped) shows a world

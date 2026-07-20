@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Gary Frattarola <garycoding@gmail.com>
+// SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 
 // The right-click menu. openContextMenu(x, y, items) renders a floating menu at
 // the pointer and returns nothing; it closes itself on an action, an outside

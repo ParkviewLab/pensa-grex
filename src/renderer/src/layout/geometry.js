@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Gary Frattarola <garycoding@gmail.com>
+// SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 
 // Pure geometry helpers for the layout engine: row assignment, the vertical
 // row grid, and horizontal lane packing. No DOM; every input is plain data

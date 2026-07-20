@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Gary Frattarola <garycoding@gmail.com>
+// SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 //
 // clean-oss-licenses.mjs — normalise the license-checker map into the compact
 // array the in-app "Open Source Licenses" viewer reads.

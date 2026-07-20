@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Gary Frattarola <garycoding@gmail.com>
+// SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 
 // Load-time invariants for a parsed forest object (see docs/model_ideas.md for
 // the schema this enforces). Pure and side-effect free: it only reads raw and

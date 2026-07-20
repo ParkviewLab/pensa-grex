@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Gary Frattarola <garycoding@gmail.com>
+// SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 
 // The Light/Dark ground toggle. Switching ground only flips a data attribute
 // — every fill in the skin is a CSS variable, so no re-layout or re-measure

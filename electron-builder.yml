@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2026 Gary Frattarola <garycoding@gmail.com>
+# SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # electron-builder — packages the electron-vite build (out/) into platform
 # installers: .dmg (macOS), NSIS .exe (Windows), .AppImage + .deb (Linux).
@@ -33,7 +33,7 @@ linux:
     - AppImage
     - deb
   category: Utility
-  maintainer: Gary Frattarola <garycoding@gmail.com>
+  maintainer: Gary Frattarola <garyf@parkviewlab.ai>
 npmRebuild: false
 # Ship the generated license/notice bundle (run `npm run legal` first; build:dist
 # does this before packaging). electron-builder deletes LICENSES.chromium.html

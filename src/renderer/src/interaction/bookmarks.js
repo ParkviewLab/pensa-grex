@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Gary Frattarola <garycoding@gmail.com>
+// SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 
 // Pure helpers for node-anchored bookmark cameras (see the Sub-Projects plan,
 // "Bookmarked views"). A bookmark stores no absolute pan; it stores the id of the
