@@ -1,15 +1,24 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Gary Frattarola <garycoding@gmail.com>
 
-// Station silhouette geometry, ported from the design mock
-// (docs/subway-forest-themed.html on doc-design-studies). A station's outline
-// is the gap between two filled paths: an outer silhouette and an inner one
-// inset per side (top/right/bottom/left), so the outline can carry a different
-// weight on each edge. Two shapes: "screen" (a rounded rectangle, the default
-// station) and "trapezium" (a leaning marquee quadrilateral with no parallel
-// sides, used for the current "here" station on a branch).
+// Station silhouette geometry and decorators. A station's outline is the gap
+// between two filled paths: an outer silhouette and an inner one, the inner a
+// scaled copy of the outer inset by a DIFFERENT amount per edge, so the outline
+// runs thin along one edge and thick along another (the Googie variable-weight
+// look). Four shapes — screen (a task), marquee (a task marked "here"), hull (a
+// project node), keystone (kept, currently unassigned) — plus composable
+// decorators drawn behind the card: `orbits` (the atomic rings of a project) and
+// `shadow` (a filled echo, used when a project is collapsed; see PR C).
 
 const SVGNS = 'http://www.w3.org/2000/svg'
+
+function setAttrs(node, attrs) {
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v)
+  return node
+}
+function svgEl(tag, attrs) {
+  return setAttrs(document.createElementNS(SVGNS, tag), attrs)
+}
 
 // A rounded rectangle path from (x0,y0) to (x1,y1) with corner radius r.
 export function rr(x0, y0, x1, y1, r) {
@@ -37,107 +46,125 @@ export function roundPoly(pts, rc) {
   return d + 'Z'
 }
 
-// Inset a polygon pts inward by a per-edge thickness th (th[i] is the inset
-// for the edge from pts[i] to pts[i+1]), by intersecting offset edge lines.
-export function insetPoly(pts, th) {
-  const n = pts.length
-  let cx = 0, cy = 0
-  for (let i = 0; i < n; i++) { cx += pts[i][0]; cy += pts[i][1] }
-  cx /= n; cy /= n
-  const lines = []
-  for (let i = 0; i < n; i++) {
-    const A = pts[i], B = pts[(i + 1) % n]
-    const dx = B[0] - A[0], dy = B[1] - A[1], len = Math.hypot(dx, dy) || 1
-    let nx = -dy / len, ny = dx / len
-    const mx = (A[0] + B[0]) / 2, my = (A[1] + B[1]) / 2
-    if ((cx - mx) * nx + (cy - my) * ny < 0) { nx = -nx; ny = -ny }
-    lines.push({ px: A[0] + nx * th[i], py: A[1] + ny * th[i], dx, dy })
-  }
-  const out = []
-  for (let i = 0; i < n; i++) {
-    const L1 = lines[(i - 1 + n) % n], L2 = lines[i]
-    const D = L1.dx * -L2.dy - -L2.dx * L1.dy
-    if (Math.abs(D) < 1e-6) { out.push([L2.px, L2.py]); continue }
-    const rx = L2.px - L1.px, ry = L2.py - L1.py
-    const tt = (rx * -L2.dy - -L2.dx * ry) / D
-    out.push([L1.px + L1.dx * tt, L1.py + L1.dy * tt])
-  }
-  return out
+// Per-edge outline thickness (px) by shape: thin one edge, thick another, sides
+// asymmetric — the Googie tell. The inner path is the outer scaled to leave
+// these borders on each side.
+const BORDERS = {
+  screen: { t: 3.5, r: 8, b: 3.5, l: 7 },
+  marquee: { t: 6, r: 8, b: 4, l: 5 },
+  hull: { t: 4, r: 5, b: 8, l: 8 },
+  keystone: { t: 3, r: 5, b: 9, l: 7 },
 }
 
-// sides = {t,r,b,l} outline thickness in px for each edge. Returns
-// { outer, inner } SVG path strings for the given shape at size w x h.
-export function buildShape(shape, w, h, sides) {
+// The outer silhouette path for a shape at size w x h (margin m off the edges).
+function outerPath(shape, w, h) {
   const m = 1.5
-  const t = Math.max(0, Math.min(sides.t, h / 2 - 4))
-  const b = Math.max(0, Math.min(sides.b, h / 2 - 4))
-  const l = Math.max(0, Math.min(sides.l, w / 2 - 4))
-  const r = Math.max(0, Math.min(sides.r, w / 2 - 4))
-  const mn = Math.min(t, b, l, r)
+  const x0 = m, x1 = w - m, y0 = m, y1 = h - m
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2
 
-  if (shape === 'trapezium') {
-    // Marquee lean: both sides slant the same way (rightward), with a slight
-    // taper so no two sides are parallel. Corners map to top/right/bottom/left.
-    const P = [[m + w * 0.10, m], [w - m, m + h * 0.05], [w - m - w * 0.08, h - m], [m, h - m - h * 0.10]]
-    const rcO = Math.min(7, h * 0.16, w * 0.06)
-    const rcI = Math.max(2.5, rcO - mn)
-    return { outer: roundPoly(P, rcO), inner: roundPoly(insetPoly(P, [t, r, b, l]), rcI) }
+  if (shape === 'keystone') {
+    const P = [
+      [x0 + 0.05 * w, y0 + 0.12 * h],
+      [x1, y0],
+      [x1 - 0.12 * w, y1],
+      [x0 + 0.20 * w, y1 - 0.06 * h],
+    ]
+    return roundPoly(P, Math.min(11, h * 0.22))
   }
-
+  if (shape === 'marquee') {
+    // Concave cushion: four corners at the box corners, each edge bowed inward.
+    return `M${x0},${y0} Q${cx},${(y0 + 0.14 * h).toFixed(1)} ${x1},${y0}` +
+      ` Q${(x1 - 0.05 * w).toFixed(1)},${cy} ${x1},${y1}` +
+      ` Q${cx},${(y1 - 0.14 * h).toFixed(1)} ${x0},${y1}` +
+      ` Q${(x0 + 0.05 * w).toFixed(1)},${cy} ${x0},${y0} Z`
+  }
+  if (shape === 'hull') {
+    // Wide, slightly concave top; sides taper inward; convex bottom.
+    const inset = 0.13 * w
+    return `M${x0},${(y0 + 0.10 * h).toFixed(1)} Q${cx},${(y0 + 0.22 * h).toFixed(1)} ${x1},${y0}` +
+      ` L${(x1 - inset).toFixed(1)},${(y1 - 0.05 * h).toFixed(1)}` +
+      ` Q${cx},${y1} ${(x0 + inset).toFixed(1)},${(y1 - 0.05 * h).toFixed(1)} Z`
+  }
+  // screen
   const R = Math.min(14, (h - 2 * m) / 2, (w - 2 * m) / 2)
-  const Ri = Math.max(3, R - mn)
-  return { outer: rr(m, m, w - m, h - m, R), inner: rr(m + l, m + t, w - m - r, h - m - b, Ri) }
+  return rr(x0, y0, x1, y1, R)
 }
 
-// Per-side outline weight by role: the current ("here") station runs a touch
-// heavier than a plain screen; both are thin top/bottom, heavier on the
-// sides, with the right edge a little heavier than the left.
-export function sidesForRole(isCursor) {
-  return isCursor ? { t: 4, r: 9, b: 4, l: 8 } : { t: 3.5, r: 8, b: 3.5, l: 7 }
+// Returns { outer, innerT }: the outer silhouette path, and the transform that
+// turns the SAME path into the inner (panel) shape, inset per edge by BORDERS.
+export function buildShape(shape, w, h) {
+  const outer = outerPath(shape, w, h)
+  const bd = BORDERS[shape] || BORDERS.screen
+  const l = Math.min(bd.l, w / 2 - 4), r = Math.min(bd.r, w / 2 - 4)
+  const t = Math.min(bd.t, h / 2 - 4), b = Math.min(bd.b, h / 2 - 4)
+  const sx = (w - l - r) / w, sy = (h - t - b) / h
+  return { outer, innerT: `translate(${l.toFixed(2)} ${t.toFixed(2)}) scale(${sx.toFixed(4)} ${sy.toFixed(4)})` }
 }
 
-// Build or update a card element's .cardbg silhouette (outer + inner filled
-// paths) from its current size and status/cursor classes. The outline colour
-// tracks the task's status; the current ("here") node is the orange accent.
+// The atomic orbits behind a project card: three thin, off-axis elliptical rings
+// centred on the card, each carrying one solid electron set back from apogee.
+function drawOrbits(group, cx, cy, colour) {
+  const O = [[72, 12, -30, -38], [66, 13, 40, 215], [68, 11, 103, -38]]
+  for (const [rx, ry, ang, t] of O) {
+    group.appendChild(svgEl('ellipse', {
+      cx, cy, rx, ry, fill: 'none', stroke: colour, 'stroke-width': 1.2,
+      'stroke-opacity': 0.7, transform: `rotate(${ang} ${cx} ${cy})`,
+    }))
+    const rad = (ang * Math.PI) / 180, tr = (t * Math.PI) / 180
+    const lx = rx * Math.cos(tr), ly = ry * Math.sin(tr)
+    const dx = cx + lx * Math.cos(rad) - ly * Math.sin(rad)
+    const dy = cy + lx * Math.sin(rad) + ly * Math.cos(rad)
+    group.appendChild(svgEl('circle', { cx: dx.toFixed(1), cy: dy.toFixed(1), r: 4, fill: colour }))
+  }
+}
+
+// Build or update a card's .cardbg silhouette (a decorator group, then the outer
+// and inner filled paths) from its size and its kind/here classes. A project
+// node draws the hull in the reserved project colour and wears the orbits; a
+// task marked "here" draws the marquee; every other task draws the screen. The
+// colour tracks the node's status (a task) or is the project colour.
 export function renderCard(cardEl) {
+  const isProject = cardEl.classList.contains('project')
   const isCursor = cardEl.classList.contains('cursor')
-  const shape = isCursor ? 'trapezium' : 'screen'
-  const sides = sidesForRole(isCursor)
+  const collapsed = cardEl.classList.contains('collapsed')
+  const shape = isProject ? 'hull' : isCursor ? 'marquee' : 'screen'
   const w = cardEl.offsetWidth, h = cardEl.offsetHeight
 
   let svg = cardEl.querySelector('svg.cardbg')
   if (!svg) {
-    svg = document.createElementNS(SVGNS, 'svg')
-    svg.setAttribute('class', 'cardbg')
-    svg.setAttribute('preserveAspectRatio', 'none')
-    const outer = document.createElementNS(SVGNS, 'path')
-    outer.setAttribute('class', 'outer')
-    const inner = document.createElementNS(SVGNS, 'path')
-    inner.setAttribute('class', 'inner')
-    svg.appendChild(outer)
-    svg.appendChild(inner)
+    svg = svgEl('svg', { class: 'cardbg', preserveAspectRatio: 'none' })
+    svg.appendChild(svgEl('g', { class: 'deco' }))
+    svg.appendChild(svgEl('path', { class: 'outer' }))
+    svg.appendChild(svgEl('path', { class: 'inner' }))
     cardEl.insertBefore(svg, cardEl.firstChild)
   }
 
   svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h)
-  const d = buildShape(shape, w, h, sides)
-  svg.querySelector('.outer').setAttribute('d', d.outer)
-  svg.querySelector('.inner').setAttribute('d', d.inner)
+  const { outer, innerT } = buildShape(shape, w, h)
+  const outerEl = svg.querySelector('.outer'), innerEl = svg.querySelector('.inner')
+  outerEl.setAttribute('d', outer)
+  innerEl.setAttribute('d', outer)
+  innerEl.setAttribute('transform', innerT)
 
-  // A project node wears the reserved project colour; a task wears its status
-  // colour (recovered from the status-glyph class). The current ("here") card
-  // takes no dedicated cursor colour — its here-ness is the trapezium shape, the
-  // heavier outline, and the sputnik mark instead.
-  let status = 'todo'
-  if (cardEl.classList.contains('project')) {
-    status = 'project'
+  let colour = 'todo'
+  if (isProject) {
+    colour = 'project'
   } else {
     const glyph = cardEl.querySelector('.gl')
     for (const name of ['done', 'prog', 'todo', 'cancel']) {
-      if (glyph && glyph.classList.contains(name)) { status = name; break }
+      if (glyph && glyph.classList.contains(name)) { colour = name; break }
     }
   }
-  svg.querySelector('.outer').style.fill = 'var(--c-' + status + ')'
+  outerEl.style.fill = 'var(--c-' + colour + ')'
+
+  // Decorators, behind the card. A collapsed project casts a filled shadow; a
+  // project wears the atomic orbits.
+  const deco = svg.querySelector('.deco')
+  deco.textContent = ''
+  if (collapsed) {
+    deco.appendChild(svgEl('path', { d: outer, transform: 'translate(9 -9)', fill: 'var(--c-project)', 'fill-opacity': 0.45 }))
+  }
+  if (isProject) drawOrbits(deco, w / 2, h / 2, 'var(--c-project)')
 }
 
 // Render every .card element under root (defaults to the whole document).
