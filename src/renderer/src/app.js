@@ -20,6 +20,7 @@ import { measureForest } from './layout/measure.js'
 import { computeForestLayout } from './layout/layout.js'
 import { createApi } from './bridge/api.js'
 import { taskIdFromEvent } from './interaction/hittest.js'
+import { createDragController } from './interaction/drag.js'
 import { openContextMenu, closeContextMenu } from './interaction/contextMenu.js'
 import { promptText, chooseAction } from './ui/dialog.js'
 import { createNoteEditor } from './notes/noteEditor.js'
@@ -93,6 +94,36 @@ window.addEventListener('beforeunload', () => {
 const viewport = createViewport({
   viewportEl, worldEl, pctEl,
   getBounds: () => currentLayout?.bounds || { w: 0, h: 0 },
+})
+
+// Drag-and-drop: dropping a node onto a card grafts it there (a task moves alone;
+// a project moves its whole subtree); dropping a sub-project on empty canvas
+// detaches it into its own tree; dropping a root on empty canvas reorders the
+// trees by where it lands; a task cannot be dropped on empty canvas. A drop onto
+// a node's own descendant (or itself) is refused. See the pure moves in
+// model/mutations.js and docs/northstar.md axiom 2 ("nothing before the root").
+createDragController({
+  contentEl, viewportEl,
+  canDrop: (sourceId, targetId) => {
+    if (!currentRaw || sourceId === targetId || !currentRaw.tasks[targetId]) return false
+    return !subtreeIdsOf(currentRaw, sourceId).has(targetId)
+  },
+  onDrop: (sourceId, targetId, clientX) => {
+    const node = currentRaw && currentRaw.tasks[sourceId]
+    if (!node) return
+    const isProject = node.kind === 'project'
+    if (targetId) {
+      if (sourceId === targetId || subtreeIdsOf(currentRaw, sourceId).has(targetId)) return
+      applyEdit(isProject
+        ? M.moveSubtree(currentRaw, sourceId, targetId)
+        : M.moveTaskNode(currentRaw, sourceId, targetId))
+      return
+    }
+    // dropped on empty canvas
+    if (!isProject) return // a task node cannot become a root
+    if (isRootId(currentRaw, sourceId)) applyEdit(M.reorderRoot(currentRaw, sourceId, rootDropIndex(sourceId, clientX)))
+    else applyEdit(M.detachToTree(currentRaw, sourceId))
+  },
 })
 
 document.getElementById('fit').addEventListener('click', () => viewport.fit())
@@ -216,6 +247,22 @@ function isRootId(raw, id) {
     if ((t.branches || []).some((b) => b.child === id)) return false
   }
   return true
+}
+
+// The index a dragged root should take when dropped on empty canvas at clientX:
+// the count of the OTHER roots whose on-screen centre lies left of the drop. The
+// roots are laid out left to right in the same order reorderRoot canonicalises to,
+// so this is a meaningful insertion index.
+function rootDropIndex(sourceId, clientX) {
+  let index = 0
+  for (const id of Object.keys(currentRaw.tasks)) {
+    if (id === sourceId || !isRootId(currentRaw, id)) continue
+    const el = contentEl.querySelector('[data-task-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]')
+    if (!el) continue
+    const r = el.getBoundingClientRect()
+    if ((r.left + r.right) / 2 < clientX) index++
+  }
+  return index
 }
 
 // Every id reachable from startId in raw (inclusive), following .next and branches.

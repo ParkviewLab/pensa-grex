@@ -75,6 +75,16 @@ body{
   background-size:40px 40px;
 }
 .viewport.dragging{ cursor:grabbing; }
+.viewport.drag-active{ cursor:grabbing; }
+/* Drag-and-drop: the grabbed card dims, a valid drop target is ringed, and a
+   small label follows the cursor. */
+.card.drag-src{ opacity:.4; }
+.card.drop-target{ outline:2px solid var(--cursor); outline-offset:4px; border-radius:10px; }
+.drag-preview{ position:fixed; z-index:70; transform:translate(12px,12px); pointer-events:none;
+  background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:6px;
+  padding:4px 9px; font-family:var(--font-display); font-size:12px; letter-spacing:.02em;
+  box-shadow:0 4px 14px rgba(0,0,0,.28); white-space:nowrap; max-width:220px; overflow:hidden;
+  text-overflow:ellipsis; }
 .world{ position:absolute; top:0; left:0; transform-origin:0 0; }
 .content{ position:relative; }
 

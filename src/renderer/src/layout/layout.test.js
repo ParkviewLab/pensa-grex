@@ -6,6 +6,8 @@ import JSON5 from 'json5'
 import fixtureRaw from '../model/fixtures/homelab.forest.json5?raw'
 import { buildForest } from '../model/forest.js'
 import { computeForestLayout } from './layout.js'
+import { validateForest } from '../model/validate.js'
+import * as M from '../model/mutations.js'
 
 // Synthetic, deterministic sizes standing in for layout/measure.js's real DOM
 // measurement — layout.js is pure and must not need a DOM to be exercised.
@@ -253,6 +255,39 @@ describe('computeForestLayout — non-crossing branches', () => {
       },
     }
     expect(countCrossings(layoutOf(deep))).toBe(0)
+  })
+})
+
+// Drag-and-drop rearranges the forest through the pure move mutations; the layout
+// must stay drawable (valid, no overlaps, no branch crossings) after each. These
+// exercise the four moves against the real HomeLab fixture.
+describe('computeForestLayout — after drag-and-drop moves', () => {
+  const fresh = () => JSON5.parse(fixtureRaw)
+  function drawable(raw) {
+    expect(validateForest(raw)).toEqual({ ok: true, errors: [] })
+    const forest = buildForest(raw)
+    const layout = computeForestLayout(forest, syntheticSizes(forest).sizes)
+    expect(countCrossings(layout)).toBe(0)
+    const rects = layout.stations.map(rectOf)
+    for (let i = 0; i < rects.length; i++) {
+      for (let j = i + 1; j < rects.length; j++) expect(overlaps(rects[i], rects[j])).toBe(false)
+    }
+  }
+
+  it('stays drawable after moving a task node onto a sibling', () => {
+    drawable(M.moveTaskNode(fresh(), 'k_restore', 'k_nas'))
+  })
+
+  it('stays drawable after grafting a whole tree as a sub-project', () => {
+    drawable(M.moveSubtree(fresh(), 'p_net', 'k_nas'))
+  })
+
+  it('stays drawable after detaching a converted sub-project into its own tree', () => {
+    drawable(M.detachToTree(M.convertKind(fresh(), 'k_migrate'), 'k_migrate'))
+  })
+
+  it('stays drawable after reordering a root', () => {
+    drawable(M.reorderRoot(fresh(), 'p_auto', 0))
   })
 })
 

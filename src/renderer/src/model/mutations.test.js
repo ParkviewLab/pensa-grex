@@ -6,6 +6,7 @@ import { validateForest } from './validate.js'
 import {
   setTitle, setNote, setStatus, makeHere, clearHere, addTree, convertKind,
   addTaskAbove, addTaskBelow, addBranchAbove, addBranchBelow, deleteTask, pasteAsTree,
+  moveTaskNode, moveSubtree, detachToTree, reorderRoot,
 } from './mutations.js'
 
 // A small valid forest: project root r -> m1(here) -> m2, with a fork b1 -> b2 off m1.
@@ -342,5 +343,126 @@ describe('pasteAsTree', () => {
     expect(Object.keys(second.next.tasks)).toHaveLength(10) // two disjoint trees
     expect(second.next.rootOrder[0]).not.toBe(second.next.rootOrder[1])
     valid(second.next)
+  })
+})
+
+describe('moveTaskNode', () => {
+  it('grafts a leaf task onto the target and leaves its old slot a tip', () => {
+    const out = moveTaskNode(base(), 'm2', 'b1') // m2 is a tip; b1 is on the fork
+    expect(out.tasks.m1.next).toBeNull() // m2 left m1 a tip
+    expect(out.tasks.b1.branches.map((b) => b.child)).toContain('m2')
+    expect(out.tasks.m2.next).toBeNull()
+    valid(out)
+  })
+
+  it('moves only the node, splicing its children onto its predecessor', () => {
+    const out = moveTaskNode(base(), 'm1', 'm2') // m1 has next m2 and fork b1
+    expect(out.tasks.r.next).toBe('m2') // m2 took m1's slot under the root
+    expect(out.tasks.m2.branches.map((b) => b.child).sort()).toEqual(['b1', 'm1'].sort()) // b1 spliced on, m1 grafted
+    expect(out.tasks.m1.next).toBeNull()
+    expect(out.tasks.m1.branches).toEqual([])
+    valid(out)
+  })
+
+  it('carries the "here" cursor with the moved node', () => {
+    const out = moveTaskNode(base(), 'm1', 'b2') // m1 is "here"
+    expect(out.tasks.m1.here).toBe(true)
+    expect(out.tasks.b2.branches.map((b) => b.child)).toContain('m1')
+    valid(out)
+  })
+
+  it('refuses a project node and a drop onto itself', () => {
+    expect(() => moveTaskNode(base(), 'r', 'm2')).toThrow() // r is a project
+    expect(() => moveTaskNode(base(), 'm2', 'm2')).toThrow()
+  })
+})
+
+// A forest with an interior sub-project: r -> a -> SP(project) -> s1 ; a forks to f1.
+function withSub() {
+  const t = (id, over = {}) => ({
+    id, title: id, kind: 'task', status: 'todo', createdAt: '2026-01-01T00:00:00Z', completedAt: null,
+    note: null, here: false, next: null, branches: [], ...over,
+  })
+  const p = (id, over = {}) => ({
+    id, title: id, kind: 'project', createdAt: '2026-01-01T00:00:00Z', note: null, next: null, branches: [], ...over,
+  })
+  return {
+    schema: 2, domain: 'T', rootOrder: ['r'],
+    tasks: {
+      r: p('r', { next: 'a' }),
+      a: t('a', { next: 'SP', branches: [{ child: 'f1', side: 'left', at: 'above' }] }),
+      SP: p('SP', { next: 's1' }),
+      s1: t('s1'),
+      f1: t('f1'),
+    },
+  }
+}
+
+describe('moveSubtree', () => {
+  it('grafts a whole subtree onto the target, intact', () => {
+    const out = moveSubtree(withSub(), 'SP', 'f1') // move the SP sub-project onto the fork tip
+    expect(out.tasks.a.next).toBeNull() // SP left a's main line
+    expect(out.tasks.f1.branches.map((b) => b.child)).toContain('SP')
+    expect(out.tasks.SP.next).toBe('s1') // subtree intact
+    valid(out)
+  })
+
+  it('drops a whole tree from rootOrder when grafted as a sub-project', () => {
+    // two trees; graft the second root's tree onto a node in the first
+    const two = withSub()
+    two.tasks.p2 = { id: 'p2', title: 'p2', kind: 'project', createdAt: '2026-01-02T00:00:00Z', note: null, next: 'q2', branches: [] }
+    two.tasks.q2 = { id: 'q2', title: 'q2', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: null, branches: [] }
+    two.rootOrder = ['r', 'p2']
+    const out = moveSubtree(two, 'p2', 'a')
+    expect(out.rootOrder).toEqual(['r']) // p2 is no longer a root
+    expect(out.tasks.a.branches.map((b) => b.child)).toContain('p2')
+    expect(out.tasks.p2.next).toBe('q2')
+    valid(out)
+  })
+
+  it('refuses grafting a subtree onto its own descendant, or onto itself', () => {
+    expect(() => moveSubtree(withSub(), 'SP', 's1')).toThrow() // s1 is inside SP
+    expect(() => moveSubtree(withSub(), 'SP', 'SP')).toThrow()
+  })
+})
+
+describe('detachToTree', () => {
+  it('turns a sub-project into its own root, carrying its subtree', () => {
+    const out = detachToTree(withSub(), 'SP')
+    expect(out.tasks.a.next).toBeNull() // SP cut from a's main line
+    expect(out.rootOrder).toContain('SP')
+    expect(out.tasks.SP.next).toBe('s1') // subtree intact
+    valid(out)
+  })
+
+  it('refuses a task node and a node that is already a root', () => {
+    expect(() => detachToTree(withSub(), 's1')).toThrow() // s1 is a task
+    expect(() => detachToTree(withSub(), 'r')).toThrow() // r is already a root
+  })
+})
+
+describe('reorderRoot', () => {
+  // three roots, only some listed in rootOrder (the rest are advisory-appended).
+  function threeRoots() {
+    const p = (id, createdAt) => ({ id, title: id, kind: 'project', createdAt, note: null, next: null, branches: [] })
+    return {
+      schema: 2, domain: 'T', rootOrder: ['A', 'B', 'C'],
+      tasks: { A: p('A', '2026-01-01T00:00:00Z'), B: p('B', '2026-01-02T00:00:00Z'), C: p('C', '2026-01-03T00:00:00Z') },
+    }
+  }
+
+  it('moves a root to a new index and clamps out-of-range indices', () => {
+    expect(reorderRoot(threeRoots(), 'C', 0).rootOrder).toEqual(['C', 'A', 'B'])
+    expect(reorderRoot(threeRoots(), 'A', 99).rootOrder).toEqual(['B', 'C', 'A'])
+  })
+
+  it('canonicalises an incomplete rootOrder to the full root set first', () => {
+    const raw = threeRoots()
+    raw.rootOrder = ['B'] // A and C are roots too, but unlisted (ordered by createdAt: A before C)
+    expect(reorderRoot(raw, 'C', 0).rootOrder).toEqual(['C', 'B', 'A'])
+  })
+
+  it('refuses a non-root node', () => {
+    expect(() => reorderRoot(withSub(), 'a', 0)).toThrow()
   })
 })
