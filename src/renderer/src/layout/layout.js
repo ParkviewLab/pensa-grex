@@ -11,7 +11,7 @@
 import { assignRows, buildRowGrid, assignLanes } from './geometry.js'
 
 const DEFAULTS = {
-  laneStep: 178, // fixed card width (138) + a horizontal gap between lanes
+  laneStep: 228, // fixed card width (188) + a horizontal gap between lanes
   rowGap: 40, // vertical clearance between one row's card and the next
   junctionExtra: 30, // extra clearance in a gap that carries a fork junction
   baseY: 0, // row 0's card-top y, before the final shift to positive bounds

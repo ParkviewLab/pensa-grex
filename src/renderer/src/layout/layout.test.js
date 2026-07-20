@@ -15,7 +15,7 @@ function syntheticSizes(forest) {
   const sizes = new Map()
   for (const [id, task] of forest.tasks) {
     const lines = task.here ? 3 : task.title.length > 18 ? 2 : 2
-    sizes.set(id, { cardW: 138, cardH: task.here ? 68 : 30 + lines * 12 })
+    sizes.set(id, { cardW: 188, cardH: task.here ? 68 : 30 + lines * 12 })
   }
   return { sizes }
 }
