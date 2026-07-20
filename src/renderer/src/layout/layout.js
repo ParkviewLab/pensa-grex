@@ -154,7 +154,7 @@ export function computeForestLayout(forest, sizes, opts = {}) {
     const x = finalX(sorted[0])
     const yBottom = anchorYOf(sorted[0])
     const yTop = anchorYOf(sorted[sorted.length - 1])
-    tracks.push({ points: [[x, yBottom], [x, yTop]] })
+    tracks.push({ points: [[x, yBottom], [x, yTop]], kind: 'riser' })
   }
 
   // ---- fork junctions + branch connector tracks ----
@@ -186,8 +186,8 @@ export function computeForestLayout(forest, sizes, opts = {}) {
         const pr = lineRows.get(lineOfTask.get(id))
         const riserTopY = anchorYForRow(pr.max) - offParent // highest point of the riser (smallest y)
         const riserBottomY = anchorYForRow(pr.min) - offParent // lowest point (largest y)
-        if (junctionY < riserTopY) tracks.push({ points: [[parentX, riserTopY], [parentX, junctionY]] })
-        else if (junctionY > riserBottomY) tracks.push({ points: [[parentX, riserBottomY], [parentX, junctionY]] })
+        if (junctionY < riserTopY) tracks.push({ points: [[parentX, riserTopY], [parentX, junctionY]], kind: 'riser' })
+        else if (junctionY > riserBottomY) tracks.push({ points: [[parentX, riserBottomY], [parentX, junctionY]], kind: 'riser' })
       }
       // Tilt the flat leg up ~12° to the elbow, then a vertical riser into the
       // lifted branch card (docs/tree-layout.md). The elbow and the card both rise
@@ -195,7 +195,7 @@ export function computeForestLayout(forest, sizes, opts = {}) {
       // diamond stays at [parentX, junctionY].
       const dir = Math.sign(branchAnchorY - junctionY) // -1 for an above-branch, +1 for a below-branch
       const elbowY = junctionY + dir * g.rise
-      tracks.push({ points: [[parentX, junctionY], [branchX, elbowY], [branchX, branchAnchorY]] })
+      tracks.push({ points: [[parentX, junctionY], [branchX, elbowY], [branchX, branchAnchorY]], kind: 'branch' })
     }
   }
   const junctions = Array.from(junctionByKey.values())

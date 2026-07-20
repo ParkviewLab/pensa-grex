@@ -55,8 +55,11 @@ export function trackPath(pts) {
   return pts.map(([x, y], i) => (i ? 'L' : 'M') + x + ',' + y).join(' ')
 }
 
-export function buildTrack(pts) {
-  return el('path', { class: 'track', d: trackPath(pts) })
+// A track path. `kind` is 'riser' (the vertical spine between stacked nodes on a
+// line) or 'branch' (a fork connector); the two are weighted differently in CSS,
+// the spine slightly heavier so the main line reads first.
+export function buildTrack(pts, kind) {
+  return el('path', { class: 'track ' + (kind === 'branch' ? 'branch' : 'riser'), d: trackPath(pts) })
 }
 
 // The small diamond marking a fork junction, centered at (cx,cy).
