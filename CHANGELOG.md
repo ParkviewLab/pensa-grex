@@ -4,6 +4,20 @@ All notable changes to this project are recorded here.
 
 ## [Unreleased]
 
+## [v1.1.0] - 2026-07-20
+
+### Highlights
+
+This release replaces the black-and-white placeholder brand mark with the actual PensaGrex app icon, a three-orbit atom over a tilted Googie task screen in the app's own palette, which is used to generate the platform icons at packaging time.
+
+### Docs
+
+- V1.0.2 [skip ci] (c0a7a51)
+
+### Features
+
+- Atomic-age app icon (#39) (69c3a43)
+
 ## [v1.0.2] - 2026-07-20
 
 ### Highlights
