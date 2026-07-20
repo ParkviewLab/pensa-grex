@@ -21,6 +21,7 @@ import { computeForestLayout } from './layout/layout.js'
 import { createApi } from './bridge/api.js'
 import { taskIdFromEvent } from './interaction/hittest.js'
 import { createDragController } from './interaction/drag.js'
+import { centeredStationId, anchorChain, resolveAnchor } from './interaction/bookmarks.js'
 import { openContextMenu, closeContextMenu } from './interaction/contextMenu.js'
 import { promptText, chooseAction } from './ui/dialog.js'
 import { createNoteEditor } from './notes/noteEditor.js'
@@ -52,6 +53,9 @@ let collapsedSet = new Set()
 // survives a domain switch. Renderer-local and non-persistent — it does not
 // outlive the app, and never touches the forest data.
 let clipboard = null
+// The domain's saved bookmarks (a named view: collapse set, zoom, node-anchored
+// camera). Shared with the domain data (northstar axiom 8), loaded per domain.
+let bookmarks = []
 
 // The note editor records a task's note filename on its first non-empty save, so
 // the note dot appears and the name is persisted in the forest.
@@ -234,9 +238,27 @@ async function openDomain(path, name) {
   if (migrated.changed) await api.saveForest(path, JSON5.stringify(raw, null, 2))
   const vs = await api.getViewState(name)
   collapsedSet = new Set(Array.isArray(vs.collapsed) ? vs.collapsed : [])
+  const bm = await api.getBookmarks(path)
+  bookmarks = parseBookmarks(bm && bm.text)
   await api.setLastDomain(name)
   updateDeleteButton()
   await render(raw, { fit: true })
+}
+
+// Bookmarks cross the bridge as text (the renderer owns the JSON shape); a missing
+// or unreadable file yields no bookmarks rather than an error the user must clear.
+function parseBookmarks(text) {
+  if (!text) return []
+  try {
+    const data = JSON.parse(text)
+    return Array.isArray(data.bookmarks) ? data.bookmarks : []
+  } catch {
+    return []
+  }
+}
+
+async function persistBookmarks() {
+  if (currentDomainPath) await api.setBookmarks(currentDomainPath, JSON.stringify({ bookmarks }, null, 2))
 }
 
 // A node is a root iff nothing points at it (no .next, no branch child). Roots
@@ -355,6 +377,66 @@ async function exportProjectFlow(taskId) {
   }
 }
 
+// ---- bookmarked views (a named collapse set + zoom + node-anchored camera) ----
+
+// Capture the current live view as a bookmark: its collapse set, its zoom, and
+// the node centred in the viewport plus that node's ancestor chain to the root
+// (a node-anchored camera, so the bookmark survives layout changes and degrades
+// to the nearest surviving ancestor rather than a stale coordinate).
+async function addBookmarkFlow() {
+  if (!currentLayout || !currentRaw) return
+  const name = await promptText({ title: 'Add bookmark', label: 'Name', value: '' })
+  if (name === null || !name.trim()) return
+  const { scale, tx, ty } = viewport.getTransform()
+  const cx = (viewportEl.clientWidth / 2 - tx) / scale
+  const cy = (viewportEl.clientHeight / 2 - ty) / scale
+  const anchorId = centeredStationId(currentLayout.stations, cx, cy)
+  bookmarks.push({
+    name: name.trim(),
+    collapsed: [...collapsedSet],
+    zoom: scale,
+    anchor: anchorId ? anchorChain(currentRaw, anchorId) : [],
+  })
+  await persistBookmarks()
+}
+
+// Apply a bookmark to the live view: restore its collapse set (client-local), then
+// centre the first node in its anchor chain that still exists and is visible. A
+// chain that runs dry (the whole anchored tree was deleted) is a broken bookmark:
+// fit the domain and say so. Collapse is resolved lazily here, not on delete.
+async function jumpToBookmark(bm) {
+  if (!currentRaw) return
+  collapsedSet = new Set((bm.collapsed || []).filter((id) => currentRaw.tasks[id] && currentRaw.tasks[id].kind === 'project'))
+  if (currentDomainName) api.setViewState(currentDomainName, { collapsed: [...collapsedSet] })
+  await render(currentRaw, { fit: false })
+  if (!currentLayout) return
+  const hit = resolveAnchor(bm.anchor || [], new Set(currentLayout.stations.map((s) => s.id)))
+  if (hit) {
+    const s = currentLayout.stations.find((st) => st.id === hit)
+    viewport.centerOn(s.x, s.cardTop + s.cardH / 2, bm.zoom)
+  } else {
+    viewport.fit()
+    await chooseAction({
+      title: 'Bookmark location is gone',
+      message: 'The node “' + bm.name + '” centred on no longer exists. Showing the whole domain instead.',
+      actions: [{ label: 'OK', value: null }],
+    })
+  }
+}
+
+async function deleteBookmarkFlow(index) {
+  const bm = bookmarks[index]
+  if (!bm) return
+  const confirm = await chooseAction({
+    title: 'Delete bookmark',
+    message: 'Delete the bookmark “' + bm.name + '”?',
+    actions: [{ label: 'Cancel', value: null }, { label: 'Delete', value: 'del', kind: 'danger' }],
+  })
+  if (confirm !== 'del') return
+  bookmarks.splice(index, 1)
+  await persistBookmarks()
+}
+
 // ---- editing flows (each dialog runs after the menu has closed) ----
 
 async function renameTask(taskId) {
@@ -468,6 +550,12 @@ function openCanvasMenu(x, y) {
   const items = [{ label: 'New tree…', onClick: () => addTreeFlow() }]
   // Paste a previously copied project as a new tree in this domain.
   if (clipboard) items.push({ label: 'Paste as new tree', onClick: () => pasteTreeFlow() })
+  items.push({ separator: true })
+  items.push({ label: 'Add bookmark…', onClick: () => addBookmarkFlow() })
+  if (bookmarks.length) {
+    items.push({ label: 'Jump to bookmark', submenu: bookmarks.map((bm) => ({ label: bm.name, onClick: () => jumpToBookmark(bm) })) })
+    items.push({ label: 'Delete bookmark', submenu: bookmarks.map((bm, i) => ({ label: bm.name, onClick: () => deleteBookmarkFlow(i) })) })
+  }
   openContextMenu(x, y, items)
 }
 

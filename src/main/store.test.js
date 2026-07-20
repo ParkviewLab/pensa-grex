@@ -135,6 +135,21 @@ describe('view state', () => {
   })
 })
 
+describe('bookmarks', () => {
+  it('round-trips bookmark text in the domain directory and reads a missing file as empty', () => {
+    const { path } = store.createForest('HomeLab')
+    expect(store.getBookmarks(path)).toEqual({ text: '' })
+    const text = JSON.stringify({ bookmarks: [{ name: 'Overview', collapsed: [], zoom: 1, anchor: ['k_a'] }] })
+    expect(store.setBookmarks(path, text)).toEqual({ ok: true })
+    expect(store.getBookmarks(path).text).toBe(text)
+  })
+
+  it('bounds bookmark paths to the library root', () => {
+    expect(store.getBookmarks('/etc').error).toMatch(/library root/)
+    expect(store.setBookmarks('/etc', '[]').error).toMatch(/library root/)
+  })
+})
+
 describe('path safety', () => {
   it('refuses a domain path outside the library root', async () => {
     expect(store.loadForest('/etc').error).toMatch(/library root/)

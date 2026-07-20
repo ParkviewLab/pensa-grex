@@ -8,7 +8,7 @@ import pkg from '../../package.json'
 import {
   getSettings, setLastDomain, getLibraryRoot, setLibraryRoot,
   listDomains, createForest, deleteForest, loadForest, saveForest, readNote, writeNote, deleteNote,
-  getViewState, setViewState, writeExport,
+  getViewState, setViewState, writeExport, getBookmarks, setBookmarks,
 } from './store.js'
 
 const isDev = !app.isPackaged
@@ -279,6 +279,8 @@ app.whenReady().then(() => {
     if (canceled || !filePath) return { canceled: true }
     return writeExport(filePath, text)
   })
+  ipcMain.handle('tfs:get-bookmarks', (_e, dir) => getBookmarks(dir))
+  ipcMain.handle('tfs:set-bookmarks', (_e, dir, text) => setBookmarks(dir, text))
 
   // Safety net: keep the window from navigating away from the app; open any
   // external URL that slips through in the system browser instead.
