@@ -28,6 +28,8 @@ function wrapRealBridge(bridge) {
     writeNote:         (dir, file, text) => bridge.writeNote(dir, file, text),
     deleteNote:        (dir, file) => bridge.deleteNote(dir, file),
     openExternal:      (url) => bridge.openExternal(url),
+    getViewState:      (domain) => bridge.getViewState(domain),
+    setViewState:      (domain, state) => bridge.setViewState(domain, state),
   }
 }
 
@@ -37,6 +39,7 @@ function makeFallback() {
     ['/virtual/Work', workRaw],
   ])
   const notes = new Map()
+  const viewState = new Map()
   let lastDomain = null
   const domains = () =>
     [...forests.keys()].map((path) => ({ name: path.split('/').pop(), path })).sort((a, b) => a.name.localeCompare(b.name))
@@ -50,7 +53,7 @@ function makeFallback() {
     createForest:      async (name) => {
       const path = '/virtual/' + name
       if (forests.has(path)) return { error: 'exists' }
-      forests.set(path, `{ schema: 1, domain: ${JSON.stringify(name)}, trees: [], tasks: {} }\n`)
+      forests.set(path, `{ schema: 2, domain: ${JSON.stringify(name)}, rootOrder: [], tasks: {} }\n`)
       return { name, path }
     },
     deleteForest:      async (dir) => {
@@ -64,6 +67,8 @@ function makeFallback() {
     writeNote:         async (dir, file, text) => { notes.set(dir + '/' + file, text); return { ok: true } },
     deleteNote:        async (dir, file) => { notes.delete(dir + '/' + file); return { ok: true } },
     openExternal:      async (url) => { window.open(url, '_blank', 'noopener') },
+    getViewState:      async (domain) => viewState.get(domain) || { collapsed: [] },
+    setViewState:      async (domain, state) => { viewState.set(domain, { collapsed: (state && state.collapsed) || [] }); return { ok: true } },
   }
 }
 

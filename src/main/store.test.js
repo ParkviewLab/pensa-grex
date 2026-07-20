@@ -119,6 +119,22 @@ describe('notes', () => {
   })
 })
 
+describe('view state', () => {
+  it('round-trips collapsed ids per domain and reports an unknown domain as empty', () => {
+    expect(store.getViewState('HomeLab')).toEqual({ collapsed: [] })
+    store.setViewState('HomeLab', { collapsed: ['k_a', 'k_b'] })
+    expect(store.getViewState('HomeLab').collapsed).toEqual(['k_a', 'k_b'])
+    store.setViewState('Work', { collapsed: ['k_c'] })
+    expect(store.getViewState('HomeLab').collapsed).toEqual(['k_a', 'k_b']) // kept, keyed per domain
+    expect(store.getViewState('Work').collapsed).toEqual(['k_c'])
+  })
+
+  it('tolerates a corrupt view-state file by reading empty (view state is disposable)', () => {
+    writeFileSync(join(h.userData, 'viewstate.json'), '{ not json', 'utf-8')
+    expect(store.getViewState('HomeLab')).toEqual({ collapsed: [] })
+  })
+})
+
 describe('path safety', () => {
   it('refuses a domain path outside the library root', async () => {
     expect(store.loadForest('/etc').error).toMatch(/library root/)
