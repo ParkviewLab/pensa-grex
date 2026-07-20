@@ -23,4 +23,6 @@ contextBridge.exposeInMainWorld('taskforkstack', {
   getViewState:      (domain)            => ipcRenderer.invoke('tfs:get-view-state', domain),
   setViewState:      (domain, state)     => ipcRenderer.invoke('tfs:set-view-state', domain, state),
   exportMarkdown:    (defaultName, text) => ipcRenderer.invoke('tfs:export-markdown', defaultName, text),
+  getBookmarks:      (dir)               => ipcRenderer.invoke('tfs:get-bookmarks', dir),
+  setBookmarks:      (dir, text)         => ipcRenderer.invoke('tfs:set-bookmarks', dir, text),
 })

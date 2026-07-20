@@ -24,6 +24,10 @@ import {
 import { isValidDomainName, isValidNoteFile, resolveUnder } from './pathsafe.js'
 
 const FOREST_FILE = 'forest.json5'
+// Bookmarks are a saved, named view (northstar axiom 8): shared WITH the domain
+// data, so they live in the domain directory alongside forest.json5 (the live,
+// client-local collapse view stays in the userData sidecar, kept out of here).
+const BOOKMARKS_FILE = 'bookmarks.json'
 
 function settingsPath() {
   return join(app.getPath('userData'), 'settings.json')
@@ -302,6 +306,41 @@ export function writeExport(absPath, text) {
   try {
     atomicWrite(absPath, text)
     return { ok: true, path: absPath }
+  } catch (e) {
+    return { error: e.message }
+  }
+}
+
+// The domain's saved bookmarks, as raw text — the renderer owns the JSON shape,
+// so this layer stays schema-agnostic (as with forest text). A missing file
+// reads as empty; the renderer treats empty as "no bookmarks yet". Bounded to the
+// domain directory, atomic on write.
+export function getBookmarks(dirPath) {
+  let dir
+  try {
+    dir = requireDomainDir(dirPath)
+  } catch (e) {
+    return { error: e.message }
+  }
+  try {
+    return { text: readFileSync(join(dir, BOOKMARKS_FILE), 'utf-8') }
+  } catch (e) {
+    if (e.code === 'ENOENT') return { text: '' }
+    return { error: e.message }
+  }
+}
+
+export function setBookmarks(dirPath, text) {
+  if (typeof text !== 'string') return { error: 'bookmarks text must be a string' }
+  let dir
+  try {
+    dir = requireDomainDir(dirPath)
+  } catch (e) {
+    return { error: e.message }
+  }
+  try {
+    atomicWrite(join(dir, BOOKMARKS_FILE), text)
+    return { ok: true }
   } catch (e) {
     return { error: e.message }
   }

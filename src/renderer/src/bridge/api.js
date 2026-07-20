@@ -31,6 +31,8 @@ function wrapRealBridge(bridge) {
     getViewState:      (domain) => bridge.getViewState(domain),
     setViewState:      (domain, state) => bridge.setViewState(domain, state),
     exportMarkdown:    (defaultName, text) => bridge.exportMarkdown(defaultName, text),
+    getBookmarks:      (dir) => bridge.getBookmarks(dir),
+    setBookmarks:      (dir, text) => bridge.setBookmarks(dir, text),
   }
 }
 
@@ -41,6 +43,7 @@ function makeFallback() {
   ])
   const notes = new Map()
   const viewState = new Map()
+  const bookmarks = new Map()
   let lastDomain = null
   const domains = () =>
     [...forests.keys()].map((path) => ({ name: path.split('/').pop(), path })).sort((a, b) => a.name.localeCompare(b.name))
@@ -83,6 +86,8 @@ function makeFallback() {
       setTimeout(() => URL.revokeObjectURL(url), 0)
       return { ok: true, path: a.download }
     },
+    getBookmarks:      async (dir) => ({ text: bookmarks.get(dir) || '' }),
+    setBookmarks:      async (dir, text) => { bookmarks.set(dir, text); return { ok: true } },
   }
 }
 

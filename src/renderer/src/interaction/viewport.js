@@ -39,6 +39,21 @@ export function createViewport({ viewportEl, worldEl, pctEl, getBounds, minScale
     apply()
   }
 
+  // The current pan/zoom, for capturing a view (a bookmark reads scale and the
+  // world point at the viewport centre from here).
+  function getTransform() {
+    return { scale, tx, ty }
+  }
+
+  // Pan (and optionally zoom) so a world point sits at the viewport centre — the
+  // node-anchored camera a bookmark restores. Absent nextScale, the zoom is kept.
+  function centerOn(worldX, worldY, nextScale) {
+    scale = clamp(nextScale || scale)
+    tx = viewportEl.clientWidth / 2 - worldX * scale
+    ty = viewportEl.clientHeight / 2 - worldY * scale
+    apply()
+  }
+
   let dragging = false, sx = 0, sy = 0, stx = 0, sty = 0
 
   function onWheel(e) {
@@ -78,5 +93,5 @@ export function createViewport({ viewportEl, worldEl, pctEl, getBounds, minScale
     viewportEl.removeEventListener('pointercancel', endDrag)
   }
 
-  return { fit, zoomAt, apply, clamp, getScale: () => scale, destroy }
+  return { fit, zoomAt, apply, clamp, getScale: () => scale, getTransform, centerOn, destroy }
 }
