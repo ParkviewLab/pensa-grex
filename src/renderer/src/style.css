@@ -21,13 +21,13 @@
 :root[data-ground="azure"]{
   --ground:#d3e6ef; --panel:#f8f3e8; --ink:#173242; --line:#365b6c; --muted:#5f7d8b;
   --grid:rgba(23,50,66,.10);
-  --c-done:#1f8f8a; --c-prog:#d75f2e; --c-todo:#d9a53a; --c-cancel:#8aa0ab; --cursor:#d75f2e;
+  --c-done:#1f8f8a; --c-prog:#d75f2e; --c-todo:#d9a53a; --c-cancel:#8aa0ab; --c-project:#7d54a6; --cursor:#d75f2e;
   --burst-a:#1f8f8a; --burst-b:#d9a53a; --here-ink:var(--ink);
 }
 :root[data-ground="navy"]{
   --ground:#0f2334; --panel:#1a3a54; --ink:#e8f1f6; --line:#6fb6c9; --muted:#93b3c2;
   --grid:rgba(111,182,201,.13);
-  --c-done:#37c2ba; --c-prog:#f27a44; --c-todo:#f0bd55; --c-cancel:#7590a0; --cursor:#f27a44;
+  --c-done:#37c2ba; --c-prog:#f27a44; --c-todo:#f0bd55; --c-cancel:#7590a0; --c-project:#bd93e6; --cursor:#f27a44;
   --burst-a:#37c2ba; --burst-b:#f0bd55; --here-ink:var(--ground);
 }
 
@@ -126,6 +126,7 @@ body{
 .gl.prog{ background:var(--c-prog); }
 .gl.todo{ background:transparent; border:2px solid var(--c-todo); }
 .gl.cancel{ background:transparent; border:1.5px dashed var(--c-cancel); }
+.gl.project{ background:var(--c-project); }
 
 /* Right-click menu (interaction/contextMenu.js). */
 .menu{ position:fixed; z-index:50; min-width:190px; background:var(--panel); color:var(--ink);

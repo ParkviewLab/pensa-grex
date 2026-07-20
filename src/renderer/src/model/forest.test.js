@@ -16,9 +16,10 @@ describe('buildForest — the HomeLab fixture', () => {
     forest = buildForest(raw)
   })
 
-  it('carries the domain and all three trees', () => {
+  it('carries the domain and all three projects, named by their root nodes, in rootOrder', () => {
     expect(forest.domain).toBe('HomeLab')
-    expect(forest.trees.map((t) => t.name)).toEqual(['Media server', 'Home network', 'Home automation'])
+    expect(forest.trees.map((t) => forest.getTask(t.rootTaskId).title)).toEqual(['Media server', 'Home network', 'Home automation'])
+    expect(forest.trees.map((t) => t.id)).toEqual(['p_media', 'p_net', 'p_auto'])
   })
 
   it('derives each task\'s predecessor without it being stored on the task', () => {
@@ -31,18 +32,21 @@ describe('buildForest — the HomeLab fixture', () => {
     expect(forest.getTask('k_plex').branchSide).toBe('left')
     expect(forest.getTask('k_plex').branchAt).toBe('above')
 
-    expect(forest.getTask('k_nas').predecessorId).toBeNull() // the root
+    expect(forest.getTask('k_nas').predecessorId).toBe('p_media') // grows above the project root
+    expect(forest.getTask('p_media').predecessorId).toBeNull() // the root
   })
 
-  it('assigns every task to the tree its root reaches, forks included', () => {
-    expect(forest.getTreeIdForTask('k_nas')).toBe('t_media')
-    expect(forest.getTreeIdForTask('k_plex')).toBe('t_media') // a branch task, same tree as its root
-    expect(forest.getTreeIdForTask('k_btrfs')).toBe('t_media')
-    expect(forest.getTreeIdForTask('k_wifi')).toBe('t_net')
-    expect(forest.getTreeIdForTask('k_energy')).toBe('t_auto')
+  it('assigns every node to the tree its root reaches, forks included', () => {
+    expect(forest.getTreeIdForTask('p_media')).toBe('p_media')
+    expect(forest.getTreeIdForTask('k_nas')).toBe('p_media')
+    expect(forest.getTreeIdForTask('k_plex')).toBe('p_media') // a branch task, same tree as its root
+    expect(forest.getTreeIdForTask('k_btrfs')).toBe('p_media')
+    expect(forest.getTreeIdForTask('k_wifi')).toBe('p_net')
+    expect(forest.getTreeIdForTask('k_energy')).toBe('p_auto')
   })
 
   it('walks the main-line chain via .next, stopping at a tip', () => {
+    expect(forest.getMainLineChain('p_media')).toEqual(['p_media', 'k_nas', 'k_migrate', 'k_backups', 'k_restore'])
     expect(forest.getMainLineChain('k_nas')).toEqual(['k_nas', 'k_migrate', 'k_backups', 'k_restore'])
     expect(forest.getMainLineChain('k_wifi')).toEqual(['k_wifi', 'k_roam'])
     expect(forest.getMainLineChain('k_plex')).toEqual(['k_plex']) // a single-task branch tip
@@ -57,10 +61,10 @@ describe('buildForest — the HomeLab fixture', () => {
     expect(forest.getBranchChildren('k_restore')).toEqual([]) // a tip with no forks
   })
 
-  it('finds the "here" task on each tree\'s trunk line', () => {
-    expect(forest.getHereTaskId('k_nas')).toBe('k_migrate')
-    expect(forest.getHereTaskId('k_rack')).toBe('k_firewall')
-    expect(forest.getHereTaskId('k_hassio')).toBe('k_zigbee')
+  it('finds the "here" task on each project\'s trunk line, skipping the project root', () => {
+    expect(forest.getHereTaskId('p_media')).toBe('k_migrate')
+    expect(forest.getHereTaskId('p_net')).toBe('k_firewall')
+    expect(forest.getHereTaskId('p_auto')).toBe('k_zigbee')
     expect(forest.getHereTaskId('k_plex')).toBeNull() // this branch has no cursor
   })
 

@@ -14,6 +14,7 @@ import { initTheme } from './theme/theme.js'
 import { createViewport } from './interaction/viewport.js'
 import { mountLayout } from './render/scene.js'
 import { validateForest } from './model/validate.js'
+import { migrateForest } from './model/migrate.js'
 import { buildForest } from './model/forest.js'
 import { measureForest } from './layout/measure.js'
 import { computeForestLayout } from './layout/layout.js'
@@ -139,8 +140,8 @@ async function render(forest, { fit = true } = {}) {
     showEmpty('This domain has no tasks yet. Right-click the canvas to start a tree.')
     return
   }
-  const { sizes, titleSizes } = await measureForest(forest)
-  currentLayout = computeForestLayout(forest, sizes, titleSizes)
+  const { sizes } = await measureForest(forest)
+  currentLayout = computeForestLayout(forest, sizes)
   mountLayout(contentEl, currentLayout, forest)
   if (emptyEl) emptyEl.style.display = 'none'
   if (fit) viewport.fit()
@@ -175,6 +176,10 @@ async function openDomain(path, name) {
     showEmpty('“' + (name || path) + '” is not valid JSON5: ' + e.message)
     return
   }
+  // Bring an older forest up to the current schema before validating; persist the
+  // upgrade once, so migration happens on first open rather than on every load.
+  const migrated = migrateForest(raw)
+  raw = migrated.raw
   const validation = validateForest(raw)
   if (!validation.ok) {
     console.error('Forest failed validation:', validation.errors)
@@ -183,9 +188,20 @@ async function openDomain(path, name) {
   }
   currentRaw = raw
   currentDomainPath = path
+  if (migrated.changed) await api.saveForest(path, JSON5.stringify(raw, null, 2))
   await api.setLastDomain(name)
   updateDeleteButton()
   await render(buildForest(raw), { fit: true })
+}
+
+// A node is a root iff nothing points at it (no .next, no branch child). Roots
+// are project nodes; nothing may be added below them and their kind is fixed.
+function isRootId(raw, id) {
+  for (const t of Object.values(raw.tasks)) {
+    if (t.next === id) return false
+    if ((t.branches || []).some((b) => b.child === id)) return false
+  }
+  return true
 }
 
 // ---- editing flows (each dialog runs after the menu has closed) ----
@@ -210,9 +226,21 @@ async function addBranchFlow(dir, taskId) {
 
 async function deleteTaskFlow(taskId) {
   const task = currentRaw.tasks[taskId]
+  const isRoot = isRootId(currentRaw, taskId)
   const hasDescendants = !!task.next || (task.branches && task.branches.length > 0)
   let mode = 'subtree'
-  if (hasDescendants) {
+  if (isRoot && hasDescendants) {
+    // Deleting a project's root deletes the whole project — a root has no splice.
+    const confirm = await chooseAction({
+      title: 'Delete “' + task.title + '”',
+      message: 'Delete this whole project and everything in it?',
+      actions: [
+        { label: 'Cancel', value: null },
+        { label: 'Delete project', value: 'subtree', kind: 'danger' },
+      ],
+    })
+    if (confirm === null) return
+  } else if (hasDescendants) {
     mode = await chooseAction({
       title: 'Delete “' + task.title + '”',
       message: 'This task has tasks growing from it. Remove the whole subtree, or keep them by splicing the task above onto the one below?',
@@ -235,31 +263,44 @@ async function addTreeFlow() {
 
 function openTaskMenu(x, y, taskId) {
   const task = currentRaw.tasks[taskId]
-  const status = (label, value) => ({
-    label, checked: task.status === value,
-    onClick: () => applyEdit(M.setStatus(currentRaw, taskId, value)),
-  })
-  openContextMenu(x, y, [
-    { label: 'Status', submenu: [
+  const isProject = task.kind === 'project'
+  const isRoot = isRootId(currentRaw, taskId)
+  const items = []
+
+  if (!isProject) {
+    const status = (label, value) => ({
+      label, checked: task.status === value,
+      onClick: () => applyEdit(M.setStatus(currentRaw, taskId, value)),
+    })
+    items.push({ label: 'Status', submenu: [
       status('To do', 'todo'),
       status('In progress', 'in-progress'),
       status('Completed', 'completed'),
       status('Cancelled', 'cancelled'),
-    ] },
-    task.here
+    ] })
+    items.push(task.here
       ? { label: 'Clear here', onClick: () => applyEdit(M.clearHere(currentRaw, taskId)) }
-      : { label: 'Make here', onClick: () => applyEdit(M.makeHere(currentRaw, taskId)) },
-    { label: 'Rename…', onClick: () => renameTask(taskId) },
-    { separator: true },
-    { label: 'Add task above', onClick: () => addTaskFlow('above', taskId) },
-    { label: 'Add task below', onClick: () => addTaskFlow('below', taskId) },
-    { label: 'Add branch above', onClick: () => addBranchFlow('above', taskId) },
-    { label: 'Add branch below', onClick: () => addBranchFlow('below', taskId) },
-    { separator: true },
-    { label: 'Edit note…', onClick: () => openNote(taskId) },
-    { separator: true },
-    { label: 'Delete…', onClick: () => deleteTaskFlow(taskId) },
-  ])
+      : { label: 'Make here', onClick: () => applyEdit(M.makeHere(currentRaw, taskId)) })
+  }
+  // A root is always a project node, so its kind cannot be changed.
+  if (!isRoot) {
+    items.push(isProject
+      ? { label: 'Make task', onClick: () => applyEdit(M.convertKind(currentRaw, taskId)) }
+      : { label: 'Make sub-project', onClick: () => applyEdit(M.convertKind(currentRaw, taskId)) })
+  }
+  items.push({ label: 'Rename…', onClick: () => renameTask(taskId) })
+  items.push({ separator: true })
+  items.push({ label: 'Add task above', onClick: () => addTaskFlow('above', taskId) })
+  // Nothing may be added below a root node (a project's base).
+  if (!isRoot) items.push({ label: 'Add task below', onClick: () => addTaskFlow('below', taskId) })
+  items.push({ label: 'Add branch above', onClick: () => addBranchFlow('above', taskId) })
+  if (!isRoot) items.push({ label: 'Add branch below', onClick: () => addBranchFlow('below', taskId) })
+  items.push({ separator: true })
+  items.push({ label: 'Edit note…', onClick: () => openNote(taskId) })
+  items.push({ separator: true })
+  items.push({ label: 'Delete…', onClick: () => deleteTaskFlow(taskId) })
+
+  openContextMenu(x, y, items)
 }
 
 function openCanvasMenu(x, y) {

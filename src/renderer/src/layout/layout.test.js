@@ -15,22 +15,14 @@ function syntheticSizes(forest) {
     const lines = task.here ? 3 : task.title.length > 18 ? 2 : 2
     sizes.set(id, { cardW: 138, cardH: task.here ? 68 : 30 + lines * 12 })
   }
-  const titleSizes = new Map()
-  for (const tree of forest.trees) {
-    titleSizes.set(tree.id, { titleW: Math.max(60, tree.name.length * 7), titleH: 14 })
-  }
-  return { sizes, titleSizes }
+  return { sizes }
 }
 
-function loadFixtureLayout(overrideTitleW) {
+function loadFixtureLayout() {
   const raw = JSON5.parse(fixtureRaw)
   const forest = buildForest(raw)
-  const { sizes, titleSizes } = syntheticSizes(forest)
-  if (overrideTitleW != null) {
-    const t = titleSizes.get('t_media')
-    titleSizes.set('t_media', { ...t, titleW: overrideTitleW })
-  }
-  return { forest, layout: computeForestLayout(forest, sizes, titleSizes) }
+  const { sizes } = syntheticSizes(forest)
+  return { forest, layout: computeForestLayout(forest, sizes) }
 }
 
 function rectOf(station) {
@@ -43,7 +35,7 @@ function overlaps(a, b) {
 describe('computeForestLayout — the HomeLab fixture', () => {
   it('places every station with finite, positive coordinates inside finite bounds', () => {
     const { layout } = loadFixtureLayout()
-    expect(layout.stations).toHaveLength(15)
+    expect(layout.stations).toHaveLength(18) // 15 tasks + 3 project-node roots
     expect(Number.isFinite(layout.bounds.w)).toBe(true)
     expect(Number.isFinite(layout.bounds.h)).toBe(true)
     for (const s of layout.stations) {
@@ -97,38 +89,22 @@ describe('computeForestLayout — the HomeLab fixture', () => {
     expect(j.y).toBeGreaterThan(backups.cardTop + backups.cardH) // below (larger y than) the upper card's bottom
   })
 
-  it('keeps every tree title centered under its own root, not colliding with a sibling tree', () => {
+  it('packs the three projects left to right without overlap', () => {
     const { layout } = loadFixtureLayout()
     const byId = new Map(layout.stations.map((s) => [s.id, s]))
-    for (const title of layout.titles) {
-      const rootId = { 't_media': 'k_nas', 't_net': 'k_rack', 't_auto': 'k_hassio' }[title.treeId]
-      expect(title.x).toBe(byId.get(rootId).x)
-    }
-    const titleXs = layout.titles.map((t) => t.x)
-    expect(new Set(titleXs).size).toBe(3) // three distinct tree positions
-  })
-
-  it('widening a tree\'s title pushes the next tree over, with no new overlap', () => {
-    const { layout: normal } = loadFixtureLayout()
-    const { layout: widened } = loadFixtureLayout(2000) // an absurdly long "Media server" title
-    const normalNextTreeX = normal.stations.find((s) => s.id === 'k_rack').x
-    const widenedNextTreeX = widened.stations.find((s) => s.id === 'k_rack').x
-    expect(widenedNextTreeX).toBeGreaterThan(normalNextTreeX)
-
-    const rects = widened.stations.map(rectOf)
-    for (let i = 0; i < rects.length; i++) {
-      for (let j = i + 1; j < rects.length; j++) {
-        expect(overlaps(rects[i], rects[j])).toBe(false)
-      }
-    }
+    // each project's root sits at a distinct x, left to right in rootOrder
+    const xs = ['p_media', 'p_net', 'p_auto'].map((id) => byId.get(id).x)
+    expect(new Set(xs).size).toBe(3)
+    expect(xs[0]).toBeLessThan(xs[1])
+    expect(xs[1]).toBeLessThan(xs[2])
   })
 
   it('an oversized cursor card still collides with nothing', () => {
     const raw = JSON5.parse(fixtureRaw)
     const forest = buildForest(raw)
-    const { sizes, titleSizes } = syntheticSizes(forest)
+    const { sizes } = syntheticSizes(forest)
     sizes.set('k_migrate', { cardW: 138, cardH: 400 }) // a wildly tall "here" trapezium
-    const layout = computeForestLayout(forest, sizes, titleSizes)
+    const layout = computeForestLayout(forest, sizes)
     const rects = layout.stations.map(rectOf)
     for (let i = 0; i < rects.length; i++) {
       for (let j = i + 1; j < rects.length; j++) {
@@ -141,7 +117,7 @@ describe('computeForestLayout — the HomeLab fixture', () => {
 describe('computeForestLayout — edge cases', () => {
   it('returns finite empty-forest bounds rather than NaN', () => {
     const emptyForest = { trees: [], tasks: new Map(), getTreeIdForTask: () => null }
-    const layout = computeForestLayout(emptyForest, new Map(), new Map())
+    const layout = computeForestLayout(emptyForest, new Map())
     expect(layout.stations).toEqual([])
     expect(Number.isFinite(layout.bounds.w)).toBe(true)
     expect(Number.isFinite(layout.bounds.h)).toBe(true)
@@ -155,8 +131,7 @@ describe('computeForestLayout — edge cases', () => {
     }
     const forest = buildForest(raw)
     const sizes = new Map([['a', { cardW: 138, cardH: 49 }]])
-    const titleSizes = new Map([['t1', { titleW: 60, titleH: 14 }]])
-    const layout = computeForestLayout(forest, sizes, titleSizes)
+    const layout = computeForestLayout(forest, sizes)
     expect(layout.stations).toHaveLength(1)
     expect(Number.isFinite(layout.bounds.w)).toBe(true)
   })
@@ -174,8 +149,7 @@ describe('computeForestLayout — edge cases', () => {
     }
     const forest = buildForest(raw)
     const sizes = new Map([['r', { cardW: 138, cardH: 49 }], ['b', { cardW: 138, cardH: 49 }]])
-    const titleSizes = new Map([['t1', { titleW: 60, titleH: 14 }]])
-    const layout = computeForestLayout(forest, sizes, titleSizes)
+    const layout = computeForestLayout(forest, sizes)
     for (const j of layout.junctions) {
       expect(Number.isFinite(j.x)).toBe(true)
       expect(Number.isFinite(j.y)).toBe(true)
@@ -202,8 +176,8 @@ function mkTask(id, over = {}) {
 
 function layoutOf(raw) {
   const forest = buildForest(raw)
-  const { sizes, titleSizes } = syntheticSizes(forest)
-  return computeForestLayout(forest, sizes, titleSizes)
+  const { sizes } = syntheticSizes(forest)
+  return computeForestLayout(forest, sizes)
 }
 
 // All track segments (risers, L-connectors, and the new tip-fork stubs).

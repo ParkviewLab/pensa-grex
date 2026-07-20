@@ -2,8 +2,8 @@
 // SPDX-FileCopyrightText: 2026 Gary Frattarola <garycoding@gmail.com>
 
 // The DOM half of the model → measure → layout → render pipeline: mounts a
-// real (off-screen) card for every task and a real title for every tree,
-// reads their laid-out pixel sizes, then removes them. layout/layout.js
+// real (off-screen) card for every node, reads its laid-out pixel size, then
+// removes it. layout/layout.js
 // consumes the resulting sizes as plain data and never touches the DOM
 // itself — see docs — so this is the only place actual text wrapping and
 // font metrics matter. Card width is fixed by style.css, but height varies
@@ -46,10 +46,10 @@ async function fontsReady() {
   }
 }
 
-// Returns { sizes: Map<taskId,{cardW,cardH}>, titleSizes: Map<treeId,{titleW,titleH}> }.
-// A task's own .here flag (already validated to at most one per line by
-// model/validate.js) decides whether it measures as a cursor card — the
-// wider/taller trapezium with its HERE chip.
+// Returns { sizes: Map<nodeId,{cardW,cardH}> }. A task's own .here flag (already
+// validated to at most one per line by model/validate.js) decides whether it
+// measures as a cursor card — the wider/taller trapezium with its HERE chip. A
+// project node is never a cursor.
 export async function measureForest(forest) {
   await fontsReady()
   const container = offscreenContainer()
@@ -61,25 +61,11 @@ export async function measureForest(forest) {
     cardEls.set(id, card)
   }
 
-  const titleEls = new Map()
-  for (const tree of forest.trees) {
-    const ttl = document.createElement('div')
-    ttl.className = 'ttl'
-    ttl.style.position = 'static' // .ttl is normally position:absolute; measure it in flow instead
-    ttl.textContent = tree.name
-    container.appendChild(ttl)
-    titleEls.set(tree.id, ttl)
-  }
-
   const sizes = new Map()
   for (const [id, card] of cardEls) {
     sizes.set(id, { cardW: card.offsetWidth, cardH: card.offsetHeight })
   }
-  const titleSizes = new Map()
-  for (const [treeId, ttl] of titleEls) {
-    titleSizes.set(treeId, { titleW: ttl.offsetWidth, titleH: ttl.offsetHeight })
-  }
 
   container.remove()
-  return { sizes, titleSizes }
+  return { sizes }
 }

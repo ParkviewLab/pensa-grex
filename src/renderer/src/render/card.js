@@ -3,9 +3,10 @@
 
 // Builds a station's DOM: the .card content (used both for off-screen
 // measurement in layout/measure.js and for the final positioned render in
-// scene.js) and the positioned .stbox wrapper. Generalizes M1's
-// buildStationCard (which took a render-only fixture station) to a real
-// task record from the forest model (model/forest.js).
+// scene.js) and the positioned .stbox wrapper, from a real node record (see
+// model/forest.js). A task node shows a status glyph and tag and can be the
+// "here" cursor; a project node ("sub-project") shows neither — it wears the
+// reserved project colour (see render/shapes.js) and carries the project's name.
 
 const STATUS_GLYPH = { todo: 'todo', 'in-progress': 'prog', completed: 'done', cancelled: 'cancel' }
 const STATUS_TAG = { todo: 'to do', 'in-progress': 'in progress', completed: 'done', cancelled: 'cancelled' }
@@ -18,18 +19,23 @@ export function statusTagText(status) {
   return STATUS_TAG[status] || status
 }
 
-// An unpositioned .card element for task. isCursor comes from the caller
-// (the layout knows which line's "here" this is) rather than task.here
-// directly, so a card can be measured/rendered consistently either way.
+// An unpositioned .card element for a node. isCursor comes from the caller (the
+// layout knows which line's "here" this is) rather than task.here directly, so a
+// card can be measured/rendered consistently either way. A project node is never
+// a cursor.
 export function buildCard(task, { isCursor } = {}) {
+  const isProject = task.kind === 'project'
+  const cursor = isCursor && !isProject
+
   const card = document.createElement('div')
   card.className = 'card'
   card.dataset.taskId = task.id
-  if (isCursor) card.classList.add('cursor')
-  if (task.status === 'cancelled') card.classList.add('cancel')
+  if (isProject) card.classList.add('project')
+  if (cursor) card.classList.add('cursor')
+  if (!isProject && task.status === 'cancelled') card.classList.add('cancel')
   if (task.note) card.classList.add('note')
 
-  if (isCursor) {
+  if (cursor) {
     const here = document.createElement('span')
     here.className = 'here'
     here.textContent = '▲ HERE'
@@ -42,7 +48,7 @@ export function buildCard(task, { isCursor } = {}) {
   const hd = document.createElement('div')
   hd.className = 'hd'
   const gl = document.createElement('span')
-  gl.className = 'gl ' + statusGlyphClass(task.status)
+  gl.className = isProject ? 'gl project' : 'gl ' + statusGlyphClass(task.status)
   const lbl = document.createElement('span')
   lbl.className = 'lbl'
   lbl.textContent = task.title
@@ -50,10 +56,12 @@ export function buildCard(task, { isCursor } = {}) {
   hd.appendChild(lbl)
   card.appendChild(hd)
 
-  const tag = document.createElement('span')
-  tag.className = 'tag'
-  tag.textContent = statusTagText(task.status)
-  card.appendChild(tag)
+  if (!isProject) {
+    const tag = document.createElement('span')
+    tag.className = 'tag'
+    tag.textContent = statusTagText(task.status)
+    card.appendChild(tag)
+  }
 
   return card
 }

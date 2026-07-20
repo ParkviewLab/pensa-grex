@@ -66,9 +66,9 @@ describe('domains', () => {
     expect(created.name).toBe('HomeLab')
     const load = store.loadForest(created.path)
     const parsed = JSON5.parse(load.text)
-    expect(parsed.schema).toBe(1)
+    expect(parsed.schema).toBe(2)
     expect(parsed.domain).toBe('HomeLab')
-    expect(parsed.trees).toEqual([])
+    expect(parsed.rootOrder).toEqual([])
     expect(store.listDomains()).toEqual([{ name: 'HomeLab', path: created.path }])
   })
 
@@ -80,7 +80,7 @@ describe('domains', () => {
 
   it('round-trips a saved forest', () => {
     const { path } = store.createForest('HomeLab')
-    const text = '{ schema: 1, domain: "HomeLab", trees: [], tasks: {} }\n'
+    const text = '{ schema: 2, domain: "HomeLab", rootOrder: [], tasks: {} }\n'
     expect(store.saveForest(path, text)).toEqual({ ok: true })
     expect(store.loadForest(path).text).toBe(text)
   })
