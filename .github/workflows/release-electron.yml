@@ -1,8 +1,8 @@
 name: Release
 
 # Tag-driven Electron release. On a `v*` tag: gate → build installers on a
-# macOS / Windows / Linux matrix (electron-vite + electron-builder, unsigned —
-# see docs/in-flight_ideas.md for the signing follow-up) → the shared changelog
+# macOS / Windows / Linux matrix (electron-vite + electron-builder; macOS signed +
+# notarized, Windows/Linux unsigned) → the shared changelog
 # job, which commits CHANGELOG.md back to main and creates the GitHub Release
 # with the three OS installers attached. A desktop app is not a server, so
 # there is NO GHCR image (cf. release-node.yml). The gate + changelog jobs
@@ -69,10 +69,23 @@ jobs:
       # licence notices and the in-app Licenses window shows a placeholder.
       - run: npm run legal
       - run: npm run build
-      - name: Package installers (unsigned)
+      - name: Prepare Apple API key (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          echo "${{ secrets.APPLE_API_KEY_B64 }}" | base64 --decode > "$RUNNER_TEMP/AuthKey.p8"
+          echo "APPLE_API_KEY=$RUNNER_TEMP/AuthKey.p8" >> "$GITHUB_ENV"
+      - name: Package installers
         run: npx electron-builder --publish never
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: false
+          # macOS is signed (Developer ID Application) + notarized (App Store Connect
+          # API key); Windows/Linux stay unsigned. The signing creds must NOT reach the
+          # Windows runner (it would try to sign with them), so each is scoped to macOS.
+          CSC_LINK: ${{ runner.os == 'macOS' && secrets.CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ runner.os == 'macOS' && secrets.CSC_KEY_PASSWORD || '' }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ runner.os == 'macOS' && 'true' || 'false' }}
+          APPLE_API_KEY_ID: ${{ runner.os == 'macOS' && secrets.APPLE_API_KEY_ID || '' }}
+          APPLE_API_ISSUER: ${{ runner.os == 'macOS' && secrets.APPLE_API_ISSUER || '' }}
+          # APPLE_API_KEY (path to the .p8) is exported by the prep step above, macOS only.
       - uses: actions/upload-artifact@v6
         with:
           name: installers-${{ matrix.os }}
