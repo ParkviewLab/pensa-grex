@@ -10,7 +10,8 @@
 // under the cursor, or null for empty canvas — and the caller owns the mutation.
 //
 // This module is DOM mechanics only; the model rules (which move a drop means,
-// what is a valid target) live with the caller via the canDrop predicate.
+// what is a valid target) live with the caller via the canDrop predicate. See
+// docs/interaction_model.md for the drop semantics and the four moves.
 
 const THRESHOLD = 5 // px of pointer travel before a press becomes a drag
 

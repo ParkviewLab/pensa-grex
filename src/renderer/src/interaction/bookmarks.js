@@ -9,6 +9,7 @@
 // collapse (it falls back to the nearest surviving ancestor); only a wholly
 // deleted tree leaves the bookmark broken. These functions are DOM-free and
 // unit-tested; app.js reads the live layout and drives the viewport with them.
+// See docs/interaction_model.md for the camera-anchor resolution.
 
 // The id of the station nearest a world-space point (the viewport centre), by
 // squared distance to each card's centre. Null if there are no stations.
