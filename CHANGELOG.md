@@ -4,6 +4,20 @@ All notable changes to this project are recorded here.
 
 ## [Unreleased]
 
+## [v1.0.1] - 2026-07-20
+
+### Highlights
+
+The macOS build is now signed with a Developer ID certificate and notarized, so the .dmg no longer trips Gatekeeper's "damaged" warning on download. Windows and Linux builds are unchanged and remain unsigned.
+
+### Bug fixes
+
+- Sign and notarize the macOS release (Gatekeeper "damaged") (#37) (a65734b)
+
+### Docs
+
+- V1.0.0 [skip ci] (20c9f61)
+
 ## [v1.0.0] - 2026-07-20
 
 ### Highlights
