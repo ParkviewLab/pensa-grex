@@ -1,5 +1,5 @@
 <!--
-SPDX-FileCopyrightText: 2026 Gary Frattarola <garycoding@gmail.com>
+SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 SPDX-License-Identifier: CC-BY-4.0
 -->
 

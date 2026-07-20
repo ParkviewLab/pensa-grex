@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Gary Frattarola <garycoding@gmail.com>
+// SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 
 // Soft-hyphenation of node labels. A long single word (an id, a coined term like
 // "Supercalifragilisticexpialidocious") has no space to wrap at, so in a

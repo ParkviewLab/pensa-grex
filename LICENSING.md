@@ -1,5 +1,5 @@
 <!--
-SPDX-FileCopyrightText: 2026 Gary Frattarola <garycoding@gmail.com>
+SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 SPDX-License-Identifier: CC-BY-4.0
 -->
 
@@ -29,7 +29,7 @@ TaskForkStack in a closed-source product, or to avoid the source-disclosure
 obligation — a **separate commercial license** is available from the copyright
 holder.
 
-> **Commercial licensing — Gary Frattarola — garycoding@gmail.com**
+> **Commercial licensing — Gary Frattarola — garyf@parkviewlab.ai**
 
 ## What each part of the repository is licensed under
 
@@ -65,4 +65,4 @@ Three similar-looking things, three jobs:
   one file per SPDX identifier.
 - `LICENSING.md` (this file) — the human explanation of the dual-license model.
 
-Copyright © 2026 Gary Frattarola <garycoding@gmail.com>
+Copyright © 2026 Gary Frattarola <garyf@parkviewlab.ai>

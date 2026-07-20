@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Gary Frattarola <garycoding@gmail.com>
+// SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 
 // One-way export of a project subtree to a nested Markdown outline (the
 // Sub-Projects plan, "Export to Markdown"). Pure and synchronous: note contents

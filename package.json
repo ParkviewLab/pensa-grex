@@ -2,7 +2,7 @@
   "name": "taskforkstack",
   "version": "0.1.0-dev0",
   "description": "TaskForkStack desktop app",
-  "author": "Gary Frattarola <garycoding@gmail.com>",
+  "author": "Gary Frattarola <garyf@parkviewlab.ai>",
   "license": "AGPL-3.0-or-later",
   "repository": {
     "type": "git",

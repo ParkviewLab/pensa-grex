@@ -3,7 +3,7 @@ version = 1
 # Documentation and prose — Creative Commons Attribution 4.0 International.
 [[annotations]]
 path = ["README.md", "LICENSING.md", "CHANGELOG.md", "AGENTS.md", "CLAUDE.md", "docs/**"]
-SPDX-FileCopyrightText = "2026 Gary Frattarola <garycoding@gmail.com>"
+SPDX-FileCopyrightText = "2026 Gary Frattarola <garyf@parkviewlab.ai>"
 SPDX-License-Identifier = "CC-BY-4.0"
 
 # Project config, manifests, lockfiles, CI workflows and scripts — AGPL-3.0-or-later.
@@ -19,7 +19,7 @@ path = [
   ".github/**",
   "electron-builder.yml",
 ]
-SPDX-FileCopyrightText = "2026 Gary Frattarola <garycoding@gmail.com>"
+SPDX-FileCopyrightText = "2026 Gary Frattarola <garyf@parkviewlab.ai>"
 SPDX-License-Identifier = "AGPL-3.0-or-later"
 
 # Vitest test files — AGPL-3.0-or-later. These carry the same inline SPDX header
@@ -29,7 +29,7 @@ SPDX-License-Identifier = "AGPL-3.0-or-later"
 # makes compliance independent of the encoding heuristic; the inline headers stay.
 [[annotations]]
 path = ["src/**/*.test.js"]
-SPDX-FileCopyrightText = "2026 Gary Frattarola <garycoding@gmail.com>"
+SPDX-FileCopyrightText = "2026 Gary Frattarola <garyf@parkviewlab.ai>"
 SPDX-License-Identifier = "AGPL-3.0-or-later"
 
 # Bundled typefaces — SIL Open Font License 1.1. woff2 are binary and cannot carry

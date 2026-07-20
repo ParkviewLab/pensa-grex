@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// SPDX-FileCopyrightText: 2026 Gary Frattarola <garycoding@gmail.com>
+// SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 
 // Small themed modal dialogs, promise-based. Electron disables window.prompt,
 // so title entry (Add task / Rename) and the delete choice (subtree vs splice)
