@@ -15,19 +15,16 @@ and the bookmark helpers in
 [`src/renderer/src/interaction/bookmarks.js`](../src/renderer/src/interaction/bookmarks.js);
 each points back here.
 
-## Drag-and-drop: one rule, four moves
+## Drag-and-drop: two drop rules, and reordering
 
-Dropping a node onto a card **grafts it there as a fresh fork of the target** — a
-new branch off the target, on the alternating side. This single rule is chosen for
-two properties. It is always valid: a branch can be added to any node, so no drop
-is ever illegal for structural reasons. And it can never place anything *below* the
-target, so the "nothing before the root" rule (northstar axiom 2) holds at every
-drop target, including a drop onto a tree's root, which simply gains a branch while
-its base stays a base. Finer main-line insertion (drop above, below, or between)
-is deliberately out of scope; it would need per-card drop zones and is a later
-step.
+There are two drop rules. Dropping a node onto a **card** grafts it there as a
+fresh fork of the target (a new branch, alternating side). Dropping a node into the
+**gap** between two nodes on a line splices it into that gap. Both are always valid
+and both keep the "nothing before the root" rule (northstar axiom 2): a fork can be
+added to any node and never sits below it, and a gap only ever sits *above* a node,
+so neither can put anything below a root.
 
-The dragged node's kind and the drop location pick one of four pure moves:
+The dragged node's kind and the drop location pick one of these pure moves:
 
 - **moveTaskNode** — a task dropped onto a card moves *alone*. Its children are
   spliced onto its predecessor in its old slot (the same reconnection
@@ -37,6 +34,13 @@ The dragged node's kind and the drop location pick one of four pure moves:
   Its incoming edge is cut and the subtree re-attached intact. Refused when the
   target is inside the moved subtree (which would detach a fragment and form a
   cycle) or is the node itself.
+- **moveIntoLine** — a node dropped into a line gap splices in just above the gap's
+  lower node. A task travels alone (its children splice onto its old predecessor);
+  a project node carries its whole subtree, whose main-line tip then continues onto
+  the gap's old upper node. Refused inserting a subtree into its own line (a cycle)
+  or above itself. Because a mid-line node contains everything above it, inserting a
+  sub-project into a line makes it contain that line's continuation — the same
+  containment collapse already reflects.
 - **detachToTree** — a sub-project dropped on empty canvas becomes its own tree:
   its incoming edge is cut and its id appended to `rootOrder`. Only a project node
   can be a root, so a task dropped on empty canvas is refused (it cannot become a
@@ -46,6 +50,12 @@ The dragged node's kind and the drop location pick one of four pure moves:
   root set first (it is advisory and may omit some), so the target index is
   meaningful.
 
+The right-click menu offers the same reordering without a drag: **moveUp /
+moveDown** swap a node with its main-line neighbour, keeping each node's own
+branches (a clean positional swap, distinct from `moveIntoLine`'s splice). "Move
+up" needs a successor and a non-root node; "move down" needs a non-root main-line
+predecessor to swap below.
+
 Every move returns a new raw forest and is re-validated before it is applied; a
 move that merges two lines has its cursors repaired by `normalizeHeres` (the
 tip-most "here" on a merged line survives). "here" flags travel with the nodes they
@@ -53,9 +63,11 @@ sit on.
 
 The gesture layer adds only mechanics: a left-button press on a card that then
 moves past a small threshold begins a drag (a press that does not is left to
-click / double-click), with a floating label and a highlighted drop target;
-panning is untouched because it is the empty-canvas gesture, so `viewport.js` skips
-a press that lands on a card.
+click / double-click), with a floating label. Hit-testing is geometric against the
+layout rather than `elementFromPoint`, so the empty gaps are targetable too; the
+caller draws a ring on a fork target or an insertion caret across a gap. Panning is
+untouched because it is the empty-canvas gesture, so `viewport.js` skips a press
+that lands on a card.
 
 ## Bookmark cameras: anchor to a node, not a coordinate
 

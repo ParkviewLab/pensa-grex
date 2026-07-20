@@ -85,6 +85,11 @@ body{
   padding:4px 9px; font-family:var(--font-display); font-size:12px; letter-spacing:.02em;
   box-shadow:0 4px 14px rgba(0,0,0,.28); white-space:nowrap; max-width:220px; overflow:hidden;
   text-overflow:ellipsis; }
+/* The insertion caret: a bar across a line gap marking where a dragged node will
+   splice in. Positioned in world space (in .content), so it scales with zoom. */
+.insert-caret{ position:absolute; z-index:3; transform:translate(-50%,-50%); pointer-events:none;
+  width:150px; height:4px; border-radius:2px; background:var(--cursor);
+  box-shadow:0 0 0 1px color-mix(in srgb, var(--cursor) 35%, transparent); }
 .world{ position:absolute; top:0; left:0; transform-origin:0 0; }
 .content{ position:relative; }
 
@@ -96,6 +101,10 @@ body{
 /* The subway map: tracks, fork junctions, the sputnik cursor mark, station
    dots, tree-name titles, and station cards. Ported from the design mock. */
 .track{ fill:none; stroke:var(--line); stroke-width:2.5; stroke-linecap:round; stroke-linejoin:round; }
+/* The vertical spine between stacked nodes is drawn slightly heavier than a fork
+   connector, so the main line of a stack reads before its branches. */
+.track.riser{ stroke-width:3; }
+.track.branch{ stroke-width:2.3; }
 .fork{ fill:var(--line); }
 .burst line{ stroke:var(--burst-a); stroke-width:1.4; }
 .burst.b line{ stroke:var(--burst-b); }

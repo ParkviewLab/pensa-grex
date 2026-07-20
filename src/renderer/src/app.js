@@ -100,33 +100,21 @@ const viewport = createViewport({
   getBounds: () => currentLayout?.bounds || { w: 0, h: 0 },
 })
 
-// Drag-and-drop: dropping a node onto a card grafts it there (a task moves alone;
-// a project moves its whole subtree); dropping a sub-project on empty canvas
-// detaches it into its own tree; dropping a root on empty canvas reorders the
-// trees by where it lands; a task cannot be dropped on empty canvas. A drop onto
-// a node's own descendant (or itself) is refused. See the pure moves in
-// model/mutations.js and docs/northstar.md axiom 2 ("nothing before the root").
+// Drag-and-drop. Dropping a node onto a card grafts it there as a fork (a task
+// moves alone; a project moves its whole subtree); dropping it into the gap
+// between two nodes on a line splices it into that gap; a sub-project on empty
+// canvas detaches into its own tree; a root on empty canvas reorders the trees by
+// where it lands; a task on empty canvas is refused. Hit-testing is geometric
+// against the layout, so it needs no DOM probe and works over the empty gaps too.
+// See model/mutations.js and docs/interaction_model.md.
 createDragController({
   contentEl, viewportEl,
-  canDrop: (sourceId, targetId) => {
-    if (!currentRaw || sourceId === targetId || !currentRaw.tasks[targetId]) return false
-    return !subtreeIdsOf(currentRaw, sourceId).has(targetId)
-  },
-  onDrop: (sourceId, targetId, clientX) => {
-    const node = currentRaw && currentRaw.tasks[sourceId]
-    if (!node) return
-    const isProject = node.kind === 'project'
-    if (targetId) {
-      if (sourceId === targetId || subtreeIdsOf(currentRaw, sourceId).has(targetId)) return
-      applyEdit(isProject
-        ? M.moveSubtree(currentRaw, sourceId, targetId)
-        : M.moveTaskNode(currentRaw, sourceId, targetId))
-      return
-    }
-    // dropped on empty canvas
-    if (!isProject) return // a task node cannot become a root
-    if (isRootId(currentRaw, sourceId)) applyEdit(M.reorderRoot(currentRaw, sourceId, rootDropIndex(sourceId, clientX)))
-    else applyEdit(M.detachToTree(currentRaw, sourceId))
+  onProbe: (sourceId, cx, cy) => renderDropHint(resolveDropIntent(sourceId, cx, cy)),
+  onCancel: () => clearDropHint(),
+  onDrop: (sourceId, cx, cy) => {
+    const intent = resolveDropIntent(sourceId, cx, cy)
+    clearDropHint()
+    applyDropIntent(sourceId, intent)
   },
 })
 
@@ -285,6 +273,114 @@ function rootDropIndex(sourceId, clientX) {
     if ((r.left + r.right) / 2 < clientX) index++
   }
   return index
+}
+
+function taskSel(id) {
+  return '[data-task-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]'
+}
+
+// The world-space point under a client coordinate, inverting the viewport's
+// translate+scale so a drag can be hit-tested against the (world-space) layout.
+function clientToWorld(clientX, clientY) {
+  const rect = viewportEl.getBoundingClientRect()
+  const { scale, tx, ty } = viewport.getTransform()
+  return { wx: (clientX - rect.left - tx) / scale, wy: (clientY - rect.top - ty) / scale }
+}
+
+// What a drag over (clientX, clientY) means for `sourceId`, resolved geometrically
+// against the current layout. Returns one of {kind:'fork', targetId},
+// {kind:'insert', belowId, caret:{x,y}}, {kind:'reorder', index}, {kind:'detach'},
+// or {kind:'none'}. A card takes precedence over a gap; a gap over empty canvas.
+function resolveDropIntent(sourceId, clientX, clientY) {
+  if (!currentRaw || !currentLayout) return { kind: 'none' }
+  const src = currentRaw.tasks[sourceId]
+  if (!src) return { kind: 'none' }
+  const { wx, wy } = clientToWorld(clientX, clientY)
+  const sub = subtreeIdsOf(currentRaw, sourceId)
+  const byId = new Map(currentLayout.stations.map((s) => [s.id, s]))
+
+  // 1. Over a card -> fork (never the source itself or a node inside its subtree).
+  const onCard = currentLayout.stations.find((s) =>
+    wx >= s.x - s.cardW / 2 && wx <= s.x + s.cardW / 2 && wy >= s.cardTop && wy <= s.cardTop + s.cardH)
+  if (onCard) {
+    if (onCard.id === sourceId || sub.has(onCard.id)) return { kind: 'none' }
+    return { kind: 'fork', targetId: onCard.id }
+  }
+
+  // 2. Over a line gap -> insert. A gap sits above a node P (between P and its .next
+  // Q, colinear); a line's tip has an open band just above it. The trunk grows
+  // upward, so Q's bottom edge is above P's top edge.
+  const CARET_HALF = 78 // a touch wider than the card, for a comfortable target
+  const TIP_GAP = 44
+  for (const [pid, p] of Object.entries(currentRaw.tasks)) {
+    const ps = byId.get(pid)
+    if (!ps || Math.abs(wx - ps.x) > CARET_HALF) continue
+    const q = p.next ? byId.get(p.next) : null
+    const yBot = ps.cardTop
+    const yTop = q ? q.cardTop + q.cardH : ps.cardTop - TIP_GAP
+    if (wy >= yTop && wy <= yBot) {
+      if (pid === sourceId) return { kind: 'none' }
+      if (src.kind === 'project' && sub.has(pid)) return { kind: 'none' }
+      return { kind: 'insert', belowId: pid, caret: { x: ps.x, y: (yTop + yBot) / 2 } }
+    }
+  }
+
+  // 3. Empty canvas: a sub-project detaches, a root reorders, a task is refused.
+  if (src.kind !== 'project') return { kind: 'none' }
+  if (isRootId(currentRaw, sourceId)) return { kind: 'reorder', index: rootDropIndex(sourceId, clientX) }
+  return { kind: 'detach' }
+}
+
+let dropHint = { caret: null, cardId: null }
+
+function clearDropHint() {
+  if (dropHint.caret) { dropHint.caret.remove(); dropHint.caret = null }
+  if (dropHint.cardId) {
+    const el = contentEl.querySelector(taskSel(dropHint.cardId))
+    if (el) el.classList.remove('drop-target')
+    dropHint.cardId = null
+  }
+}
+
+// Draw the hint for a resolved intent: a ring on the fork target, or an insertion
+// caret across the gap. Nothing is drawn for detach/reorder/none.
+function renderDropHint(intent) {
+  clearDropHint()
+  if (!intent) return
+  if (intent.kind === 'fork') {
+    const el = contentEl.querySelector(taskSel(intent.targetId))
+    if (el) { el.classList.add('drop-target'); dropHint.cardId = intent.targetId }
+  } else if (intent.kind === 'insert') {
+    const caret = document.createElement('div')
+    caret.className = 'insert-caret'
+    caret.style.left = intent.caret.x + 'px'
+    caret.style.top = intent.caret.y + 'px'
+    contentEl.appendChild(caret)
+    dropHint.caret = caret
+  }
+}
+
+// Apply a resolved drop intent through the pure mutations. applyEdit re-validates,
+// so a stale or degenerate intent is rejected rather than corrupting the forest.
+function applyDropIntent(sourceId, intent) {
+  if (!currentRaw || !intent) return
+  const node = currentRaw.tasks[sourceId]
+  if (!node) return
+  try {
+    if (intent.kind === 'fork') {
+      applyEdit(node.kind === 'project'
+        ? M.moveSubtree(currentRaw, sourceId, intent.targetId)
+        : M.moveTaskNode(currentRaw, sourceId, intent.targetId))
+    } else if (intent.kind === 'insert') {
+      applyEdit(M.moveIntoLine(currentRaw, sourceId, intent.belowId))
+    } else if (intent.kind === 'reorder') {
+      applyEdit(M.reorderRoot(currentRaw, sourceId, intent.index))
+    } else if (intent.kind === 'detach') {
+      applyEdit(M.detachToTree(currentRaw, sourceId))
+    }
+  } catch (e) {
+    console.error('drop rejected:', (e && e.message) || e)
+  }
 }
 
 // Every id reachable from startId in raw (inclusive), following .next and branches.
@@ -531,6 +627,14 @@ function openTaskMenu(x, y, taskId) {
     // Export the project's subtree to a markdown outline (one-way).
     items.push({ label: 'Export to Markdown…', onClick: () => exportProjectFlow(taskId) })
   }
+  // Reorder within the line: a clean swap with the main-line neighbour that keeps
+  // the node's own branches. "Move up" needs a successor (and not a root, whose
+  // successor cannot take the base); "move down" needs a non-root main-line
+  // predecessor to swap below.
+  const succId = task.next
+  const predId = Object.keys(currentRaw.tasks).find((pid) => currentRaw.tasks[pid].next === taskId)
+  if (succId && !isRoot) items.push({ label: 'Move up', onClick: () => applyEdit(M.moveUp(currentRaw, taskId)) })
+  if (predId && !isRootId(currentRaw, predId)) items.push({ label: 'Move down', onClick: () => applyEdit(M.moveDown(currentRaw, taskId)) })
   items.push({ label: 'Rename…', onClick: () => renameTask(taskId) })
   items.push({ separator: true })
   items.push({ label: 'Add task above', onClick: () => addTaskFlow('above', taskId) })

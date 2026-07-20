@@ -35,7 +35,7 @@ export function mountLayout(contentEl, layout, forest) {
   svg.setAttribute('style', 'position:absolute;top:0;left:0;z-index:0;')
   ensureDefs(svg)
 
-  for (const t of layout.tracks) svg.appendChild(buildTrack(t.points))
+  for (const t of layout.tracks) svg.appendChild(buildTrack(t.points, t.kind))
   for (const j of layout.junctions) svg.appendChild(buildForkMarker(j.x, j.y))
   for (const c of layout.cursors) svg.appendChild(buildCursorMark(c.x, c.y))
   contentEl.appendChild(svg)

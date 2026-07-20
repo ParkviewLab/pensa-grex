@@ -6,7 +6,7 @@ import { validateForest } from './validate.js'
 import {
   setTitle, setNote, setStatus, makeHere, clearHere, addTree, convertKind,
   addTaskAbove, addTaskBelow, addBranchAbove, addBranchBelow, deleteTask, pasteAsTree,
-  moveTaskNode, moveSubtree, detachToTree, reorderRoot,
+  moveTaskNode, moveSubtree, detachToTree, reorderRoot, moveIntoLine, moveUp, moveDown,
 } from './mutations.js'
 
 // A small valid forest: project root r -> m1(here) -> m2, with a fork b1 -> b2 off m1.
@@ -464,5 +464,83 @@ describe('reorderRoot', () => {
 
   it('refuses a non-root node', () => {
     expect(() => reorderRoot(withSub(), 'a', 0)).toThrow()
+  })
+})
+
+// A straight branchless line: project root r -> a -> b -> c -> d.
+function line4() {
+  const t = (id, over = {}) => ({
+    id, title: id, kind: 'task', status: 'todo', createdAt: 'x', completedAt: null,
+    note: null, here: false, next: null, branches: [], ...over,
+  })
+  return {
+    schema: 2, domain: 'T', rootOrder: ['r'],
+    tasks: {
+      r: { id: 'r', title: 'r', kind: 'project', createdAt: 'x', note: null, next: 'a', branches: [] },
+      a: t('a', { next: 'b' }), b: t('b', { next: 'c' }), c: t('c', { next: 'd' }), d: t('d'),
+    },
+  }
+}
+const chain = (raw) => { const out = []; let id = raw.tasks.r.next; while (id) { out.push(id); id = raw.tasks[id].next }; return out }
+
+describe('moveIntoLine', () => {
+  it('reorders a task into a gap higher on its line', () => {
+    const out = moveIntoLine(line4(), 'b', 'c') // insert b between c and d
+    expect(chain(out)).toEqual(['a', 'c', 'b', 'd'])
+    valid(out)
+  })
+
+  it('reorders a task into a gap lower on its line', () => {
+    const out = moveIntoLine(line4(), 'd', 'a') // insert d between a and b
+    expect(chain(out)).toEqual(['a', 'd', 'b', 'c'])
+    valid(out)
+  })
+
+  it('moving a task alone leaves its own branches behind on the line', () => {
+    const out = moveIntoLine(base(), 'm1', 'm2') // m1 has fork b1; insert m1 above m2 (tip)
+    expect(out.tasks.r.next).toBe('m2') // m1 spliced out; its branch b1 stayed with the line
+    expect(out.tasks.m2.branches.map((x) => x.child)).toContain('b1')
+    expect(out.tasks.m2.next).toBe('m1') // m1 reinserted above m2
+    expect(out.tasks.m1.branches).toEqual([]) // travelled alone
+    valid(out)
+  })
+
+  it('splices a whole sub-project into a line, its tip continuing the line', () => {
+    const out = moveIntoLine(withSub(), 'SP', 'f1') // SP(project)->s1 grafted above the fork tip f1
+    expect(out.tasks.a.next).toBeNull() // SP left a's main line
+    expect(out.tasks.f1.next).toBe('SP')
+    expect(out.tasks.SP.next).toBe('s1') // subtree intact, tip continues (f1 had no successor)
+    valid(out)
+  })
+
+  it('refuses inserting a subtree into its own line, or above itself', () => {
+    expect(() => moveIntoLine(withSub(), 'SP', 's1')).toThrow()
+    expect(() => moveIntoLine(line4(), 'b', 'b')).toThrow()
+  })
+})
+
+describe('moveUp / moveDown', () => {
+  it('moves a task one step toward the tip', () => {
+    expect(chain(moveUp(line4(), 'b'))).toEqual(['a', 'c', 'b', 'd'])
+  })
+
+  it('moves a task one step toward the root', () => {
+    expect(chain(moveDown(line4(), 'c'))).toEqual(['a', 'c', 'b', 'd'])
+  })
+
+  it('keeps the swapped node\'s branches and cursor', () => {
+    const out = moveUp(base(), 'm1') // m1 is "here" and forks to b1; swap with m2
+    expect(out.tasks.r.next).toBe('m2')
+    expect(out.tasks.m2.next).toBe('m1')
+    expect(out.tasks.m1.branches.map((x) => x.child)).toContain('b1') // branch preserved
+    expect(out.tasks.m1.here).toBe(true) // cursor preserved
+    valid(out)
+  })
+
+  it('refuses moving the tip up, a root up, or below the root', () => {
+    expect(() => moveUp(base(), 'm2')).toThrow() // m2 is the tip
+    expect(() => moveUp(base(), 'r')).toThrow() // r is the root
+    expect(() => moveDown(base(), 'm1')).toThrow() // m1 sits right above the root
+    expect(() => moveDown(base(), 'b1')).toThrow() // b1 is a branch line's start
   })
 })
