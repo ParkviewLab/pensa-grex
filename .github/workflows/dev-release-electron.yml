@@ -48,6 +48,9 @@ jobs:
           node-version: 24.x
           cache: npm
       - run: npm ci
+      # Complete Electron's partial prebuilt extraction before the legal step
+      # (see release-electron.yml; electron/electron#51619).
+      - run: node node_modules/electron/install.js
       # Generate the legal/ notice bundle before packaging (see release-electron.yml).
       - run: npm run legal
       - run: npm run build
