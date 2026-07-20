@@ -19,12 +19,20 @@ export function ensureDefs(svgEl) {
   if (svgEl.querySelector('defs#tfs-defs')) return
   const defs = el('defs', { id: 'tfs-defs' })
 
+  // The "here" mark: an atomic starburst — solid rays of irregular length at
+  // irregular angles, each tipped with a ball, around a solid centre (Googie,
+  // asymmetric). The ray lines inherit their stroke from .cursor-mark; the balls
+  // set their own fill and no stroke (see style.css).
   const sputnik = el('g', { id: 'sputnik' })
-  const spokes = [[0, -13, 0, 13], [-13, 0, 13, 0], [-9.2, -9.2, 9.2, 9.2], [9.2, -9.2, -9.2, 9.2]]
-  for (const [x1, y1, x2, y2] of spokes) sputnik.appendChild(el('line', { x1, y1, x2, y2 }))
-  const balls = [[0, -13], [0, 13], [-13, 0], [13, 0], [-9.2, -9.2], [9.2, 9.2], [9.2, -9.2], [-9.2, 9.2]]
-  for (const [cx, cy] of balls) sputnik.appendChild(el('circle', { class: 'ball', cx, cy, r: 2.2 }))
-  sputnik.appendChild(el('circle', { class: 'core', cx: 0, cy: 0, r: 3.4 }))
+  const rays = [[-6, 1.0], [30, 0.66], [63, 1.12], [99, 0.58], [138, 0.9], [177, 1.2], [210, 0.68], [246, 1.02], [285, 0.82], [318, 1.08]]
+  const base = 15
+  for (const [deg, f] of rays) {
+    const rad = (deg * Math.PI) / 180, len = base * f
+    const tx = +(len * Math.cos(rad)).toFixed(1), ty = +(len * Math.sin(rad)).toFixed(1)
+    sputnik.appendChild(el('line', { x1: 0, y1: 0, x2: tx, y2: ty, 'stroke-width': 1.4, 'stroke-linecap': 'round' }))
+    sputnik.appendChild(el('circle', { class: 'ball', cx: tx, cy: ty, r: 2.2, stroke: 'none' }))
+  }
+  sputnik.appendChild(el('circle', { class: 'core', cx: 0, cy: 0, r: 2.8, stroke: 'none' }))
   defs.appendChild(sputnik)
 
   const starburst = el('g', { id: 'starburst' })
