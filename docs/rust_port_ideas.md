@@ -242,7 +242,24 @@ directly. Maturity is the residual risk, not coverage or license: pre-1.0 (v0.1.
 2026-07-07), a multi-crate workspace on crates.io, ~1.4k stars but apparently a single
 maintainer, so expect API churn and weigh bus-factor. The remaining validation, when
 the port is real, is to run representative note formulas through its harness. So math
-is a bounded implementation task in the preview pane, not a lost capability. (Discard the tempting HTML-plus-KaTeX
+is a bounded implementation task in the preview pane, not a lost capability.
+
+Insulating the dependency. The single-maintainer risk is bounded by the MIT license
+itself: worst case, fork the version already held, on identical terms, at any later
+date, so RaTeX's adoption does not bet on the maintainer's persistence. Two moves,
+different costs. Cheap insurance: vendor the sources into our tree (a `cargo vendor`
+dir or a mirror) so the build no longer depends on GitHub or crates.io serving the
+code (a pinned git-rev alone does not protect against the repo being deleted); this
+addresses "no worries about the future of that repo," stays reversible, and keeps the
+option to pull upstream fixes. We would vendor only the string-to-display-list-to-SVG
+subset (`ratex-types`, `-lexer`, `-parser`, `-layout`, `-render`, `-svg`, and the
+font crates), not `-ffi`/`-wasm`/`-pdf`. Expensive independence: hard-fork and
+maintain that subset ourselves, which transfers rather than removes the bus-factor,
+since we would then own an intricate TeX layout engine, a specialized long-term
+liability. Recommendation: vendor for supply-chain safety and track upstream while it
+lives; keep a full fork as a contingency executed only on genuine abandonment. Each
+vendored file keeps its MIT header; the bundled math fonts keep OFL-1.1, per the
+existing font-vendoring pattern. (Discard the tempting HTML-plus-KaTeX
 in a WebView route: it reintroduces the webview Design B exists to remove, and belongs
 to Design A.)
 
