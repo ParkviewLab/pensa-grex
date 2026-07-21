@@ -22,7 +22,7 @@ import { centeredStationId, anchorChain, resolveAnchor } from './interaction/boo
 import { openContextMenu, closeContextMenu } from './interaction/contextMenu.js'
 import { promptText, chooseAction } from './ui/dialog.js'
 import { createNoteEditor } from './notes/noteEditor.js'
-import { serializeProject } from './export/markdown.js'
+import { serializeProject } from '../../shared/export/markdown.js'
 import homelabFixtureRaw from '../../shared/model/fixtures/homelab.forest.json5?raw'
 import workFixtureRaw from '../../shared/model/fixtures/work.forest.json5?raw'
 
@@ -140,6 +140,50 @@ domainSel.addEventListener('change', () => {
   openDomain(domainSel.value, domainSel.selectedOptions[0]?.textContent)
 })
 delDomainBtn.addEventListener('click', () => deleteDomainFlow())
+
+// ---- MCP server status indicator (header) ----
+// A dot (teal running, muted off, orange on error) plus a menu to copy the
+// endpoint URL and turn the server on or off. The server itself lives in the
+// main process; this only reflects and toggles it.
+const mcpBtn = document.getElementById('mcp')
+const mcpDot = document.getElementById('mcpdot')
+let mcpState = null
+
+async function refreshMcp() {
+  mcpState = await api.mcpStatus()
+  const s = mcpState || {}
+  mcpDot.className = 'mcp-dot' + (s.error ? ' err' : s.running ? ' on' : '')
+  mcpBtn.title = [
+    'MCP server',
+    s.running ? 'running at ' + s.url : (s.enabled ? 'starting…' : 'off'),
+    s.scope ? 'scope: ' + s.scope : null,
+    s.error ? 'error: ' + s.error : null,
+  ].filter(Boolean).join(' · ')
+}
+
+async function copyMcpUrl(url) {
+  if (!url) return
+  try {
+    await navigator.clipboard.writeText(url)
+  } catch {
+    await chooseAction({ title: 'MCP endpoint', message: url, actions: [{ label: 'OK', value: null }] })
+  }
+}
+
+mcpBtn.addEventListener('click', async () => {
+  await refreshMcp()
+  const s = mcpState || {}
+  const items = [{ label: (s.running ? '● ' : '○ ') + (s.url || 'unavailable'), disabled: true }, { separator: true }]
+  if (s.url) items.push({ label: 'Copy endpoint URL', onClick: () => copyMcpUrl(s.url) })
+  items.push({
+    label: s.enabled ? 'Turn off' : 'Turn on',
+    onClick: async () => { await api.mcpSetEnabled(!s.enabled); await refreshMcp() },
+  })
+  const r = mcpBtn.getBoundingClientRect()
+  openContextMenu(r.left, r.bottom + 4, items)
+})
+
+refreshMcp()
 window.addEventListener('resize', () => viewport.fit())
 
 // The delete button acts on the open domain, so it is disabled when none is open.

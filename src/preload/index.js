@@ -21,6 +21,9 @@ contextBridge.exposeInMainWorld('pensagrex', {
   // load/save above stay for seeding and one-time migration writes.
   readForest:        (dir)               => ipcRenderer.invoke('pensagrex:read-forest', dir),
   taskOp:            (dir, op, ...args)  => ipcRenderer.invoke('pensagrex:task-op', dir, op, ...args),
+  // The in-app MCP server: read its status (enabled/running/url) and turn it on/off.
+  mcpStatus:         ()                  => ipcRenderer.invoke('pensagrex:mcp-status'),
+  mcpSetEnabled:     (enabled)           => ipcRenderer.invoke('pensagrex:mcp-set-enabled', enabled),
   readNote:          (dir, file)         => ipcRenderer.invoke('pensagrex:read-note', dir, file),
   writeNote:         (dir, file, text)   => ipcRenderer.invoke('pensagrex:write-note', dir, file, text),
   deleteNote:        (dir, file)         => ipcRenderer.invoke('pensagrex:delete-note', dir, file),
