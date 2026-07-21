@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import { validateForest } from './validate.js'
 import {
-  setTitle, setNote, setStatus, cycleStatus, makeHere, clearHere, addTree, convertKind,
+  setTitle, uniqueTitle, setNote, setStatus, cycleStatus, makeHere, clearHere, addTree, convertKind,
   addTaskAbove, addTaskBelow, addBranchAbove, addBranchBelow, deleteTask, pasteAsTree,
   moveTaskNode, moveSubtree, detachToTree, reorderRoot, moveIntoLine, moveUp, moveDown,
 } from './mutations.js'
@@ -87,6 +87,32 @@ describe('cycleStatus', () => {
 
   it('refuses to cycle a project node', () => {
     expect(() => cycleStatus(base(), 'r')).toThrow()
+  })
+})
+
+describe('uniqueTitle — unique node titles within a domain', () => {
+  it('leaves a free title unchanged', () => {
+    expect(uniqueTitle(base(), 'Fresh', null)).toBe('Fresh')
+  })
+
+  it('appends -1 on a bare collision and increments from there', () => {
+    // base() titles equal ids: r, m1, m2, b1, b2.
+    expect(uniqueTitle(base(), 'b1', null)).toBe('b1-1')
+    const f = setTitle(base(), 'm2', 'b1') // m2 -> 'b1-1'
+    expect(f.tasks.m2.title).toBe('b1-1')
+    expect(uniqueTitle(f, 'b1', null)).toBe('b1-2') // 'b1' and 'b1-1' both taken
+  })
+
+  it('renumbers from the base, stripping an existing -N rather than stacking', () => {
+    const f = setTitle(base(), 'm2', 'b1') // 'b1' taken -> 'b1-1'
+    const out = setTitle(f, 'b2', 'b1-1') // 'b1-1' taken; base 'b1' -> 'b1-2'
+    expect(out.tasks.b2.title).toBe('b1-2')
+    valid(out)
+  })
+
+  it('does not count the renamed node itself as a collision', () => {
+    const out = setTitle(base(), 'm2', 'm2') // renaming m2 to its own title
+    expect(out.tasks.m2.title).toBe('m2')
   })
 })
 
@@ -360,6 +386,19 @@ describe('pasteAsTree', () => {
     expect(Object.keys(second.next.tasks)).toHaveLength(10) // two disjoint trees
     expect(second.next.rootOrder[0]).not.toBe(second.next.rootOrder[1])
     valid(second.next)
+  })
+
+  it('suffixes pasted titles that collide with names already in the domain', () => {
+    // Paste the clip into a forest that already holds its titles (base(): r, m1,
+    // m2, b1, b2), with the root renamed to 'Proj' so the clip root collides too.
+    const dest = setTitle(base(), 'r', 'Proj')
+    const { next } = pasteAsTree(dest, clip())
+    const titles = Object.values(next.tasks).map((t) => t.title)
+    expect(titles.filter((t) => t === 'Proj')).toHaveLength(1) // original kept
+    expect(titles).toContain('Proj-1') // pasted root suffixed
+    expect(titles).toContain('m1-1')
+    expect(titles).toContain('b2-1')
+    valid(next)
   })
 })
 
