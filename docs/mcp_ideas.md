@@ -163,9 +163,9 @@ Read-only tier:
 - `list_domains()` returns domains as name and path.
 - `list_projects(domain?)` returns each project node's id, title, kind, and
   whether it is a root, for resolving a named project (for instance "the Pre-MCP
-  project") to an id. Titles are only a strong tendency to be unique (enforced
-  on rename and paste, not on add), so an ambiguous name returns all matches for
-  the agent to disambiguate.
+  project") to an id. Node titles are domain-unique by invariant (enforced on
+  create, rename, and paste as of v1.3.2, PR #52), so a name resolves to at most
+  one node.
 - `find_flagged(domain?)` returns the flagged nodes; the `flagged` mark is set to
   select tasks for an assistant to work, so this serves "plan the flagged tasks."
 - `read_project(domain?, project_id?, include_notes=false)` returns the
