@@ -137,7 +137,7 @@ function requireTask(raw, taskId) {
 export function addTree(raw, name) {
   const next = clone(raw)
   const root = newProjectNode(name)
-  next.tasks[root.id] = root
+  addNode(next, root)
   if (!Array.isArray(next.rootOrder)) next.rootOrder = []
   next.rootOrder.push(root.id)
   return next
@@ -162,6 +162,15 @@ export function uniqueTitle(raw, desired, excludeId) {
     const candidate = baseName + '-' + n
     if (!taken.has(candidate)) return candidate
   }
+}
+
+// Place a freshly-created node into the forest with a domain-unique title (uniqueTitle),
+// so a name typed at creation is suffixed just as setTitle and pasteAsTree already do.
+// Used by every add* mutation; the node is not yet in raw, so excludeId is null.
+function addNode(raw, node) {
+  node.title = uniqueTitle(raw, node.title, null)
+  raw.tasks[node.id] = node
+  return node
 }
 
 /** Set a node's title, kept unique within the domain (see uniqueTitle). */
@@ -267,7 +276,7 @@ export function addTaskAbove(raw, taskId, title) {
   const n = newTask(title)
   n.next = task.next
   task.next = n.id
-  next.tasks[n.id] = n
+  addNode(next, n)
   return next
 }
 
@@ -285,7 +294,7 @@ export function addTaskBelow(raw, taskId, title) {
   n.next = taskId
   if (pred.kind === 'next') next.tasks[pred.id].next = n.id
   else next.tasks[pred.id].branches[pred.branchIndex].child = n.id
-  next.tasks[n.id] = n
+  addNode(next, n)
   return next
 }
 
@@ -302,7 +311,7 @@ export function addBranchAbove(raw, taskId, title, side) {
   const task = requireTask(next, taskId)
   const n = newTask(title)
   task.branches.push({ child: n.id, side: branchSide(task, side), at: 'above' })
-  next.tasks[n.id] = n
+  addNode(next, n)
   return next
 }
 
@@ -316,7 +325,7 @@ export function addBranchBelow(raw, taskId, title, side) {
   if (!predecessorOf(next, taskId)) throw new Error('cannot add a branch below a root node')
   const n = newTask(title)
   task.branches.push({ child: n.id, side: branchSide(task, side), at: 'below' })
-  next.tasks[n.id] = n
+  addNode(next, n)
   return next
 }
 
