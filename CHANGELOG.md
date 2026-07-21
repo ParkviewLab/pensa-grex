@@ -4,6 +4,25 @@ All notable changes to this project are recorded here.
 
 ## [Unreleased]
 
+## [v1.3.1] - 2026-07-20
+
+### Highlights
+
+The note view gains A-/A+ buttons in its header that step the view pane's text size between 12 and 28px and persist the choice per editor, alongside the existing split-ratio and wrap preferences. The flagged-node orbit rings are now drawn with a thicker stroke so they read clearly behind the card, and the "here" sputnik mark reverts to ink colour and is 15% larger for better contrast against both azure and navy backgrounds.
+
+### Bug fixes
+
+- Revert the here mark to ink and enlarge it 15% (#49) (eafea05)
+- Thicken the flagged orbit rings, keep them behind the node (#50) (58f4c59)
+
+### Docs
+
+- V1.3.0 [skip ci] (ff06b3b)
+
+### Features
+
+- A persisted font-size control for the note view (#51) (9227c56)
+
 ## [v1.3.0] - 2026-07-20
 
 ### Highlights
