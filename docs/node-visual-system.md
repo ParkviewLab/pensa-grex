@@ -73,8 +73,10 @@ overflow the card box.
   of hidden cards.
 - **Atomic Starburst** (the "here" mark, `#sputnik` in `tracks.js`) — solid rays
   of irregular length at irregular angles, each tipped with a ball, around a solid
-  centre. It marks the branch cursor beside the marquee. (The older four-plus
-  spoke `#starburst` remains in the defs but is not the cursor mark.)
+  centre. It marks the branch cursor beside the marquee, and takes the here-node's
+  own status colour (set per-instance in `scene.js` via `buildCursorMark`, with
+  `.cursor-mark`'s `var(--ink)` as the fallback), so the mark matches its card. (The
+  older four-plus spoke `#starburst` remains in the defs but is not the cursor mark.)
 
 ## Reserved colour
 
