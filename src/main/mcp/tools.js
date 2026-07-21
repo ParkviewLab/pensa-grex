@@ -151,6 +151,27 @@ export function registerTools(server, deps, scope) {
   const dirOf = (a) => resolveDir(store, a.domain)
   const raw = (dir) => readRaw(taskService, dir)
 
+  // A prompt (a client "workflow") baking in the re-read-first discipline for the
+  // common "work the flagged tasks" case; exposed in every scope tier.
+  server.registerPrompt('work_flagged', {
+    title: 'Work the flagged tasks',
+    description: 'Plan and work the tasks flagged for an assistant, re-reading current state before each step.',
+    argsSchema: { domain: z.string().optional() },
+  }, (a) => ({
+    messages: [{
+      role: 'user',
+      content: {
+        type: 'text',
+        text: 'Work the flagged tasks in ' + (a && a.domain ? '"' + a.domain + '"' : 'the open domain') + '. '
+          + 'The forest is live and can change under you, so: '
+          + '(1) call find_flagged NOW to get the current flagged tasks, never trusting an earlier read; '
+          + '(2) for each, read_note for what is asked and read_project for context; '
+          + '(3) do the work, then set_status / set_note, re-reading (find_flagged / read_project) immediately before each write to confirm the target still exists and is still the one you mean; '
+          + '(4) set a task to completed when it is done.',
+      },
+    }],
+  }))
+
   // ------- read-only -------
   server.registerTool('list_domains', {
     description: 'List every task domain (forest) in the library, as name and path.',
@@ -168,7 +189,7 @@ export function registerTools(server, deps, scope) {
   }))
 
   server.registerTool('find_flagged', {
-    description: 'List the flagged nodes in a domain (the flag marks tasks selected for an assistant to work on).',
+    description: 'List the flagged nodes in a domain (the flag marks tasks selected for an assistant to work on). Results reflect this instant only; the flag set changes as the user works, so re-read rather than reusing an earlier result.',
     inputSchema: { domain: z.string().optional() },
   }, guard(async (a) => {
     const dir = dirOf(a); const r = raw(dir)
@@ -276,7 +297,7 @@ export function registerTools(server, deps, scope) {
   }, guard(async (a) => runWrite(taskService, dirOf(a), 'setTitle', [a.node_id, a.title], a.node_id)))
 
   server.registerTool('set_status', {
-    description: "Set a task's status.",
+    description: "Set a task's status. Re-read (read_project / list_projects) to confirm the target id before calling; the forest may have changed since your last read.",
     inputSchema: { node_id: z.string(), status: z.enum(STATUSES), domain: z.string().optional() },
   }, guard(async (a) => runWrite(taskService, dirOf(a), 'setStatus', [a.node_id, a.status], a.node_id)))
 
@@ -337,7 +358,7 @@ export function registerTools(server, deps, scope) {
 
   // ------- destructive -------
   server.registerTool('delete_task', {
-    description: 'Delete a node. mode subtree removes it and everything growing from it; mode splice removes only it and reconnects its successor.',
+    description: 'Delete a node. mode subtree removes it and everything growing from it; mode splice removes only it and reconnects its successor. Re-read (read_project) to confirm the target id before calling; the forest may have changed since your last read.',
     inputSchema: { node_id: z.string(), mode: z.enum(['subtree', 'splice']).optional(), domain: z.string().optional() },
   }, guard(async (a) => {
     const dir = dirOf(a)
@@ -347,7 +368,7 @@ export function registerTools(server, deps, scope) {
   }))
 
   server.registerTool('delete_domain', {
-    description: 'Move a whole domain (its forest and notes) to the Trash.',
+    description: 'Move a whole domain (its forest and notes) to the Trash. Re-read (list_domains) to confirm the target before calling.',
     inputSchema: { name_or_path: z.string() },
   }, guard(async (a) => {
     let dir

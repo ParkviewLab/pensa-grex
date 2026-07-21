@@ -17,6 +17,12 @@ The project's intent and its axioms are in [`docs/northstar.md`](docs/northstar.
 read it first. A forest is plain files on disk: one JSON5 file per domain, beside
 its per-task markdown notes.
 
+## Download
+
+Get the latest macOS, Windows, and Linux builds from the
+**[download page](https://parkviewlab.github.io/pensa-grex/)**, or straight from
+[GitHub Releases](https://github.com/ParkviewLab/pensa-grex/releases).
+
 ## Run from source
 
 ```bash

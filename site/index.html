@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<!--
+SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
+SPDX-License-Identifier: CC-BY-4.0
+-->
+<html lang="en" data-ground="azure">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PensaGrex — download</title>
+<meta name="description" content="PensaGrex: a living forest of task trees, drawn as a subway map. Download for macOS, Windows, and Linux.">
+<link rel="icon" href="assets/icon.svg">
+<style>
+/* Bundled mid-century typefaces, self-hosted (no network). Both SIL OFL 1.1. */
+@font-face{font-family:'League Spartan';font-style:normal;font-weight:100 900;font-display:swap;src:url('assets/fonts/LeagueSpartan-latin.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;}
+@font-face{font-family:'League Spartan';font-style:normal;font-weight:100 900;font-display:swap;src:url('assets/fonts/LeagueSpartan-latin-ext.woff2') format('woff2');unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;}
+@font-face{font-family:'Boogaloo';font-style:normal;font-weight:400;font-display:swap;src:url('assets/fonts/Boogaloo-latin.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;}
+
+/* Palette — the app's own tokens, both grounds, selected by data-ground. */
+:root{
+  --font-ui:'League Spartan',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --font-display:'Boogaloo','League Spartan',sans-serif;
+}
+:root[data-ground="azure"]{
+  --ground:#d3e6ef; --panel:#f8f3e8; --ink:#173242; --line:#365b6c; --muted:#5f7d8b;
+  --grid:rgba(23,50,66,.10);
+  --c-done:#1f8f8a; --c-prog:#d75f2e; --c-todo:#d9a53a; --c-cancel:#8aa0ab; --c-project:#7d54a6; --cursor:#d75f2e;
+  --burst-a:#1f8f8a; --burst-b:#d9a53a; --here-ink:var(--ink);
+}
+:root[data-ground="navy"]{
+  --ground:#0f2334; --panel:#1a3a54; --ink:#e8f1f6; --line:#6fb6c9; --muted:#93b3c2;
+  --grid:rgba(111,182,201,.13);
+  --c-done:#37c2ba; --c-prog:#f27a44; --c-todo:#f0bd55; --c-cancel:#7590a0; --c-project:#bd93e6; --cursor:#f27a44;
+  --burst-a:#37c2ba; --burst-b:#f0bd55; --here-ink:var(--ground);
+}
+
+*{box-sizing:border-box;}
+html,body{margin:0;}
+body{
+  font-family:var(--font-ui); color:var(--ink); background:var(--ground);
+  background-image:radial-gradient(circle, var(--grid) 1px, transparent 1.4px);
+  background-size:40px 40px;
+  min-height:100vh; line-height:1.55;
+}
+a{color:var(--c-done);}
+
+/* Top bar echoing the app's chrome. */
+.topbar{display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding:11px 20px; border-bottom:1px solid var(--line); background:var(--ground);
+  position:sticky; top:0; z-index:10;}
+.brand{font-family:var(--font-display); font-size:16px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--ink);}
+.tb-right{display:flex; align-items:center; gap:12px;}
+.seglbl{font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted);}
+.seg{display:inline-flex; border:1px solid var(--line); border-radius:999px; overflow:hidden;}
+.seg button{font:inherit; font-size:12px; border:0; background:transparent; color:var(--muted); padding:6px 14px; cursor:pointer;}
+.seg button.on{background:var(--ink); color:var(--ground);}
+.mcp-chip{display:inline-flex; align-items:center; gap:7px; font-size:12px; color:var(--muted);
+  border:1px solid var(--line); border-radius:5px; padding:5px 10px;}
+.mcp-dot{width:8px; height:8px; border-radius:50%; background:var(--c-done);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--ink) 25%, transparent);}
+
+.wrap{max-width:1040px; margin:0 auto; padding:0 20px;}
+
+/* Hero. */
+.hero{display:grid; grid-template-columns:1.15fr .85fr; gap:40px; align-items:center; padding:64px 0 40px;}
+.hero-mark{position:relative; justify-self:center;}
+.hero-mark img{width:min(300px,72vw); height:auto; display:block; filter:drop-shadow(0 12px 30px rgba(0,0,0,.18));}
+.hero-mark .icon-night{display:none;}
+:root[data-ground="navy"] .hero-mark .icon-day{display:none;}
+:root[data-ground="navy"] .hero-mark .icon-night{display:block;}
+.wordmark{font-family:var(--font-display); font-size:clamp(46px,8vw,84px); line-height:.98; letter-spacing:.01em; margin:0 0 6px; color:var(--ink);}
+.tagline{font-family:var(--font-display); font-size:clamp(20px,3.2vw,30px); color:var(--c-prog); margin:0 0 16px; letter-spacing:.01em;}
+.lede{font-size:16px; color:var(--ink); max-width:46ch; margin:0 0 26px;}
+.lede .muted{color:var(--muted);}
+
+/* Download tiles as Googie "screen" station cards. */
+.dl-head{display:flex; align-items:baseline; gap:12px; margin:0 0 14px;}
+.dl-head h2{font-family:var(--font-display); font-weight:400; font-size:22px; letter-spacing:.02em; margin:0; color:var(--ink);}
+.verbadge{font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--here-ink);
+  background:var(--c-done); padding:2px 8px; border-radius:3px; font-weight:800;}
+.tiles{display:grid; grid-template-columns:repeat(2,1fr); gap:12px;}
+.tile{display:flex; align-items:center; gap:11px; text-decoration:none; color:var(--ink);
+  background:var(--panel); border:3px solid var(--accent); border-bottom-width:5px; border-radius:15px;
+  padding:12px 15px; transition:transform .09s ease, box-shadow .09s ease;}
+.tile:hover{transform:translateY(-2px); box-shadow:0 8px 20px rgba(0,0,0,.14);}
+.tile[aria-disabled="true"]{opacity:.5; pointer-events:none;}
+.tile .glyph{width:13px; height:13px; border-radius:50%; background:var(--accent); flex:none;}
+.tile .t-os{font-family:var(--font-display); font-size:18px; line-height:1.05; color:var(--ink);}
+.tile .t-kind{font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin-top:2px;}
+.tile.mac{--accent:var(--c-done);} .tile.win{--accent:var(--c-prog);}
+.tile.lin-appimage{--accent:var(--c-todo);} .tile.lin-deb{--accent:var(--c-project);}
+.dl-note{font-size:12px; color:var(--muted); margin:12px 0 0;}
+.dl-note a{color:var(--muted); text-decoration:underline;}
+
+/* Screenshot band. */
+.shotband{padding:26px 0 56px;}
+.shot{border:1px solid var(--line); border-radius:16px; overflow:hidden; background:var(--ground);
+  box-shadow:0 18px 50px rgba(0,0,0,.16);}
+.shot img{display:block; width:100%; height:auto;}
+.shot-ph{padding:60px 24px; text-align:center; color:var(--muted);
+  background-image:radial-gradient(circle, var(--grid) 1px, transparent 1.4px); background-size:40px 40px;}
+.shot-cap{font-size:12px; color:var(--muted); text-align:center; margin:12px 0 0; letter-spacing:.02em;}
+
+/* "What it is" trio. */
+.trio{display:grid; grid-template-columns:repeat(3,1fr); gap:20px; padding:8px 0 20px;}
+.pt h3{font-family:var(--font-display); font-weight:400; font-size:20px; letter-spacing:.02em; margin:0 0 6px; color:var(--ink);}
+.pt p{font-size:14px; color:var(--muted); margin:0;}
+.pt .k{color:var(--c-done);}
+
+/* Connect-to-Claude-Code section. */
+.connect{margin:8px 0 48px;}
+.connect h2{font-family:var(--font-display); font-weight:400; font-size:26px; letter-spacing:.02em; margin:0 0 6px; color:var(--ink);}
+.connect-lede{font-size:15px; color:var(--muted); max-width:60ch; margin:0 0 22px;}
+.steps{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:18px;}
+.steps > li{display:flex; gap:14px; align-items:flex-start;}
+.step-n{flex:none; width:30px; height:30px; border-radius:50%; display:grid; place-items:center;
+  background:var(--c-done); color:var(--here-ink); font-family:var(--font-display); font-size:17px; line-height:1;}
+.step-body{min-width:0;}
+.steps h3{font-family:var(--font-display); font-weight:400; font-size:18px; letter-spacing:.01em; margin:3px 0 3px; color:var(--ink);}
+.steps p{font-size:14px; color:var(--muted); margin:0 0 8px;}
+.steps code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.9em;
+  background:color-mix(in srgb, var(--line) 16%, transparent); padding:1px 6px; border-radius:4px; color:var(--ink);}
+.cmd{display:flex; align-items:center; gap:10px; margin-top:2px;
+  background:color-mix(in srgb, var(--line) 14%, transparent); border:1px solid var(--line);
+  border-radius:8px; padding:10px 12px; overflow-x:auto;}
+.cmd code{background:transparent; padding:0; color:var(--ink); white-space:nowrap; font-size:13px;}
+.copy{flex:none; font:inherit; font-size:11px; letter-spacing:.06em; text-transform:uppercase; cursor:pointer;
+  border:1px solid var(--line); background:var(--panel); color:var(--muted); border-radius:5px; padding:6px 11px;}
+.copy:hover{color:var(--ink); border-color:var(--ink);}
+.copy.done{color:var(--c-done); border-color:var(--c-done);}
+
+footer{border-top:1px solid var(--line); padding:26px 0 40px; font-size:12.5px; color:var(--muted);}
+footer .wrap{display:flex; flex-wrap:wrap; justify-content:space-between; gap:10px;}
+footer a{color:var(--muted); text-decoration:underline;}
+
+@media (max-width:760px){
+  .hero{grid-template-columns:1fr; gap:20px; padding:36px 0 24px; text-align:center;}
+  .hero-mark{order:-1;}
+  .lede{margin-inline:auto;}
+  .dl-head{justify-content:center;}
+  .tiles{grid-template-columns:1fr;}
+  .trio{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <span class="brand">PensaGrex</span>
+  <div class="tb-right">
+    <span class="mcp-chip"><span class="mcp-dot"></span>MCP</span>
+    <span class="seglbl">Mode</span>
+    <div class="seg" id="mode">
+      <button data-g="azure" class="on">Light</button>
+      <button data-g="navy">Dark</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="hero">
+    <div class="hero-copy">
+      <h1 class="wordmark">PensaGrex</h1>
+      <p class="tagline">Keep track of what you &amp; your AI are doing</p>
+      <p class="lede">Build branching trees of tasks in cooperation with your AI. You and your AI can
+        add and edit markdown notes for any task. Drag &amp; drop tasks and trees of tasks to wherever
+        you want. Flag the tasks you want your AI to focus on. Let your AI change tasks
+        as it works on them, and you&rsquo;ll see it all happen, as it happens, in PensaGrex.</p>
+
+      <div class="dl-head">
+        <h2>Download</h2>
+        <span class="verbadge ver">…</span>
+      </div>
+      <div class="tiles">
+        <a class="tile mac" id="dl-mac" href="https://github.com/ParkviewLab/pensa-grex/releases/latest">
+          <span class="glyph"></span><span><span class="t-os">macOS</span><br><span class="t-kind">Apple Silicon · .dmg</span></span>
+        </a>
+        <a class="tile win" id="dl-win" href="https://github.com/ParkviewLab/pensa-grex/releases/latest">
+          <span class="glyph"></span><span><span class="t-os">Windows</span><br><span class="t-kind">Installer · .exe</span></span>
+        </a>
+        <a class="tile lin-appimage" id="dl-appimage" href="https://github.com/ParkviewLab/pensa-grex/releases/latest">
+          <span class="glyph"></span><span><span class="t-os">Linux</span><br><span class="t-kind">Portable · .AppImage</span></span>
+        </a>
+        <a class="tile lin-deb" id="dl-deb" href="https://github.com/ParkviewLab/pensa-grex/releases/latest">
+          <span class="glyph"></span><span><span class="t-os">Linux</span><br><span class="t-kind">Debian · .deb</span></span>
+        </a>
+      </div>
+      <p class="dl-note">Windows and Linux builds are unsigned, so the OS may warn on first launch.
+        See <a href="https://github.com/ParkviewLab/pensa-grex/releases">all releases</a>.</p>
+    </div>
+
+    <div class="hero-mark">
+      <img class="icon-day" src="assets/icon.svg" alt="PensaGrex" width="300" height="300">
+      <img class="icon-night" src="assets/icon-night.svg" alt="PensaGrex" width="300" height="300">
+    </div>
+  </section>
+
+  <section class="shotband">
+    <div class="shot">
+      <img src="assets/screenshot.webp" alt="PensaGrex showing the Work domain as a subway map of task trees"
+           onerror="this.style.display='none'; document.getElementById('shot-ph').style.display='block';">
+      <div class="shot-ph" id="shot-ph" style="display:none;">The app screenshot goes here.</div>
+    </div>
+    <p class="shot-cap">A domain of task trees, live.</p>
+  </section>
+
+  <section class="trio">
+    <div class="pt"><h3><span class="k">The structure</span> is the model.</h3><p>Task, fork, stack. The tree is the shape of the work, not a decoration on a flat list.</p></div>
+    <div class="pt"><h3><span class="k">Legible</span> at a glance.</h3><p>Status is colour, a fork is a junction, and the leaning marquee shows where you are before you read a word.</p></div>
+    <div class="pt"><h3><span class="k">Yours</span>, and local.</h3><p>One JSON5 file per domain beside its markdown notes. Grep it, diff it, sync it, keep it.</p></div>
+  </section>
+
+  <section class="connect">
+    <h2>Connect Claude Code</h2>
+    <p class="connect-lede">PensaGrex is an MCP server. Point Claude Code at it and it can read
+      and edit your tasks while you watch the forest change.</p>
+    <ol class="steps">
+      <li>
+        <span class="step-n">1</span>
+        <div class="step-body">
+          <h3>Run PensaGrex.</h3>
+          <p>The server starts on <code>127.0.0.1:35899</code> while the app is open; the green
+            MCP dot in the toolbar shows it running.</p>
+        </div>
+      </li>
+      <li>
+        <span class="step-n">2</span>
+        <div class="step-body">
+          <h3>Register it with Claude Code.</h3>
+          <p>Run this once in a terminal (<code>--scope user</code> makes it available in every
+            Claude Code session):</p>
+          <div class="cmd">
+            <code id="mcp-cmd">claude mcp add --transport http --scope user pensagrex http://127.0.0.1:35899/mcp</code>
+            <button class="copy" type="button" data-copy="mcp-cmd">Copy</button>
+          </div>
+        </div>
+      </li>
+      <li>
+        <span class="step-n">3</span>
+        <div class="step-body">
+          <h3>Restart Claude Code.</h3>
+          <p>It loads its connections at startup, so a fresh session sees PensaGrex's tools;
+            confirm with <code>claude mcp list</code>. Keep PensaGrex open while you use them.</p>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>© 2026 Gary Frattarola · AGPL-3.0-or-later, or commercial.</span>
+    <span><a href="https://github.com/ParkviewLab/pensa-grex">Source on GitHub</a></span>
+  </div>
+</footer>
+
+<script>
+// Light / Dark ground toggle, mirroring the app (persisted to the same key).
+(function(){
+  var root=document.documentElement;
+  function setGround(g){
+    root.dataset.ground=g;
+    document.querySelectorAll('#mode button').forEach(function(b){ b.classList.toggle('on', b.dataset.g===g); });
+    try{ localStorage.setItem('pensagrex.ground', g); }catch(e){}
+  }
+  document.querySelectorAll('#mode button').forEach(function(b){ b.addEventListener('click', function(){ setGround(b.dataset.g); }); });
+  try{ var s=localStorage.getItem('pensagrex.ground'); if(s==='navy'||s==='azure') setGround(s); }catch(e){}
+})();
+
+// Self-updating downloads: read the latest GitHub Release and point each tile at
+// its installer, matched by file extension. Falls back to the releases page.
+(function(){
+  var map={ dmg:'dl-mac', exe:'dl-win', appimage:'dl-appimage', deb:'dl-deb' };
+  fetch('https://api.github.com/repos/ParkviewLab/pensa-grex/releases/latest', {headers:{Accept:'application/vnd.github+json'}})
+    .then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function(rel){
+      document.querySelectorAll('.ver').forEach(function(e){ e.textContent = rel.tag_name || 'latest'; });
+      var seen={};
+      (rel.assets||[]).forEach(function(a){
+        var m=(a.name||'').match(/\.(dmg|exe|AppImage|deb)$/i);
+        if(!m) return;
+        var ext=m[1].toLowerCase(), id=map[ext];
+        if(id && !seen[ext]){ seen[ext]=1; document.getElementById(id).href=a.browser_download_url; }
+      });
+      Object.keys(map).forEach(function(ext){ if(!seen[ext]){ document.getElementById(map[ext]).setAttribute('aria-disabled','true'); } });
+    })
+    .catch(function(){
+      document.querySelectorAll('.ver').forEach(function(e){ e.textContent='latest'; });
+      // tiles already point at /releases/latest as their static href
+    });
+})();
+
+// Copy the connect command to the clipboard.
+(function(){
+  function fallbackCopy(text){
+    var t=document.createElement('textarea'); t.value=text; t.style.position='fixed'; t.style.opacity='0';
+    document.body.appendChild(t); t.focus(); t.select();
+    try{ document.execCommand('copy'); }catch(e){}
+    document.body.removeChild(t);
+  }
+  document.querySelectorAll('.copy').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var el=document.getElementById(btn.dataset.copy); if(!el) return;
+      var text=el.textContent.trim();
+      var done=function(){ btn.textContent='Copied'; btn.classList.add('done');
+        setTimeout(function(){ btn.textContent='Copy'; btn.classList.remove('done'); }, 1400); };
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(text).then(done, function(){ fallbackCopy(text); done(); });
+      } else { fallbackCopy(text); done(); }
+    });
+  });
+})();
+</script>
+</body>
+</html>

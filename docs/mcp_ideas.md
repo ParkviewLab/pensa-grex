@@ -118,6 +118,15 @@ depth and composes with all of the above.
   serialize naturally, with no external lock; and because the authority is
   in-process, it can push a change event to the renderer after any mutation,
   whoever made it, so the open window reflects an agent's edits at once.
+- The store is LIVE: the user, or another agent, can change it at any moment, so
+  an agent must not trust an earlier read. The server says so in its MCP
+  `instructions` at connect time, and the read/write tool descriptions reinforce
+  it: re-read the current state (find_flagged, list_projects, read_project) before
+  acting, and always immediately before a write, resolving any "the flagged one"
+  or "the current task" against that fresh read rather than memory. A `work_flagged`
+  prompt bakes the re-read-first order into the common "work the flagged tasks"
+  flow. (Added after a stale-read slip: three flagged nodes were read, two were
+  then unflagged, and "the flagged node" was resolved against the stale count.)
 
 ## Live view updates
 
