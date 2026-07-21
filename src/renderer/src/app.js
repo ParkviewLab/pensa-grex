@@ -63,6 +63,8 @@ const noteEditor = createNoteEditor({
     const t = currentRaw && currentRaw.tasks[taskId]
     if (t && !t.note) applyOp('setNote', taskId, file)
   },
+  // Surfaced when an external writer changes or removes the note being edited.
+  notify: (msg) => { chooseAction({ title: 'Note', message: msg, actions: [{ label: 'OK', value: null }] }) },
 })
 
 function openNote(taskId) {
@@ -828,5 +830,56 @@ async function boot() {
   populateSwitcher(domains, last.path)
   await openDomain(last.path, last.name)
 }
+
+// ---- live updates from another writer (the in-app MCP server) ----
+// An agent edited the open domain: re-read and re-render in place, holding the
+// camera, zoom, and collapse state (northstar axiom 8 — the view is the client's).
+// A burst of edits coalesces into one render per animation frame; no changed-node
+// highlight. The renderer applies its OWN edits from their IPC result, and main
+// pushes only for external edits, so nothing renders twice.
+let liveRefreshQueued = false
+let liveRefreshDir = null
+function scheduleLiveRefresh(dir) {
+  liveRefreshDir = dir
+  if (liveRefreshQueued) return
+  liveRefreshQueued = true
+  requestAnimationFrame(async () => {
+    liveRefreshQueued = false
+    const d = liveRefreshDir
+    liveRefreshDir = null
+    if (!d || d !== currentDomainPath) return
+    const res = await api.readForest(d)
+    if (res.error) return
+    currentRaw = res.raw
+    await render(currentRaw, { fit: false })
+    noteEditor.reconcile(d, currentRaw)
+  })
+}
+
+// The domain list changed (an agent created or trashed a domain): refresh the
+// switcher, and if the open domain is the one that was removed, move to another.
+async function refreshDomainList() {
+  const domains = await api.listDomains()
+  if (currentDomainPath && !domains.some((d) => d.path === currentDomainPath)) {
+    noteEditor.close()
+    closeContextMenu()
+    if (!domains.length) {
+      currentDomainPath = null
+      currentRaw = null
+      await api.setLastDomain(null)
+      populateSwitcher([], null)
+      updateDeleteButton()
+      showEmpty('No domains. Use “New domain…” in the switcher to create one.')
+      return
+    }
+    populateSwitcher(domains, domains[0].path)
+    await openDomain(domains[0].path, domains[0].name)
+    return
+  }
+  populateSwitcher(domains, currentDomainPath)
+}
+
+api.onDomainChanged((dir) => scheduleLiveRefresh(dir))
+api.onDomainsChanged(() => refreshDomainList())
 
 boot()

@@ -29,6 +29,8 @@ function wrapRealBridge(bridge) {
     taskOp:            (dir, op, ...args) => bridge.taskOp(dir, op, ...args),
     mcpStatus:         () => bridge.mcpStatus(),
     mcpSetEnabled:     (enabled) => bridge.mcpSetEnabled(enabled),
+    onDomainChanged:   (cb) => bridge.onDomainChanged(cb),
+    onDomainsChanged:  (cb) => bridge.onDomainsChanged(cb),
     readNote:          (dir, file) => bridge.readNote(dir, file),
     writeNote:         (dir, file, text) => bridge.writeNote(dir, file, text),
     deleteNote:        (dir, file) => bridge.deleteNote(dir, file),
@@ -86,6 +88,9 @@ function makeFallback() {
     // reports it as unavailable rather than pretending to host it.
     mcpStatus:         async () => ({ enabled: false, running: false, url: null, port: null, scope: null, error: 'the MCP server runs only in the desktop app' }),
     mcpSetEnabled:     async () => ({ enabled: false, running: false, url: null, port: null, scope: null, error: 'the MCP server runs only in the desktop app' }),
+    // No external writer without Electron: nothing to subscribe to.
+    onDomainChanged:   () => () => {},
+    onDomainsChanged:  () => () => {},
     readNote:          async (dir, file) => ({ content: notes.get(dir + '/' + file) || '' }),
     writeNote:         async (dir, file, text) => { notes.set(dir + '/' + file, text); return { ok: true } },
     deleteNote:        async (dir, file) => { notes.delete(dir + '/' + file); return { ok: true } },

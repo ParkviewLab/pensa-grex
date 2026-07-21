@@ -147,6 +147,7 @@ const SCOPES = { 'read-only': 0, 'read-write': 1, destructive: 2 }
 export function registerTools(server, deps, scope) {
   const level = SCOPES[scope] ?? SCOPES['read-write']
   const { taskService, store } = deps
+  const notify = typeof deps.notify === 'function' ? deps.notify : () => {}
   const dirOf = (a) => resolveDir(store, a.domain)
   const raw = (dir) => readRaw(taskService, dir)
 
@@ -237,7 +238,9 @@ export function registerTools(server, deps, scope) {
     inputSchema: { name: z.string() },
   }, guard(async (a) => {
     const res = store.createForest(a.name)
-    return res.error ? fail(res.error) : json(res)
+    if (res.error) return fail(res.error)
+    notify('pensagrex:domains-changed', {})
+    return json(res)
   }))
 
   server.registerTool('create_project', {
@@ -296,6 +299,9 @@ export function registerTools(server, deps, scope) {
     const w = store.writeNote(dir, file, a.content)
     if (w && w.error) return fail(w.error)
     if (!t.note) return runWrite(taskService, dir, 'setNote', [a.node_id, file], a.node_id)
+    // The forest is unchanged (the note filename was already recorded), so the
+    // taskOp wrapper did not fire; push the note change for the live view/editor.
+    notify('pensagrex:domain-changed', { dir })
     return json({ id: a.node_id, note: file, outline: projectOutline(r, rootOf(r, a.node_id)) })
   }))
 
@@ -347,6 +353,9 @@ export function registerTools(server, deps, scope) {
     let dir
     try { dir = resolveDir(store, a.name_or_path) } catch (e) { return fail(e.message) }
     const res = await store.deleteForest(dir)
-    return res.error ? fail(res.error) : json({ deleted: a.name_or_path })
+    if (res.error) return fail(res.error)
+    notify('pensagrex:domains-changed', {})
+    notify('pensagrex:domain-changed', { dir }) // in case the deleted domain is the open one
+    return json({ deleted: a.name_or_path })
   }))
 }

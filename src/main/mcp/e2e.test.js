@@ -38,9 +38,9 @@ afterEach(async () => {
 // Start the service on an ephemeral loopback port at the given scope (the store is
 // wrapped so only getMcpConfig is overridden; every other call hits the real store
 // over the temp library), then connect a real SDK client to it.
-async function connect(scope = 'destructive') {
+async function connect(scope = 'destructive', notify) {
   const wrapped = { ...store, getMcpConfig: () => ({ enabled: true, port: 0, scope }) }
-  svc = createMcpService({ taskService, store: wrapped, version: '9.9.9' })
+  svc = createMcpService({ taskService, store: wrapped, version: '9.9.9', notify })
   svc.start()
   const t0 = Date.now()
   while (!svc.status().running && Date.now() - t0 < 3000) await new Promise((r) => setTimeout(r, 10))
@@ -77,5 +77,14 @@ describe('MCP end to end (real SDK client over loopback HTTP)', () => {
     expect(names).toContain('read_project')
     expect(names).not.toContain('create_project')
     expect(names).not.toContain('delete_domain')
+  })
+
+  it('pushes domain-changed after an MCP write (the live-update wrapper)', async () => {
+    store.createForest('HomeLab')
+    store.setLastDomain('HomeLab')
+    const events = []
+    await connect('read-write', (channel, data) => events.push([channel, data]))
+    await client.callTool({ name: 'create_project', arguments: { name: 'Overview' } })
+    expect(events.some(([c]) => c === 'pensagrex:domain-changed')).toBe(true)
   })
 })

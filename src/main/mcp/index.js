@@ -21,20 +21,36 @@ import { registerTools } from './tools.js'
 
 const HOST = '127.0.0.1'
 
-// Create the MCP service. `deps` = { taskService, store, version }. Returns
-// { start, stop, status, setEnabled }; nothing binds until start() is called.
-export function createMcpService({ taskService, store, version }) {
+// Create the MCP service. `deps` = { taskService, store, version, notify }.
+// `notify(channel, data)` (optional) lets the caller push a change to the open
+// window after an agent edit, so the live view can update (see docs/mcp_ideas.md);
+// it fires only for edits made HERE (the MCP path), never for the GUI's own edits,
+// so the window never renders its own echo twice. Returns { start, stop, status,
+// setEnabled }; nothing binds until start() is called.
+export function createMcpService({ taskService, store, version, notify }) {
   let httpServer = null
   let boundPort = null
   let lastError = null
   const transports = new Map() // sessionId -> transport (one MCP session each)
+  const emit = typeof notify === 'function' ? notify : () => {}
+
+  // taskService, wrapped so a successful write pushes a domain-changed event for
+  // the live view. Reads pass through untouched.
+  const notifyingTaskService = {
+    readForest: (dir) => taskService.readForest(dir),
+    taskOp: (dir, op, args) => {
+      const res = taskService.taskOp(dir, op, args)
+      if (!res.error) emit('pensagrex:domain-changed', { dir })
+      return res
+    },
+  }
 
   // A fresh McpServer per session, with the tool surface registered at the scope
   // configured at this moment (scope is a startup-time gate; see the notebook).
   function buildServer() {
     const { scope } = store.getMcpConfig()
     const server = new McpServer({ name: 'pensagrex', version })
-    registerTools(server, { taskService, store }, scope)
+    registerTools(server, { taskService: notifyingTaskService, store, notify: emit }, scope)
     return server
   }
 

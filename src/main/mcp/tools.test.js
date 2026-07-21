@@ -135,3 +135,27 @@ describe('tools drive the task authority', () => {
     expect((await s.call('list_projects', { domain: 'Nope' })).isError).toBe(true)
   })
 })
+
+describe('tools notify on non-forest changes', () => {
+  // A fresh registerTools with a notify spy (the real taskService, so taskOp does
+  // not notify here; that wrapper is tested end to end in e2e.test.js).
+  function serverWithNotify() {
+    const events = []
+    const tools = new Map()
+    registerTools({ registerTool: (n, _c, cb) => tools.set(n, cb) }, { taskService, store, notify: (ch) => events.push(ch) }, 'destructive')
+    return { events, call: (n, args = {}) => tools.get(n)(args, {}) }
+  }
+
+  it('create_domain notifies domains-changed; an existing-note set_note notifies domain-changed', async () => {
+    const s = serverWithNotify()
+    await s.call('create_domain', { name: 'Work' })
+    expect(s.events).toContain('pensagrex:domains-changed')
+
+    store.setLastDomain('Work')
+    const cp = JSON.parse((await s.call('create_project', { name: 'P' })).content[0].text)
+    await s.call('set_note', { node_id: cp.id, content: 'first' }) // records the note (forest change)
+    s.events.length = 0
+    await s.call('set_note', { node_id: cp.id, content: 'second' }) // note-only change
+    expect(s.events).toContain('pensagrex:domain-changed')
+  })
+})

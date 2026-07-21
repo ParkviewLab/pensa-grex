@@ -316,7 +316,14 @@ app.whenReady().then(() => {
   // The in-app MCP server: start it now (enabled by default) so a local agent can
   // reach the live app on loopback. The renderer's status indicator reads and
   // toggles it. It shares this process's single taskService authority.
-  mcpService = createMcpService({ taskService, store, version: pkg.version })
+  mcpService = createMcpService({
+    taskService, store, version: pkg.version,
+    // Push an agent's edit to the open window so the live view can update. Sent
+    // only for MCP-path edits; the GUI applies its own edits from its IPC result.
+    notify: (channel, data) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, data)
+    },
+  })
   mcpService.start()
   ipcMain.handle('pensagrex:mcp-status', () => mcpService.status())
   ipcMain.handle('pensagrex:mcp-set-enabled', (_e, enabled) => mcpService.setEnabled(enabled))
