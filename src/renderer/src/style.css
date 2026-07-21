@@ -66,6 +66,7 @@ body{
 .btn.danger:hover{ background:color-mix(in srgb, var(--c-prog) 16%, transparent); }
 .btn:disabled{ opacity:.4; cursor:default; }
 .btn:disabled:hover{ background:transparent; }
+.btn.toggle[aria-pressed="true"]{ background:var(--ink); color:var(--ground); border-color:var(--ink); }
 .pct{ font-size:11px; color:var(--muted); min-width:42px; text-align:center; font-variant-numeric:tabular-nums; }
 
 .viewport{
@@ -146,6 +147,15 @@ body{
 .noteicon .np-ring{ stroke:var(--muted); stroke-width:1.2; stroke-linecap:round; }
 .noteicon .np-rule{ stroke:var(--muted); stroke-width:1; stroke-linecap:round; }
 .noteicon:hover .np-body, .noteicon:hover .np-ring, .noteicon:hover .np-rule{ stroke:var(--ink); }
+
+/* "Show only flagged" read-only view (toggled from the toolbar): hide the track
+   layer, the line dots, and every non-flagged card, and make all cards
+   non-interactive so the view cannot edit — drag included, since drag.js starts from
+   the pointer's DOM target, which pointer-events:none removes. */
+.flagged-only > svg,
+.flagged-only > .dot,
+.flagged-only .card:not(.flagged){ display:none; }
+.flagged-only .card{ pointer-events:none; }
 /* The HERE pill's background is set per-task to the status colour in render/card.js;
    --here-ink is the ground's dark tone so the label stays legible on any status colour. */
 .here{ align-self:flex-start; font-size:8px; font-weight:800; letter-spacing:.14em; color:var(--here-ink);
