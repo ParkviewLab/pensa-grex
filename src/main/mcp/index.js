@@ -21,6 +21,21 @@ import { registerTools } from './tools.js'
 
 const HOST = '127.0.0.1'
 
+// Guidance handed to every client at connect time (the MCP initialize
+// `instructions`). PensaGrex is a live store the user and other agents can change
+// at any moment, so a client must re-read current state before acting rather than
+// trusting an earlier read (see docs/mcp_ideas.md).
+const INSTRUCTIONS = [
+  'PensaGrex is a LIVE task store: its user, and other agents, can change it at any moment.',
+  'Never rely on an earlier read. Treat anything you read (domains, projects, flagged nodes,',
+  'statuses, notes) as possibly stale the instant after you read it. Before you act, and always',
+  'immediately before a write, re-read the current state with the relevant tool (find_flagged,',
+  'list_projects, read_project, read_note) and resolve any description such as "the flagged one",',
+  '"the current task", or "the one we discussed" against that fresh read, not against memory.',
+  'Every write returns the affected id and the re-rendered outline; treat that returned state as',
+  'your new ground truth. Nodes are addressed by id; titles and positions can change under you.',
+].join(' ')
+
 // Create the MCP service. `deps` = { taskService, store, version, notify }.
 // `notify(channel, data)` (optional) lets the caller push a change to the open
 // window after an agent edit, so the live view can update (see docs/mcp_ideas.md);
@@ -49,7 +64,7 @@ export function createMcpService({ taskService, store, version, notify }) {
   // configured at this moment (scope is a startup-time gate; see the notebook).
   function buildServer() {
     const { scope } = store.getMcpConfig()
-    const server = new McpServer({ name: 'pensagrex', version })
+    const server = new McpServer({ name: 'pensagrex', version }, { instructions: INSTRUCTIONS })
     registerTools(server, { taskService: notifyingTaskService, store, notify: emit }, scope)
     return server
   }

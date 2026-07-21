@@ -26,7 +26,7 @@ afterEach(() => { rmSync(h.userData, { recursive: true, force: true }) })
 
 function fakeServer(scope) {
   const tools = new Map()
-  registerTools({ registerTool: (name, _config, cb) => tools.set(name, cb) }, { taskService, store }, scope)
+  registerTools({ registerTool: (name, _config, cb) => tools.set(name, cb), registerPrompt: () => {} }, { taskService, store }, scope)
   return {
     has: (n) => tools.has(n),
     call: async (n, args = {}) => {
@@ -142,7 +142,7 @@ describe('tools notify on non-forest changes', () => {
   function serverWithNotify() {
     const events = []
     const tools = new Map()
-    registerTools({ registerTool: (n, _c, cb) => tools.set(n, cb) }, { taskService, store, notify: (ch) => events.push(ch) }, 'destructive')
+    registerTools({ registerTool: (n, _c, cb) => tools.set(n, cb), registerPrompt: () => {} }, { taskService, store, notify: (ch) => events.push(ch) }, 'destructive')
     return { events, call: (n, args = {}) => tools.get(n)(args, {}) }
   }
 

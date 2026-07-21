@@ -87,4 +87,13 @@ describe('MCP end to end (real SDK client over loopback HTTP)', () => {
     await client.callTool({ name: 'create_project', arguments: { name: 'Overview' } })
     expect(events.some(([c]) => c === 'pensagrex:domain-changed')).toBe(true)
   })
+
+  it('advertises the re-read instructions and the work_flagged prompt', async () => {
+    store.createForest('HomeLab')
+    store.setLastDomain('HomeLab')
+    await connect('read-only') // instructions + prompt are not scope-gated
+    expect(client.getInstructions()).toMatch(/re-read/i)
+    const prompts = (await client.listPrompts()).prompts.map((p) => p.name)
+    expect(prompts).toContain('work_flagged')
+  })
 })
