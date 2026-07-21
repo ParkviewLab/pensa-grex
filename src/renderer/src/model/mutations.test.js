@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import { validateForest } from './validate.js'
 import {
-  setTitle, uniqueTitle, setNote, setStatus, makeHere, clearHere, addTree, convertKind,
+  setTitle, uniqueTitle, setNote, setStatus, cycleStatus, makeHere, clearHere, addTree, convertKind,
   addTaskAbove, addTaskBelow, addBranchAbove, addBranchBelow, deleteTask, pasteAsTree,
   moveTaskNode, moveSubtree, detachToTree, reorderRoot, moveIntoLine, moveUp, moveDown,
 } from './mutations.js'
@@ -70,6 +70,23 @@ describe('setTitle / setStatus', () => {
 
   it('refuses to set a status on a project node', () => {
     expect(() => setStatus(base(), 'r', 'todo')).toThrow()
+  })
+})
+
+describe('cycleStatus', () => {
+  it('advances one step and wraps cancelled -> todo', () => {
+    let raw = base() // m2 is a todo task
+    raw = cycleStatus(raw, 'm2'); expect(raw.tasks.m2.status).toBe('in-progress')
+    raw = cycleStatus(raw, 'm2'); expect(raw.tasks.m2.status).toBe('completed')
+    expect(raw.tasks.m2.completedAt).not.toBeNull() // completion stamps
+    raw = cycleStatus(raw, 'm2'); expect(raw.tasks.m2.status).toBe('cancelled')
+    expect(raw.tasks.m2.completedAt).toBeNull() // leaving completed clears
+    raw = cycleStatus(raw, 'm2'); expect(raw.tasks.m2.status).toBe('todo') // wraps
+    valid(raw)
+  })
+
+  it('refuses to cycle a project node', () => {
+    expect(() => cycleStatus(base(), 'r')).toThrow()
   })
 })
 
