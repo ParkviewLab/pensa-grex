@@ -671,6 +671,14 @@ viewportEl.addEventListener('contextmenu', (e) => {
   else openCanvasMenu(e.clientX, e.clientY)
 })
 
+// Clicking a card's notepad icon opens its note.
+viewportEl.addEventListener('click', (e) => {
+  if (!currentRaw) return
+  if (!e.target.closest('.noteicon')) return
+  const taskId = taskIdFromEvent(e)
+  if (taskId && currentRaw.tasks[taskId]) openNote(taskId)
+})
+
 // Double-clicking a task label opens its note (the same as Edit note).
 viewportEl.addEventListener('dblclick', (e) => {
   if (!currentRaw) return

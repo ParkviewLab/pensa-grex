@@ -21,6 +21,31 @@ export function statusTagText(status) {
   return STATUS_TAG[status] || status
 }
 
+const SVGNS = 'http://www.w3.org/2000/svg'
+
+// A small 1950s memo-pad glyph shown in a card's bottom-right corner when the node
+// has a note; clicking it opens the note editor (wired as a delegated handler in
+// app.js). Built as SVG so it inherits the theme colours from CSS (.noteicon in
+// style.css): a spiral-bound pad with a few ruled lines.
+function noteIconEl() {
+  const svg = document.createElementNS(SVGNS, 'svg')
+  svg.setAttribute('class', 'noteicon')
+  svg.setAttribute('viewBox', '0 0 16 16')
+  svg.setAttribute('aria-hidden', 'true')
+  const add = (tag, attrs) => {
+    const n = document.createElementNS(SVGNS, tag)
+    for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v)
+    svg.appendChild(n)
+  }
+  add('rect', { class: 'np-body', x: 3, y: 3, width: 10, height: 11, rx: 1.5 })
+  add('line', { class: 'np-ring', x1: 6, y1: 1.5, x2: 6, y2: 4.5 })
+  add('line', { class: 'np-ring', x1: 10, y1: 1.5, x2: 10, y2: 4.5 })
+  add('line', { class: 'np-rule', x1: 5.5, y1: 7.5, x2: 10.5, y2: 7.5 })
+  add('line', { class: 'np-rule', x1: 5.5, y1: 10, x2: 10.5, y2: 10 })
+  add('line', { class: 'np-rule', x1: 5.5, y1: 12.5, x2: 8.5, y2: 12.5 })
+  return svg
+}
+
 // An unpositioned .card element for a node. isCursor comes from the caller (the
 // layout knows which line's "here" this is) rather than task.here directly, so a
 // card can be measured/rendered consistently either way. A project node is never
@@ -67,6 +92,9 @@ export function buildCard(task, { isCursor } = {}) {
     tag.textContent = statusTagText(task.status)
     card.appendChild(tag)
   }
+
+  // A memo-pad glyph in the bottom-right corner marks a note and opens it on click.
+  if (task.note) card.appendChild(noteIconEl())
 
   return card
 }
