@@ -68,7 +68,7 @@ double-clicking a node (see `docs/interaction_model.md`).
 Decorators are independent and compose; each is drawn behind the card so it can
 overflow the card box.
 
-- **orbits** — three thin, off-axis elliptical rings centred on the card, each
+- **orbits** — three heavy, off-axis elliptical rings centred on the card, each
   carrying one solid electron set back from apogee. Off-axis and irregular on
   purpose: rings at 0/90/180 would read as a tidy modern diagram, not atomic-age.
   Worn by any flagged node, in the node's own colour.
