@@ -4,6 +4,30 @@ All notable changes to this project are recorded here.
 
 ## [Unreleased]
 
+## [v1.3.0] - 2026-07-20
+
+### Highlights
+
+This release adds a Flagged toolbar toggle that filters the canvas to flagged nodes in a read-only review view, with flags themselves set by double-clicking a card and rendered as atomic orbits in the node's own colour, persisted in the forest file. Notes are now opened via a new memo-pad icon in the card's corner, and a task's status glyph can be cycled by single-clicking it. Node titles are centre-justified and enforced unique within a domain, project cards reserve height for two lines, and the sputnik "here" mark now takes the current node's status colour.
+
+### Bug fixes
+
+- Project nodes reserve height for a two-line title (#43) (fd9ef06)
+
+### Docs
+
+- V1.2.0 [skip ci] (9393784)
+
+### Features
+
+- Unique node titles within a domain (#41) (2f10b45)
+- Centre-justify node titles (#42) (b8bc36d)
+- The sputnik "here" mark takes the node's status colour (#44) (b98ab82)
+- Click a task's status glyph to cycle it (#45) (4506a51)
+- Clickable notepad note icon (#46) (123e31c)
+- Flag nodes (double-click; atomic orbits in the node's colour) (#47) (99d0848)
+- Show-only-flagged read-only view (#48) (6dd050d)
+
 ## [v1.2.0] - 2026-07-20
 
 ### Highlights
