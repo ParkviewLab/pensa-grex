@@ -4,6 +4,26 @@ All notable changes to this project are recorded here.
 
 ## [Unreleased]
 
+## [v2.0.0] - 2026-07-21
+
+### Highlights
+
+The app now hosts an MCP server on loopback (127.0.0.1:35899, enabled by default, toggleable from a header status indicator that shows the endpoint URL), letting a local agent read and write tasks through the same authority the GUI uses, across read-only, read-write, and destructive scope tiers. When an agent edits the open domain, the view re-renders in place while preserving pan, zoom, and collapse, and the note editor reconciles external changes by reloading when clean, warning when dirty, and closing with a notice if the underlying task is deleted. Under the hood, task writes are now owned by the main process on a single write path, and a single-instance lock ensures one process binds the port.
+
+### Docs
+
+- V1.3.2 [skip ci] (4eb9028)
+- Capture the in-app MCP server design (mcp_ideas.md) (#53) (d6f8571)
+
+### Features
+
+- In-app MCP server (#55) (3feefab)
+- Live view updates and note-editor reconciliation (#56) (1185e47)
+
+### Refactor
+
+- Invert task authority into the main process (#54) (12b382c)
+
 ## [v1.3.2] - 2026-07-20
 
 ### Highlights
