@@ -184,12 +184,12 @@ body{
 .modal-btn.primary{ background:var(--ink); color:var(--ground); border-color:var(--ink); }
 .modal-btn.danger{ background:var(--c-prog); color:var(--ground); border-color:var(--c-prog); }
 
-/* Per-task note editor (notes/noteEditor.js): a right-docked panel with a
-   rendered-markdown view and a CodeMirror editor revealed beside it on Edit. */
-.note-backdrop{ position:fixed; inset:0; z-index:70; background:rgba(0,0,0,.28); display:flex; justify-content:flex-end; }
+/* Per-task note editor (notes/noteEditor.js): a full-window panel with a
+   rendered-markdown view and a CodeMirror editor revealed beside it on Edit,
+   split by a draggable divider with a formatting toolbar atop the source. */
+.note-backdrop{ position:fixed; inset:0; z-index:70; }
 .note-backdrop.hidden{ display:none; }
-.note-panel{ width:min(840px,94vw); height:100%; background:var(--ground); border-left:1px solid var(--line);
-  display:flex; flex-direction:column; box-shadow:-14px 0 44px rgba(0,0,0,.26); }
+.note-panel{ width:100%; height:100%; background:var(--ground); display:flex; flex-direction:column; }
 .note-head{ flex:0 0 auto; display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--line); }
 .note-title{ flex:1; font-size:14px; font-weight:800; letter-spacing:.02em; color:var(--ink);
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -199,15 +199,31 @@ body{
 .note-close{ font:inherit; font-size:13px; border:1px solid var(--line); background:transparent; color:var(--ink);
   border-radius:6px; width:30px; height:30px; cursor:pointer; }
 .note-content{ flex:1; display:flex; min-height:0; }
-.note-editor{ flex:1; min-width:0; display:none; border-right:1px solid var(--line); overflow:hidden; }
-.note-panel.edit .note-editor{ display:block; }
-.note-editor .cm-editor{ height:100%; }
+.note-editor{ min-width:0; display:none; flex-direction:column; flex-grow:0; flex-shrink:0; overflow:hidden; }
+.note-panel.edit .note-editor{ display:flex; }
+.note-toolbar{ flex:0 0 auto; display:flex; align-items:center; gap:4px; flex-wrap:wrap;
+  padding:6px 8px; border-bottom:1px solid var(--line); font-family:var(--font-ui); }
+.note-tool{ font:inherit; font-size:12px; line-height:1; border:1px solid var(--line); background:transparent;
+  color:var(--ink); border-radius:5px; padding:5px 8px; cursor:pointer; }
+.note-tool:hover{ background:color-mix(in srgb, var(--line) 16%, transparent); }
+.note-tool.tb{ font-weight:800; } .note-tool.ti{ font-style:italic; } .note-tool.ts{ text-decoration:line-through; }
+.note-tool.on{ background:var(--ink); color:var(--ground); border-color:var(--ink); }
+.note-wrap{ margin-left:auto; }
+.note-cm-host{ flex:1 1 0; min-height:0; overflow:hidden; }
+.note-cm-host .cm-editor{ height:100%; }
+.note-divider{ flex:0 0 6px; display:none; position:relative; cursor:col-resize; }
+.note-panel.edit .note-divider{ display:block; }
+.note-divider::before{ content:""; position:absolute; inset:0 2px; background:var(--line); }
+.note-divider:hover::before{ background:var(--cursor); }
+.note-panel.resizing{ user-select:none; }
+.note-panel.resizing .cm-editor{ pointer-events:none; }
 .note-body{ flex:1; min-width:0; overflow:auto; padding:20px 24px; color:var(--ink); font-size:14px; line-height:1.62; }
 
 /* Rendered-markdown typography (kept modest; three-colour palette only). */
 .note-body > :first-child{ margin-top:0; }
-.note-body h1,.note-body h2,.note-body h3{ font-weight:800; letter-spacing:.01em; line-height:1.25; margin:1.4em 0 .5em; }
-.note-body h1{ font-size:1.5em; } .note-body h2{ font-size:1.28em; } .note-body h3{ font-size:1.1em; }
+.note-body h1,.note-body h2,.note-body h3{ font-family:var(--font-display); font-weight:400; letter-spacing:.01em;
+  line-height:1.15; margin:1.3em 0 .45em; }
+.note-body h1{ font-size:1.7em; } .note-body h2{ font-size:1.4em; } .note-body h3{ font-size:1.18em; }
 .note-body p,.note-body ul,.note-body ol,.note-body blockquote,.note-body pre,.note-body table{ margin:0 0 .85em; }
 .note-body a{ color:var(--c-done); text-decoration:none; } .note-body a:hover{ text-decoration:underline; }
 .note-body code{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.88em;

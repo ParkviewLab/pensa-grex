@@ -1,6 +1,6 @@
 {
   "name": "pensa-grex",
-  "version": "1.1.0",
+  "version": "1.1.1-dev0",
   "description": "PensaGrex desktop app",
   "author": "Gary Frattarola <garyf@parkviewlab.ai>",
   "license": "AGPL-3.0-or-later",
@@ -39,7 +39,10 @@
   },
   "dependencies": {
     "@codemirror/lang-markdown": "^6.5.1",
+    "@codemirror/language": "^6.12.4",
     "@codemirror/state": "^6.7.1",
+    "@codemirror/view": "^6.43.6",
+    "@lezer/highlight": "^1.2.3",
     "codemirror": "^6.0.2",
     "dompurify": "^3.4.12",
     "hypher": "^0.2.5",
