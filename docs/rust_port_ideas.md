@@ -454,15 +454,48 @@ Sync server is orthogonal to every row and can be added to any of them.
 - The data is safe under every option: JSON5 forests and markdown notes on disk are
   unchanged.
 
-# Precedent (partly pending)
+# Precedent: is robotics moving from C++/Python toward Rust/Python?
 
-Whether the ROS community is itself moving from a C++/Python foundation toward
-Rust/Python is being researched separately; the fuller synthesis will be folded in
-here. One concrete data point is already in hand: Dora-rs, a Rust-native dataflow
-framework positioned against ROS 2, federates Rust and Python nodes over a wire,
-which is the same "Rust core, Python as a peer service" shape Design C recommends.
-Threads still under investigation: ros2-rust/rclrs and r2r (Rust client libraries),
-and Zenoh with rmw_zenoh (Rust entering the ROS 2 middleware layer).
+The analogy the direction rests on holds up, and its precise shape is worth
+borrowing. A dedicated research pass on the ROS community (July 2026) finds the move
+toward Rust serious and sustained rather than fringe, but framed as "add Rust
+alongside C++ and Python," not "rewrite ROS in Rust," and not yet a formally
+sanctioned peer status.
+
+Two tracks are visible. On the client-library track, ros2-rust/rclrs has reached
+near feature-parity with the C++ and Python clients (publishers, subscriptions,
+services, actions, timers, parameters, zero-copy loaned messages; v0.7.0 on
+2026-01-18), and its message generator entered the ROS 2 Rolling core generator set
+in October 2025 alongside the C, C++, and Python generators; a core ROS 2 author
+presented it at FOSDEM 2026 as "the official ROS 2 client library for Rust." Yet
+rclrs still disclaims API stability, lives under the community org rather than the
+official one, and ROS 2's own documentation continues to list only C++ and Python as
+officially maintained, with Rust at "various levels of community support." So Rust is
+first-class in practice and momentum, not yet by governance.
+
+On the middleware track, Rust entered the core stack by dependency rather than by
+rewrite: Zenoh, which is written in Rust, was selected in the 2023 RMW evaluation as
+ROS 2's alternative middleware, and rmw_zenoh reached Tier-1 support in Kilted (May
+2025). But the ROS team reached Zenoh deliberately through its C and C++ bindings, so
+the Rust sits behind the RMW abstraction rather than being exposed in the core. And
+the Rust-native alternative, Dora (dora-rs), is a self-described "100% Rust framework"
+that positions itself against ROS 2 on performance (claiming a large speedup over ROS
+2's Python path via zero-copy shared memory), but as a separate dataflow framework,
+not a ROS rewrite.
+
+The bearing on PensaGrex is direct, and it validates the recommended shape rather
+than a maximal one. Robotics' actual trajectory is Rust as a first-class citizen
+alongside Python, federated over a wire, plus Rust-native alternatives that keep
+Python as a node, rather than a wholesale rewrite of a mature C++ core. That is
+exactly Design B combined with Design C's discipline: a 100% Rust app, with Python
+kept first-class at the service seam over a wire, Dora-rs being the clean instance of
+a Rust core with Python nodes. It does not argue for embedding Python in the app, and
+it does not treat "rewrite everything in Rust" as the norm; it treats Rust as the
+language one adopts for new first-class surfaces while Python stays over the wire.
+
+Sources: rclrs 0.5.0 and 0.6.0 release announcements (ROS Discourse, 2025); the
+FOSDEM 2026 rclrs talk (Esteve Fernandez); the ROS 2 alternative-middleware report
+(2023) and rmw_zenoh (ros2 org, Tier-1 in Kilted, 2025); dora-rs.ai.
 
 # Decisions log
 
