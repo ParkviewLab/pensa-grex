@@ -4,6 +4,20 @@ All notable changes to this project are recorded here.
 
 ## [Unreleased]
 
+## [v1.2.0] - 2026-07-20
+
+### Highlights
+
+The per-task note editor is now a full-window split-pane panel instead of an 840px right-docked drawer, with a draggable splitter whose ratio persists across sessions and resets on double-click. A markdown formatting toolbar sits above the CodeMirror source pane, offering bold, italic, strikethrough, inline code, headings, links, lists, blockquotes, and code blocks with Mod-key shortcuts, alongside a persisted line-wrap toggle. Source tokens now follow the app's azure/navy palette, and preview headings are set in Boogaloo.
+
+### Docs
+
+- V1.1.0 [skip ci] (e5b88c0)
+
+### Features
+
+- Full-window note editor with split pane, formatting toolbar, and themed CodeMirror (#40) (2ce3377)
+
 ## [v1.1.0] - 2026-07-20
 
 ### Highlights
