@@ -4,6 +4,20 @@ All notable changes to this project are recorded here.
 
 ## [Unreleased]
 
+## [v1.3.2] - 2026-07-20
+
+### Highlights
+
+Node title uniqueness is now enforced when tasks, forks, and trees are created, not just when they are renamed or pasted, so a duplicate name typed while adding a node will be de-duplicated automatically.
+
+### Bug fixes
+
+- Enforce unique node titles on creation, not only rename/paste (#52) (cbcd253)
+
+### Docs
+
+- V1.3.1 [skip ci] (c93aa86)
+
 ## [v1.3.1] - 2026-07-20
 
 ### Highlights
