@@ -125,6 +125,19 @@ document.getElementById('zin').addEventListener('click', () => {
 document.getElementById('zout').addEventListener('click', () => {
   viewport.zoomAt(1 / 1.2, viewportEl.clientWidth / 2, viewportEl.clientHeight / 2)
 })
+
+// "Show only flagged" read-only view: a client-local toggle (never written to the
+// forest, per northstar axiom 8). The class on the content element hides everything
+// but flagged cards and makes cards non-interactive (which also disables drag, since
+// drag.js resolves its source from the pointer's DOM target); the context menu is
+// gated separately so no canvas-level edit (e.g. Paste as new tree) is reachable.
+let flaggedOnly = false
+const flagFilterBtn = document.getElementById('flagfilter')
+flagFilterBtn.addEventListener('click', () => {
+  flaggedOnly = !flaggedOnly
+  contentEl.classList.toggle('flagged-only', flaggedOnly)
+  flagFilterBtn.setAttribute('aria-pressed', String(flaggedOnly))
+})
 domainSel.addEventListener('change', () => {
   if (domainSel.value === NEW_DOMAIN) { createDomainFlow(); return }
   openDomain(domainSel.value, domainSel.selectedOptions[0]?.textContent)
@@ -666,6 +679,7 @@ function openCanvasMenu(x, y) {
 viewportEl.addEventListener('contextmenu', (e) => {
   e.preventDefault()
   if (!currentRaw) return
+  if (flaggedOnly) return // read-only view; card gestures are already disabled via CSS
   const taskId = taskIdFromEvent(e)
   if (taskId && currentRaw.tasks[taskId]) openTaskMenu(e.clientX, e.clientY, taskId)
   else openCanvasMenu(e.clientX, e.clientY)

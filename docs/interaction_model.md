@@ -89,6 +89,10 @@ sidecar; northstar axiom 8) — so a selection made by flagging survives a reloa
 can be read by another tool. See `docs/node-visual-system.md` for how the orbits
 render.
 
+A toolbar toggle, "Flagged," switches the view to show only flagged nodes and locks
+editing — a read-only review of the selection. The toggle is live client view state
+(like the collapse set and camera), never written to the forest.
+
 ## Bookmark cameras: anchor to a node, not a coordinate
 
 A bookmark is a named saved view: a collapse set, a zoom, and a camera. The camera
