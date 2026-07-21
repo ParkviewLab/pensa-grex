@@ -29,6 +29,8 @@ const SPLIT_KEY = 'pensagrex.notesplit' // left pane's share of the content widt
 const WRAP_KEY = 'pensagrex.notewrap' // 'on' | 'off' (default on)
 const DIVIDER_PX = 6
 const MIN_PANE_PX = 220
+const FONT_KEY = 'pensagrex.notefont' // view-pane font size in px (persisted)
+const FONT_MIN = 12, FONT_MAX = 28, FONT_STEP = 2, FONT_DEFAULT = 16
 
 const editorTheme = EditorView.theme({
   '&': { height: '100%', backgroundColor: 'transparent', color: 'var(--ink)', fontSize: '13px' },
@@ -79,9 +81,14 @@ export function createNoteEditor({ readNote, writeNote, openExternal, onFirstWri
   const panel = elem('div', 'note-panel')
   const head = elem('div', 'note-head')
   const title = elem('div', 'note-title')
+  const fontDec = elem('button', 'note-fontbtn', 'A−')
+  const fontInc = elem('button', 'note-fontbtn', 'A+')
+  fontDec.type = fontInc.type = 'button'
+  fontDec.title = 'Smaller view text'
+  fontInc.title = 'Larger view text'
   const toggleBtn = elem('button', 'note-toggle', 'View')
   const closeBtn = elem('button', 'note-close', '✕')
-  head.append(title, toggleBtn, closeBtn)
+  head.append(title, fontDec, fontInc, toggleBtn, closeBtn)
 
   const content = elem('div', 'note-content')
   const editorPane = elem('div', 'note-editor') // left pane (flex column: toolbar + editor)
@@ -105,6 +112,7 @@ export function createNoteEditor({ readNote, writeNote, openExternal, onFirstWri
   let saveTimer = null
   let splitRatio = 0.5
   let wrapOn = true
+  let fontPx = FONT_DEFAULT
   const wrapCompartment = new Compartment()
 
   const isOpen = () => !backdrop.classList.contains('hidden')
@@ -116,6 +124,21 @@ export function createNoteEditor({ readNote, writeNote, openExternal, onFirstWri
   function renderPreview() {
     body.innerHTML = DOMPurify.sanitize(marked.parse(raw || ''))
   }
+
+  // View-pane font size: a persisted per-editor preference (like the split ratio and
+  // wrap), stepped by the A-/A+ buttons in the header and applied to the .note-body.
+  function applyFont() {
+    body.style.fontSize = fontPx + 'px'
+    fontDec.disabled = fontPx <= FONT_MIN
+    fontInc.disabled = fontPx >= FONT_MAX
+  }
+  function setFont(px) {
+    fontPx = Math.min(FONT_MAX, Math.max(FONT_MIN, px))
+    applyFont()
+    try { localStorage.setItem(FONT_KEY, String(fontPx)) } catch { /* storage may be unavailable */ }
+  }
+  fontDec.addEventListener('click', () => setFont(fontPx - FONT_STEP))
+  fontInc.addEventListener('click', () => setFont(fontPx + FONT_STEP))
 
   function destroyEditor() {
     if (view) { view.destroy(); view = null }
@@ -323,6 +346,11 @@ export function createNoteEditor({ readNote, writeNote, openExternal, onFirstWri
     splitRatio = Number.isFinite(parsed) && parsed > 0 && parsed < 1 ? parsed : 0.5
     applySplit()
     try { wrapOn = localStorage.getItem(WRAP_KEY) !== 'off' } catch { wrapOn = true }
+    let fs = null
+    try { fs = localStorage.getItem(FONT_KEY) } catch { /* storage may be unavailable */ }
+    const fp = parseInt(fs, 10)
+    fontPx = Number.isFinite(fp) && fp >= FONT_MIN && fp <= FONT_MAX ? fp : FONT_DEFAULT
+    applyFont()
 
     editMode = true
     destroyEditor()
