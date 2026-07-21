@@ -200,6 +200,13 @@ describe('addTree', () => {
     expect(out.tasks[rootId].kind).toBe('project')
     valid(out)
   })
+
+  it('makes a colliding tree name unique', () => {
+    const out = addTree(base(), 'm2') // base() already has a node titled 'm2'
+    const rootId = out.rootOrder[out.rootOrder.length - 1]
+    expect(out.tasks[rootId].title).toBe('m2-1')
+    valid(out)
+  })
 })
 
 describe('addTask', () => {
@@ -233,6 +240,25 @@ describe('addTask', () => {
     expect(out.tasks[n].next).toBe('b1')
     valid(out)
   })
+
+  it('makes a colliding created title unique', () => {
+    const before = base() // titles r, m1, m2, b1, b2
+    const out = addTaskAbove(before, 'm1', 'b1')
+    const n = newId(before, out)
+    expect(out.tasks[n].title).toBe('b1-1')
+    valid(out)
+  })
+
+  it('uniquifies even the default placeholder, so two unnamed tasks differ', () => {
+    const before = base()
+    const one = addTaskAbove(before, 'm1') // no title -> 'New task'
+    const nOne = newId(before, one)
+    expect(one.tasks[nOne].title).toBe('New task')
+    const two = addTaskAbove(one, 'm1') // -> 'New task-1'
+    const nTwo = newId(one, two)
+    expect(two.tasks[nTwo].title).toBe('New task-1')
+    valid(two)
+  })
 })
 
 describe('addBranch', () => {
@@ -257,6 +283,14 @@ describe('addBranch', () => {
 
   it('refuses to add a branch below a root node', () => {
     expect(() => addBranchBelow(base(), 'r', 'A')).toThrow()
+  })
+
+  it('makes a colliding branch title unique', () => {
+    const before = base()
+    const out = addBranchAbove(before, 'm2', 'b1') // 'b1' already exists
+    const n = newId(before, out)
+    expect(out.tasks[n].title).toBe('b1-1')
+    valid(out)
   })
 })
 
