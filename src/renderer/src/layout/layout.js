@@ -139,7 +139,7 @@ export function computeForestLayout(forest, sizes, opts = {}) {
     maxY = Math.max(maxY, box.bottom)
   }
   const dots = stations.filter((s) => !s.cursor).map((s) => ({ x: s.x, y: s.anchorY }))
-  const cursors = stations.filter((s) => s.cursor).map((s) => ({ x: s.x, y: s.anchorY, status: s.status }))
+  const cursors = stations.filter((s) => s.cursor).map((s) => ({ x: s.x, y: s.anchorY }))
 
   // ---- tracks: one straight riser per line, anchor to anchor ----
   const linesByStart = new Map()

@@ -104,13 +104,14 @@ export function buildShape(shape, w, h) {
   return { outer, innerT: `translate(${l.toFixed(2)} ${t.toFixed(2)}) scale(${sx.toFixed(4)} ${sy.toFixed(4)})` }
 }
 
-// The atomic orbits behind a project card: three thin, off-axis elliptical rings
-// centred on the card, each carrying one solid electron set back from apogee.
+// The atomic orbits behind a flagged node: three off-axis elliptical rings centred
+// on the card, each carrying one solid electron set back from apogee. The rings are
+// heavy (stroke 2.4) so they read clearly from behind the card.
 function drawOrbits(group, cx, cy, colour) {
   const O = [[72, 12, -30, -38], [66, 13, 40, 215], [68, 11, 103, -38]]
   for (const [rx, ry, ang, t] of O) {
     group.appendChild(svgEl('ellipse', {
-      cx, cy, rx, ry, fill: 'none', stroke: colour, 'stroke-width': 1.2,
+      cx, cy, rx, ry, fill: 'none', stroke: colour, 'stroke-width': 2.4,
       'stroke-opacity': 0.7, transform: `rotate(${ang} ${cx} ${cy})`,
     }))
     const rad = (ang * Math.PI) / 180, tr = (t * Math.PI) / 180
