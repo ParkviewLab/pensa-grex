@@ -10,6 +10,7 @@ import {
   listDomains, createForest, deleteForest, loadForest, saveForest, readNote, writeNote, deleteNote,
   getViewState, setViewState, writeExport, getBookmarks, setBookmarks,
 } from './store.js'
+import * as taskService from './taskService.js'
 
 const isDev = !app.isPackaged
 const GITHUB_URL = 'https://github.com/ParkviewLab/pensa-grex'
@@ -232,13 +233,32 @@ function buildMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
+// The one window, hoisted so `second-instance` can focus it. One process is one
+// authority over the task data (and, for the coming MCP server, one binder of the
+// fixed loopback port), enforced by the single-instance lock below.
+let mainWindow = null
+
+if (!app.requestSingleInstanceLock()) {
+  // A second launch hands off to the running instance and exits.
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.focus()
+    }
+  })
+}
+
 app.whenReady().then(() => {
+  // The lock-losing second instance is on its way out; never build a UI in it.
+  if (!app.hasSingleInstanceLock()) return
   const csp = contentSecurityPolicy()
   session.defaultSession.webRequest.onHeadersReceived((details, cb) => {
     cb({ responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [csp] } })
   })
 
-  const win = createWindow()
+  mainWindow = createWindow()
   buildMenu()
 
   // Persistence bridge: the renderer's whole view of disk. Handlers in store.js
@@ -247,7 +267,7 @@ app.whenReady().then(() => {
   ipcMain.handle('pensagrex:set-last-domain', (_e, name) => setLastDomain(name))
   ipcMain.handle('pensagrex:get-library-root', () => getLibraryRoot())
   ipcMain.handle('pensagrex:choose-library-root', async () => {
-    const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
       title: 'Choose a forest library folder',
       properties: ['openDirectory', 'createDirectory'],
     })
@@ -271,7 +291,7 @@ app.whenReady().then(() => {
   // save dialog is the trust boundary for this deliberately out-of-library write.
   ipcMain.handle('pensagrex:export-markdown', async (_e, defaultName, text) => {
     if (typeof text !== 'string') return { error: 'export text must be a string' }
-    const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
       title: 'Export project to Markdown',
       defaultPath: typeof defaultName === 'string' && defaultName ? defaultName : 'project.md',
       filters: [{ name: 'Markdown', extensions: ['md'] }],
@@ -282,9 +302,16 @@ app.whenReady().then(() => {
   ipcMain.handle('pensagrex:get-bookmarks', (_e, dir) => getBookmarks(dir))
   ipcMain.handle('pensagrex:set-bookmarks', (_e, dir, text) => setBookmarks(dir, text))
 
+  // Task authority: the single write path over the shared model. The renderer
+  // calls these in place of the coarse load/save; the in-app MCP server (later)
+  // will call the same taskService in this same process. Every op re-validates
+  // before it persists, so a bad edit is rejected, not written.
+  ipcMain.handle('pensagrex:read-forest', (_e, dir) => taskService.readForest(dir))
+  ipcMain.handle('pensagrex:task-op', (_e, dir, op, ...args) => taskService.taskOp(dir, op, args))
+
   // Safety net: keep the window from navigating away from the app; open any
   // external URL that slips through in the system browser instead.
-  win.webContents.on('will-navigate', (e, url) => {
+  mainWindow.webContents.on('will-navigate', (e, url) => {
     // Compare against the real file URL (pathToFileURL) rather than a hand-built
     // 'file://' + OS path, which is malformed on Windows (backslashes, drive
     // letter, two slashes) and would treat the app's own URL as external.
@@ -298,7 +325,7 @@ app.whenReady().then(() => {
   })
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) mainWindow = createWindow()
   })
 })
 

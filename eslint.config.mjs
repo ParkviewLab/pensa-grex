@@ -22,4 +22,10 @@ export default [
     files: ['src/renderer/**'],
     languageOptions: { globals: { ...globals.browser } },
   },
+  {
+    // The shared model + task-authority core run in BOTH the main process and the
+    // renderer, so they may use only globals present in both (e.g. structuredClone).
+    files: ['src/shared/**'],
+    languageOptions: { globals: { ...globals.node, ...globals.browser } },
+  },
 ]

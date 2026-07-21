@@ -3,11 +3,11 @@
 
 import { describe, it, expect } from 'vitest'
 import JSON5 from 'json5'
-import fixtureRaw from '../model/fixtures/homelab.forest.json5?raw'
-import { buildForest } from '../model/forest.js'
+import fixtureRaw from '../../../shared/model/fixtures/homelab.forest.json5?raw'
+import { buildForest } from '../../../shared/model/forest.js'
 import { computeForestLayout } from './layout.js'
-import { validateForest } from '../model/validate.js'
-import * as M from '../model/mutations.js'
+import { validateForest } from '../../../shared/model/validate.js'
+import * as M from '../../../shared/model/mutations.js'
 
 // Synthetic, deterministic sizes standing in for layout/measure.js's real DOM
 // measurement — layout.js is pure and must not need a DOM to be exercised.

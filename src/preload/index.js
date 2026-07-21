@@ -16,6 +16,11 @@ contextBridge.exposeInMainWorld('pensagrex', {
   deleteForest:      (dir)               => ipcRenderer.invoke('pensagrex:delete-forest', dir),
   loadForest:        (dir)               => ipcRenderer.invoke('pensagrex:load-forest', dir),
   saveForest:        (dir, text)         => ipcRenderer.invoke('pensagrex:save-forest', dir, text),
+  // The task-authority surface: read a forest through the shared model, and apply
+  // one named task operation. These replace load/save for editing; the coarse
+  // load/save above stay for seeding and one-time migration writes.
+  readForest:        (dir)               => ipcRenderer.invoke('pensagrex:read-forest', dir),
+  taskOp:            (dir, op, ...args)  => ipcRenderer.invoke('pensagrex:task-op', dir, op, ...args),
   readNote:          (dir, file)         => ipcRenderer.invoke('pensagrex:read-note', dir, file),
   writeNote:         (dir, file, text)   => ipcRenderer.invoke('pensagrex:write-note', dir, file, text),
   deleteNote:        (dir, file)         => ipcRenderer.invoke('pensagrex:delete-note', dir, file),
