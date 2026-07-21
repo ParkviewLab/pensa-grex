@@ -116,8 +116,9 @@ brief:
   rewrite but the only literally-100%-Rust path; it removes the webview problem and
   collapses the model to one Rust crate. egui is the recommended toolkit for the
   subway-map-plus-notes shape; the note editor is not CodeMirror (that needs a
-  webview) but `TextEdit` + `egui_commonmark`, with KaTeX-style math the one real
-  regression. The recommended end state.
+  webview) but `TextEdit` + `egui_commonmark`; math is a preview-pane task with real
+  native Rust renderers (RaTeX, ReX, pulldown-latex), not a lost capability. The
+  recommended end state.
 - Design C (Rust + Python): keep Python only across a wire, as a federated peer
   service (FastAPI, smalt-mcp). Every in-app shape (PyO3 embed, sidecar, Python MCP
   server) forfeits the one-static-binary win and, for embedding, pulls the Python

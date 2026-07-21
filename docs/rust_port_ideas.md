@@ -212,11 +212,28 @@ surface. In egui that is `TextEdit` plus `egui_commonmark` for preview (with
 wanted); in iced it is the cosmic-text-based `text_editor` (the closest thing to
 CodeMirror-class editing in the permissive Rust ecosystem, though undo is on you).
 Markdown rendering moves from Marked to `pulldown-cmark` (MIT), deliberately chosen
-over `comrak` (BSD-2-Clause, outside a strict MIT-or-Apache constraint). The one
-genuine regression is KaTeX: there is no mature Rust equivalent for in-note math
-rendering, so if notes rely on math, that capability is the real casualty of
-Design B, larger than the editor change. Avoid `helix-core` for the editor: capable
-but MPL-2.0, outside the MIT-or-Apache line (though AGPL-compatible).
+over `comrak` (BSD-2-Clause, outside a strict MIT-or-Apache constraint). Avoid
+`helix-core` for the editor: capable but MPL-2.0, outside the MIT-or-Apache line
+(though AGPL-compatible).
+
+Math (KaTeX today) is a preview-pane concern, not an editor one, and this reframing
+makes it tractable. The editor holds plain LaTeX source, so cosmic-text or `TextEdit`
+need no math awareness; math renders only in the rendered pane, exactly like
+Obsidian's split view. The pipeline is `pulldown-cmark` plus a small extension that
+recognises `$...$` and `$$...$$` (optionally `\(...\)` and `\[...\]`), with each math
+run rendered to an SVG or cached texture, debounced (100 to 200 ms) and keyed by
+source, size, and colour so identical formulas render once. Contrary to an earlier
+reading in this notebook, native Rust math renderers do exist: RaTeX (pure Rust, no
+JavaScript or WebView, emits a flat display list for SVG/PNG/canvas, self-reporting
+greater than 99.5% KaTeX syntax coverage), ReX (an older SVG math-typesetting
+library), and `pulldown-latex` or `katex-rs` (LaTeX to MathML); `pulldown-cmark-katex`
+already wires pulldown-cmark math runs to MathML. The honest calibration: these are
+younger and less proven than KaTeX, RaTeX's coverage figure is self-reported, and
+their licenses must be confirmed against the MIT-or-Apache constraint and their
+coverage validated against real note content. So math is a bounded implementation
+task in the preview pane, not a lost capability. (Discard the tempting HTML-plus-KaTeX
+in a WebView route: it reintroduces the webview Design B exists to remove, and belongs
+to Design A.)
 
 Costs. A full rewrite, not a migration: the model, its tests, the store and atomic
 writes, the task authority, and the MCP server are all re-authored in Rust, and the
@@ -449,8 +466,10 @@ Sync server is orthogonal to every row and can be added to any of them.
 - Migration strategy (open). Staged (a Tauri interim, then the webview swapped for
   egui) de-risks the jump but risks paying the model re-homing cost twice unless
   sequenced deliberately; a big-bang rewrite to Design B is cleaner but riskier.
-- Editor and math. The note editor has good permissive Rust answers; in-note math
-  (KaTeX) has no mature Rust equivalent and would regress under Design B.
+- Editor and math. The note editor has good permissive Rust answers, and math is a
+  preview-pane task, not an editor one: native Rust math renderers exist (RaTeX, ReX,
+  `pulldown-latex`/`katex-rs`), so KaTeX narrows from a lost capability to a bounded
+  implementation task, with library maturity and licensing to validate.
 - The data is safe under every option: JSON5 forests and markdown notes on disk are
   unchanged.
 
