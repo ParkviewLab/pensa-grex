@@ -678,6 +678,17 @@ viewportEl.addEventListener('dblclick', (e) => {
   if (taskId && currentRaw.tasks[taskId]) openNote(taskId)
 })
 
+// Single-clicking a task's status glyph cycles its status
+// (todo -> in-progress -> completed -> cancelled -> todo). A project glyph, which
+// carries no status, is ignored.
+viewportEl.addEventListener('click', (e) => {
+  if (!currentRaw) return
+  const gl = e.target.closest('.gl')
+  if (!gl || gl.classList.contains('project')) return
+  const taskId = taskIdFromEvent(e)
+  if (taskId && currentRaw.tasks[taskId]) applyEdit(M.cycleStatus(currentRaw, taskId))
+})
+
 const NEW_DOMAIN = '__new__'
 
 function populateSwitcher(domains, selectedPath) {

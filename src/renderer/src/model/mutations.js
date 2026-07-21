@@ -168,6 +168,18 @@ export function setStatus(raw, taskId, status) {
 }
 
 /**
+ * Advance a task's status one step along STATUSES, wrapping cancelled -> todo. The
+ * click-free counterpart of the right-click Status submenu; an unknown current
+ * status starts the cycle at todo.
+ */
+export function cycleStatus(raw, taskId) {
+  const task = requireTask(raw, taskId)
+  if (task.kind === 'project') throw new Error('a project node has no status')
+  const i = STATUSES.indexOf(task.status)
+  return setStatus(raw, taskId, STATUSES[(i + 1) % STATUSES.length])
+}
+
+/**
  * Toggle a node between task and project (a "sub-project"). Task -> project
  * DISCARDS status/completedAt and clears the cursor (a project has none); a
  * round-trip therefore resets a task to 'todo'. A root is always a project node,
