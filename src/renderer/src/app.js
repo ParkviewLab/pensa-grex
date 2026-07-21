@@ -1,21 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 
-// Renderer entry: boots the theme and the pan/zoom viewport, loads a real
-// forest from disk over the persistence bridge (bridge/api.js → preload →
-// main/store.js), and — as of M5 — edits it through a right-click menu. Every
-// edit runs a pure mutation (model/mutations.js) on the raw forest, is
-// re-validated, then re-rendered in place and saved (debounced). On first run
-// it seeds the two bundled sample domains; the header switcher reopens the
-// last-used domain across restarts.
+// Renderer entry: boots the theme and the pan/zoom viewport, opens a forest
+// through the main-process task authority (bridge/api.js → preload →
+// main/taskService.js), and edits it through a right-click menu. Each edit is a
+// named task operation the main process runs over the shared model — mutate,
+// re-validate, persist atomically — returning the new forest, which the renderer
+// adopts and re-renders in place. On first run it seeds the two bundled sample
+// domains; the header switcher reopens the last-used domain across restarts.
 
-import JSON5 from 'json5'
 import { initTheme } from './theme/theme.js'
 import { createViewport } from './interaction/viewport.js'
 import { mountLayout } from './render/scene.js'
-import { validateForest } from './model/validate.js'
-import { migrateForest } from './model/migrate.js'
-import { buildForest } from './model/forest.js'
+import { buildForest } from '../../shared/model/forest.js'
 import { measureForest } from './layout/measure.js'
 import { computeForestLayout } from './layout/layout.js'
 import { createApi } from './bridge/api.js'
@@ -25,10 +22,9 @@ import { centeredStationId, anchorChain, resolveAnchor } from './interaction/boo
 import { openContextMenu, closeContextMenu } from './interaction/contextMenu.js'
 import { promptText, chooseAction } from './ui/dialog.js'
 import { createNoteEditor } from './notes/noteEditor.js'
-import * as M from './model/mutations.js'
-import { serializeProject } from './export/markdown.js'
-import homelabFixtureRaw from './model/fixtures/homelab.forest.json5?raw'
-import workFixtureRaw from './model/fixtures/work.forest.json5?raw'
+import { serializeProject } from '../../shared/export/markdown.js'
+import homelabFixtureRaw from '../../shared/model/fixtures/homelab.forest.json5?raw'
+import workFixtureRaw from '../../shared/model/fixtures/work.forest.json5?raw'
 
 initTheme(document.getElementById('mode'))
 
@@ -65,8 +61,10 @@ const noteEditor = createNoteEditor({
   openExternal: (url) => api.openExternal(url),
   onFirstWrite: (taskId, file) => {
     const t = currentRaw && currentRaw.tasks[taskId]
-    if (t && !t.note) applyEdit(M.setNote(currentRaw, taskId, file))
+    if (t && !t.note) applyOp('setNote', taskId, file)
   },
+  // Surfaced when an external writer changes or removes the note being edited.
+  notify: (msg) => { chooseAction({ title: 'Note', message: msg, actions: [{ label: 'OK', value: null }] }) },
 })
 
 function openNote(taskId) {
@@ -74,24 +72,25 @@ function openNote(taskId) {
   if (t) noteEditor.open(t, currentDomainPath)
 }
 
-// A failed forest save must not be silent — the edit is on screen but not on
-// disk. Surface it once (not once per retry) without tearing down the map.
-let saveErrorOpen = false
-api.onSaveError = async (msg) => {
-  if (saveErrorOpen) return
-  saveErrorOpen = true
+// A failed edit must not be silent — the change is on screen but the authority
+// refused it (a broken invariant) or could not write it (a disk error). Surface
+// it once (not once per repeat) without tearing down the map.
+let editErrorOpen = false
+async function reportEditError(msg) {
+  if (editErrorOpen) return
+  editErrorOpen = true
   await chooseAction({
-    title: 'Save failed',
-    message: 'A change could not be saved to disk: ' + msg,
+    title: 'Change not saved',
+    message: 'A change could not be applied: ' + msg,
     actions: [{ label: 'OK', value: null }],
   })
-  saveErrorOpen = false
+  editErrorOpen = false
 }
 
-// Flush pending debounced writes (forest and the open note) before the window
-// closes, so an edit made within the debounce window is not lost on quit.
+// Forest edits persist synchronously through the task authority, so only the
+// open note — still autosaved on a debounce — needs a flush before the window
+// closes, lest an edit made within its debounce window be lost on quit.
 window.addEventListener('beforeunload', () => {
-  api.flushSaves()
   noteEditor.flush()
 })
 
@@ -143,6 +142,50 @@ domainSel.addEventListener('change', () => {
   openDomain(domainSel.value, domainSel.selectedOptions[0]?.textContent)
 })
 delDomainBtn.addEventListener('click', () => deleteDomainFlow())
+
+// ---- MCP server status indicator (header) ----
+// A dot (teal running, muted off, orange on error) plus a menu to copy the
+// endpoint URL and turn the server on or off. The server itself lives in the
+// main process; this only reflects and toggles it.
+const mcpBtn = document.getElementById('mcp')
+const mcpDot = document.getElementById('mcpdot')
+let mcpState = null
+
+async function refreshMcp() {
+  mcpState = await api.mcpStatus()
+  const s = mcpState || {}
+  mcpDot.className = 'mcp-dot' + (s.error ? ' err' : s.running ? ' on' : '')
+  mcpBtn.title = [
+    'MCP server',
+    s.running ? 'running at ' + s.url : (s.enabled ? 'starting…' : 'off'),
+    s.scope ? 'scope: ' + s.scope : null,
+    s.error ? 'error: ' + s.error : null,
+  ].filter(Boolean).join(' · ')
+}
+
+async function copyMcpUrl(url) {
+  if (!url) return
+  try {
+    await navigator.clipboard.writeText(url)
+  } catch {
+    await chooseAction({ title: 'MCP endpoint', message: url, actions: [{ label: 'OK', value: null }] })
+  }
+}
+
+mcpBtn.addEventListener('click', async () => {
+  await refreshMcp()
+  const s = mcpState || {}
+  const items = [{ label: (s.running ? '● ' : '○ ') + (s.url || 'unavailable'), disabled: true }, { separator: true }]
+  if (s.url) items.push({ label: 'Copy endpoint URL', onClick: () => copyMcpUrl(s.url) })
+  items.push({
+    label: s.enabled ? 'Turn off' : 'Turn on',
+    onClick: async () => { await api.mcpSetEnabled(!s.enabled); await refreshMcp() },
+  })
+  const r = mcpBtn.getBoundingClientRect()
+  openContextMenu(r.left, r.bottom + 4, items)
+})
+
+refreshMcp()
 window.addEventListener('resize', () => viewport.fit())
 
 // The delete button acts on the open domain, so it is disabled when none is open.
@@ -194,56 +237,42 @@ async function render(raw, { fit = true } = {}) {
   if (fit) viewport.fit()
 }
 
-// Apply a pure mutation result: reject it if it breaks an invariant, otherwise
-// adopt it, re-render in place, and persist (debounced).
-async function applyEdit(nextRaw) {
-  const v = validateForest(nextRaw)
-  if (!v.ok) {
-    console.error('edit rejected — would break an invariant:', v.errors)
+// Apply one task operation through the main-process authority: it runs the pure
+// mutation over the on-disk forest, re-validates, and persists atomically, then
+// returns the new forest, which we adopt and re-render in place. A refused edit
+// (a broken invariant) or a failed write comes back as an error we surface.
+async function applyOp(op, ...args) {
+  const res = await api.taskOp(currentDomainPath, op, ...args)
+  if (res.error) {
+    console.error(`edit rejected (${op}):`, res.error)
+    reportEditError(res.error)
     return
   }
-  currentRaw = nextRaw
-  await render(nextRaw, { fit: false })
-  api.saveForestDebounced(currentDomainPath, JSON5.stringify(nextRaw, null, 2))
+  currentRaw = res.raw
+  await render(currentRaw, { fit: false })
 }
 
 async function openDomain(path, name) {
   if (!path) return
   closeContextMenu()
   noteEditor.close()
-  const res = await api.loadForest(path)
+  // Main parses, migrates (persisting the upgrade once), and validates; the
+  // renderer receives the authoritative forest and renders it.
+  const res = await api.readForest(path)
   if (res.error) {
     showEmpty('Could not open “' + (name || path) + '”: ' + res.error)
     return
   }
-  let raw
-  try {
-    raw = JSON5.parse(res.text)
-  } catch (e) {
-    showEmpty('“' + (name || path) + '” is not valid JSON5: ' + e.message)
-    return
-  }
-  // Bring an older forest up to the current schema before validating; persist the
-  // upgrade once, so migration happens on first open rather than on every load.
-  const migrated = migrateForest(raw)
-  raw = migrated.raw
-  const validation = validateForest(raw)
-  if (!validation.ok) {
-    console.error('Forest failed validation:', validation.errors)
-    showEmpty('“' + (name || path) + '” failed validation (see console)')
-    return
-  }
-  currentRaw = raw
+  currentRaw = res.raw
   currentDomainPath = path
   currentDomainName = name
-  if (migrated.changed) await api.saveForest(path, JSON5.stringify(raw, null, 2))
   const vs = await api.getViewState(name)
   collapsedSet = new Set(Array.isArray(vs.collapsed) ? vs.collapsed : [])
   const bm = await api.getBookmarks(path)
   bookmarks = parseBookmarks(bm && bm.text)
   await api.setLastDomain(name)
   updateDeleteButton()
-  await render(raw, { fit: true })
+  await render(currentRaw, { fit: true })
 }
 
 // Bookmarks cross the bridge as text (the renderer owns the JSON shape); a missing
@@ -373,26 +402,21 @@ function renderDropHint(intent) {
   }
 }
 
-// Apply a resolved drop intent through the pure mutations. applyEdit re-validates,
-// so a stale or degenerate intent is rejected rather than corrupting the forest.
+// Apply a resolved drop intent as a task op. The authority re-validates every
+// op, so a stale or degenerate drop is rejected there and surfaced, rather than
+// corrupting the forest.
 function applyDropIntent(sourceId, intent) {
   if (!currentRaw || !intent) return
   const node = currentRaw.tasks[sourceId]
   if (!node) return
-  try {
-    if (intent.kind === 'fork') {
-      applyEdit(node.kind === 'project'
-        ? M.moveSubtree(currentRaw, sourceId, intent.targetId)
-        : M.moveTaskNode(currentRaw, sourceId, intent.targetId))
-    } else if (intent.kind === 'insert') {
-      applyEdit(M.moveIntoLine(currentRaw, sourceId, intent.belowId))
-    } else if (intent.kind === 'reorder') {
-      applyEdit(M.reorderRoot(currentRaw, sourceId, intent.index))
-    } else if (intent.kind === 'detach') {
-      applyEdit(M.detachToTree(currentRaw, sourceId))
-    }
-  } catch (e) {
-    console.error('drop rejected:', (e && e.message) || e)
+  if (intent.kind === 'fork') {
+    applyOp(node.kind === 'project' ? 'moveSubtree' : 'moveTaskNode', sourceId, intent.targetId)
+  } else if (intent.kind === 'insert') {
+    applyOp('moveIntoLine', sourceId, intent.belowId)
+  } else if (intent.kind === 'reorder') {
+    applyOp('reorderRoot', sourceId, intent.index)
+  } else if (intent.kind === 'detach') {
+    applyOp('detachToTree', sourceId)
   }
 }
 
@@ -465,13 +489,11 @@ async function copyProject(taskId) {
 }
 
 // Paste the clipboard into the open domain as a new tree: fresh ids, kept
-// statuses, cleared here cursors, fresh note files. Notes are written first so
-// the note dots resolve to real files once the pasted forest is rendered.
+// statuses, cleared here cursors, fresh note files. The paste op writes the note
+// files and the forest together in the main process.
 async function pasteTreeFlow() {
   if (!clipboard || !currentRaw) return
-  const { next, notes } = M.pasteAsTree(currentRaw, clipboard)
-  for (const n of notes) await api.writeNote(currentDomainPath, n.file, n.content)
-  applyEdit(next)
+  await applyOp('pasteAsTree', clipboard)
 }
 
 // Export a project's subtree to a markdown outline the user saves where they
@@ -551,19 +573,19 @@ async function deleteBookmarkFlow(index) {
 async function renameTask(taskId) {
   const title = await promptText({ title: 'Rename task', label: 'Title', value: currentRaw.tasks[taskId].title })
   if (title === null) return
-  applyEdit(M.setTitle(currentRaw, taskId, title))
+  applyOp('setTitle', taskId, title)
 }
 
 async function addTaskFlow(dir, taskId) {
   const title = await promptText({ title: 'Add task ' + dir, label: 'Title', value: '' })
   if (title === null) return
-  applyEdit(dir === 'above' ? M.addTaskAbove(currentRaw, taskId, title) : M.addTaskBelow(currentRaw, taskId, title))
+  applyOp(dir === 'above' ? 'addTaskAbove' : 'addTaskBelow', taskId, title)
 }
 
 async function addBranchFlow(dir, taskId) {
   const title = await promptText({ title: 'Add branch ' + dir, label: 'Title', value: '' })
   if (title === null) return
-  applyEdit(dir === 'above' ? M.addBranchAbove(currentRaw, taskId, title) : M.addBranchBelow(currentRaw, taskId, title))
+  applyOp(dir === 'above' ? 'addBranchAbove' : 'addBranchBelow', taskId, title)
 }
 
 async function deleteTaskFlow(taskId) {
@@ -594,13 +616,13 @@ async function deleteTaskFlow(taskId) {
     })
     if (mode === null) return
   }
-  applyEdit(M.deleteTask(currentRaw, taskId, mode))
+  applyOp('deleteTask', taskId, mode)
 }
 
 async function addTreeFlow() {
   const name = await promptText({ title: 'New tree', label: 'Tree name', value: '' })
   if (name === null) return
-  applyEdit(M.addTree(currentRaw, name))
+  applyOp('addTree', name)
 }
 
 function openTaskMenu(x, y, taskId) {
@@ -612,7 +634,7 @@ function openTaskMenu(x, y, taskId) {
   if (!isProject) {
     const status = (label, value) => ({
       label, checked: task.status === value,
-      onClick: () => applyEdit(M.setStatus(currentRaw, taskId, value)),
+      onClick: () => applyOp('setStatus', taskId, value),
     })
     items.push({ label: 'Status', submenu: [
       status('To do', 'todo'),
@@ -621,14 +643,14 @@ function openTaskMenu(x, y, taskId) {
       status('Cancelled', 'cancelled'),
     ] })
     items.push(task.here
-      ? { label: 'Clear here', onClick: () => applyEdit(M.clearHere(currentRaw, taskId)) }
-      : { label: 'Make here', onClick: () => applyEdit(M.makeHere(currentRaw, taskId)) })
+      ? { label: 'Clear here', onClick: () => applyOp('clearHere', taskId) }
+      : { label: 'Make here', onClick: () => applyOp('makeHere', taskId) })
   }
   // A root is always a project node, so its kind cannot be changed.
   if (!isRoot) {
     items.push(isProject
-      ? { label: 'Make task', onClick: () => applyEdit(M.convertKind(currentRaw, taskId)) }
-      : { label: 'Make sub-project', onClick: () => applyEdit(M.convertKind(currentRaw, taskId)) })
+      ? { label: 'Make task', onClick: () => applyOp('convertKind', taskId) }
+      : { label: 'Make sub-project', onClick: () => applyOp('convertKind', taskId) })
   }
   // Collapse/expand folds a project node's subtree (client-local view state).
   if (isProject) {
@@ -646,8 +668,8 @@ function openTaskMenu(x, y, taskId) {
   // predecessor to swap below.
   const succId = task.next
   const predId = Object.keys(currentRaw.tasks).find((pid) => currentRaw.tasks[pid].next === taskId)
-  if (succId && !isRoot) items.push({ label: 'Move up', onClick: () => applyEdit(M.moveUp(currentRaw, taskId)) })
-  if (predId && !isRootId(currentRaw, predId)) items.push({ label: 'Move down', onClick: () => applyEdit(M.moveDown(currentRaw, taskId)) })
+  if (succId && !isRoot) items.push({ label: 'Move up', onClick: () => applyOp('moveUp', taskId) })
+  if (predId && !isRootId(currentRaw, predId)) items.push({ label: 'Move down', onClick: () => applyOp('moveDown', taskId) })
   items.push({ label: 'Rename…', onClick: () => renameTask(taskId) })
   items.push({ separator: true })
   items.push({ label: 'Add task above', onClick: () => addTaskFlow('above', taskId) })
@@ -700,7 +722,7 @@ viewportEl.addEventListener('dblclick', (e) => {
   if (!currentRaw) return
   if (e.target.closest('.gl') || e.target.closest('.noteicon')) return
   const taskId = taskIdFromEvent(e)
-  if (taskId && currentRaw.tasks[taskId]) applyEdit(M.toggleFlag(currentRaw, taskId))
+  if (taskId && currentRaw.tasks[taskId]) applyOp('toggleFlag', taskId)
 })
 
 // Single-clicking a task's status glyph cycles its status
@@ -711,7 +733,7 @@ viewportEl.addEventListener('click', (e) => {
   const gl = e.target.closest('.gl')
   if (!gl || gl.classList.contains('project')) return
   const taskId = taskIdFromEvent(e)
-  if (taskId && currentRaw.tasks[taskId]) applyEdit(M.cycleStatus(currentRaw, taskId))
+  if (taskId && currentRaw.tasks[taskId]) applyOp('cycleStatus', taskId)
 })
 
 const NEW_DOMAIN = '__new__'
@@ -770,7 +792,8 @@ async function deleteDomainFlow() {
 
   noteEditor.close()
   closeContextMenu()
-  api.cancelPendingSave(path) // a queued save must not re-create the trashed forest
+  // No queued forest save to cancel: task ops write synchronously through main,
+  // so nothing can re-create the trashed forest after this point.
   const res = await api.deleteForest(path)
   if (res.error) {
     await chooseAction({ title: 'Could not delete domain', message: res.error, actions: [{ label: 'OK', value: null }] })
@@ -807,5 +830,56 @@ async function boot() {
   populateSwitcher(domains, last.path)
   await openDomain(last.path, last.name)
 }
+
+// ---- live updates from another writer (the in-app MCP server) ----
+// An agent edited the open domain: re-read and re-render in place, holding the
+// camera, zoom, and collapse state (northstar axiom 8 — the view is the client's).
+// A burst of edits coalesces into one render per animation frame; no changed-node
+// highlight. The renderer applies its OWN edits from their IPC result, and main
+// pushes only for external edits, so nothing renders twice.
+let liveRefreshQueued = false
+let liveRefreshDir = null
+function scheduleLiveRefresh(dir) {
+  liveRefreshDir = dir
+  if (liveRefreshQueued) return
+  liveRefreshQueued = true
+  requestAnimationFrame(async () => {
+    liveRefreshQueued = false
+    const d = liveRefreshDir
+    liveRefreshDir = null
+    if (!d || d !== currentDomainPath) return
+    const res = await api.readForest(d)
+    if (res.error) return
+    currentRaw = res.raw
+    await render(currentRaw, { fit: false })
+    noteEditor.reconcile(d, currentRaw)
+  })
+}
+
+// The domain list changed (an agent created or trashed a domain): refresh the
+// switcher, and if the open domain is the one that was removed, move to another.
+async function refreshDomainList() {
+  const domains = await api.listDomains()
+  if (currentDomainPath && !domains.some((d) => d.path === currentDomainPath)) {
+    noteEditor.close()
+    closeContextMenu()
+    if (!domains.length) {
+      currentDomainPath = null
+      currentRaw = null
+      await api.setLastDomain(null)
+      populateSwitcher([], null)
+      updateDeleteButton()
+      showEmpty('No domains. Use “New domain…” in the switcher to create one.')
+      return
+    }
+    populateSwitcher(domains, domains[0].path)
+    await openDomain(domains[0].path, domains[0].name)
+    return
+  }
+  populateSwitcher(domains, currentDomainPath)
+}
+
+api.onDomainChanged((dir) => scheduleLiveRefresh(dir))
+api.onDomainsChanged(() => refreshDomainList())
 
 boot()

@@ -21,6 +21,7 @@ import markedKatex from 'marked-katex-extension'
 import DOMPurify from 'dompurify'
 import 'katex/dist/katex.min.css'
 import { wrapSelection, prefixLines, insertLink } from './mdCommands.js'
+import { reconcileDecision } from './reconcile.js'
 
 marked.use(markedKatex({ throwOnError: false }))
 
@@ -76,7 +77,7 @@ function elem(tag, className, text) {
 // readNote/writeNote/openExternal come from bridge/api.js; onFirstWrite(taskId,
 // filename) lets the caller record the note filename on a task once its note
 // first gains content (so the .card.note dot appears and the name is persisted).
-export function createNoteEditor({ readNote, writeNote, openExternal, onFirstWrite }) {
+export function createNoteEditor({ readNote, writeNote, openExternal, onFirstWrite, notify }) {
   const backdrop = elem('div', 'note-backdrop hidden')
   const panel = elem('div', 'note-panel')
   const head = elem('div', 'note-head')
@@ -110,6 +111,7 @@ export function createNoteEditor({ readNote, writeNote, openExternal, onFirstWri
   let recorded = false // whether this task's note filename is already on the task
   let view = null
   let saveTimer = null
+  let conflictWarned = false // one-shot, so an external-change warning does not repeat
   let splitRatio = 0.5
   let wrapOn = true
   let fontPx = FONT_DEFAULT
@@ -153,9 +155,40 @@ export function createNoteEditor({ readNote, writeNote, openExternal, onFirstWri
     const firstWrite = !recorded && text.trim().length > 0
     const r = await writeNote(dir, f, text)
     if (r && r.error) { console.warn('[note save]', r.error); return }
+    conflictWarned = false // the editor content is now on disk
     if (firstWrite && onFirstWrite) {
       recorded = true
       onFirstWrite(id, f)
+    }
+  }
+
+  // Reconcile the open note with an external change (an MCP write to this domain).
+  // Never discards the user's in-progress edits silently: if the editor is clean
+  // it adopts the new content; if it has unsaved edits it warns and keeps them; if
+  // the task was removed, it closes with a notice. `raw` here is the forest.
+  async function reconcile(dir, forest) {
+    if (!isOpen() || domainPath !== dir || file === null) return
+    const taskExists = !!(forest && forest.tasks[taskId])
+    if (!taskExists) {
+      close()
+      if (notify) notify('The task whose note you were editing was removed by another writer, so the note was closed.')
+      return
+    }
+    const res = await readNote(domainPath, file)
+    const disk = res && typeof res.content === 'string' ? res.content : ''
+    const decision = reconcileDecision({ taskExists: true, diskContent: disk, editorContent: raw, dirty: saveTimer !== null })
+    if (decision === 'none') return
+    if (decision === 'warn') { // unsaved edits pending: keep them, warn once, never overwrite
+      if (!conflictWarned && notify) {
+        conflictWarned = true
+        notify('This note was changed by another writer while you had unsaved edits. Your edits are kept; save to keep them.')
+      }
+      return
+    }
+    raw = disk // clean: adopt the external content
+    renderPreview()
+    if (editMode && view) {
+      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: raw } })
     }
   }
 
@@ -335,6 +368,7 @@ export function createNoteEditor({ readNote, writeNote, openExternal, onFirstWri
     domainPath = dir
     file = task.note || task.id + '.md'
     recorded = !!task.note
+    conflictWarned = false
     title.textContent = task.title
     const res = await readNote(domainPath, file)
     raw = res && typeof res.content === 'string' ? res.content : ''
@@ -368,5 +402,5 @@ export function createNoteEditor({ readNote, writeNote, openExternal, onFirstWri
     editMode = false
   }
 
-  return { open, close, flush, isOpen }
+  return { open, close, flush, isOpen, reconcile }
 }
