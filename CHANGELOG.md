@@ -4,6 +4,22 @@ All notable changes to this project are recorded here.
 
 ## [Unreleased]
 
+## [v2.1.0] - 2026-07-21
+
+### Highlights
+
+This release adds a themed GitHub Pages download page at parkviewlab.github.io/pensa-grex, with self-updating links to the latest release installers and a Light/Dark toggle, plus a Connect Claude Code walkthrough covering the `claude mcp add` registration step. On the MCP side, the server now instructs connected clients that the task store is live and reads may be stale, telling them to re-read before acting and especially before writes; `find_flagged`, `set_status`, `delete_task`, and `delete_domain` carry matching cautions, and a new `work_flagged` prompt bakes the re-read-first order into the flagged-task workflow.
+
+### Docs
+
+- V2.0.0 [skip ci] (7e385d6)
+- Add a themed GitHub Pages download page (#57) (25d42cf)
+- Add Connect Claude Code section to the download page (#59) (b3acc27)
+
+### Features
+
+- Tell MCP clients not to trust stale reads (#58) (b85c59a)
+
 ## [v2.0.0] - 2026-07-21
 
 ### Highlights
