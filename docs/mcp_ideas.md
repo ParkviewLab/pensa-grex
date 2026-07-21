@@ -119,6 +119,36 @@ depth and composes with all of the above.
   in-process, it can push a change event to the renderer after any mutation,
   whoever made it, so the open window reflects an agent's edits at once.
 
+## Live view updates
+
+When the MCP server (or any writer that is not the open window) changes a
+domain, the app updates the displayed domain live, so the user can watch the AI
+alter the forest in real time. Main pushes the change to the renderer over
+`webContents.send` after every mutation; if the open window is showing that
+domain, it re-renders (model, measure, layout, draw). No file-watching is
+needed, and every push carries a post-validation snapshot, so the live view is
+never half-formed or invalid. Setting a status or moving the here-cursor shows
+as the node recoloring and the marquee moving.
+
+Rules:
+
+- The user always controls the camera. A live update never moves the camera and
+  never changes pan or zoom; new nodes appear in place. Collapse state is
+  preserved likewise; both are client view state, per northstar axiom 8.
+- No changed-node highlight; the update is silent.
+- A burst of agent edits coalesces into one render per frame, so the map stays
+  smooth without losing the live feel.
+- The renderer applies the results of its own IPC edits directly and treats a
+  pushed event only as "another writer changed this domain" (the MCP case, and
+  any future second window), so nothing renders twice.
+
+Note-editor reconciliation (in scope for v1): the note editor is a second view
+of the same data. If a task's note is open in the editor while the MCP server
+writes that same note, the editor reloads it when it has no unsaved edits, and
+warns rather than overwrites when it does. If the MCP server deletes the task
+whose note is open, the editor closes with a notice. A user's in-progress note
+is never silently discarded.
+
 ## Tool surface
 
 Task-level tools, not the coarse whole-forest load and save, across the three
@@ -244,3 +274,6 @@ library.
   destructive tiers, addressing by id with name-to-id lookup via `list_projects`
   and a `find_flagged` convenience; every mutation exposed; writes return the
   re-rendered outline. (settled)
+- Live view updates: the open domain re-renders on any external mutation; the
+  user always controls the camera (no auto-move, no changed-node highlight);
+  note-editor reconciliation is in scope for v1. (settled)
