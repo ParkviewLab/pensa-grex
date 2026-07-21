@@ -218,6 +218,10 @@ body{
 .note-panel.edit .note-toggle{ background:var(--ink); color:var(--ground); border-color:var(--ink); }
 .note-close{ font:inherit; font-size:13px; border:1px solid var(--line); background:transparent; color:var(--ink);
   border-radius:6px; width:30px; height:30px; cursor:pointer; }
+.note-fontbtn{ font:inherit; font-size:12px; border:1px solid var(--line); background:transparent; color:var(--ink);
+  border-radius:6px; padding:5px 9px; cursor:pointer; }
+.note-fontbtn:hover{ background:color-mix(in srgb, var(--line) 16%, transparent); }
+.note-fontbtn:disabled{ opacity:.4; cursor:default; }
 .note-content{ flex:1; display:flex; min-height:0; }
 .note-editor{ min-width:0; display:none; flex-direction:column; flex-grow:0; flex-shrink:0; overflow:hidden; }
 .note-panel.edit .note-editor{ display:flex; }
@@ -237,7 +241,7 @@ body{
 .note-divider:hover::before{ background:var(--cursor); }
 .note-panel.resizing{ user-select:none; }
 .note-panel.resizing .cm-editor{ pointer-events:none; }
-.note-body{ flex:1; min-width:0; overflow:auto; padding:20px 24px; color:var(--ink); font-size:14px; line-height:1.62; }
+.note-body{ flex:1; min-width:0; overflow:auto; padding:20px 24px; color:var(--ink); font-size:16px; line-height:1.62; }
 
 /* Rendered-markdown typography (kept modest; three-colour palette only). */
 .note-body > :first-child{ margin-top:0; }
