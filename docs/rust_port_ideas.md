@@ -224,14 +224,25 @@ recognises `$...$` and `$$...$$` (optionally `\(...\)` and `\[...\]`), with each
 run rendered to an SVG or cached texture, debounced (100 to 200 ms) and keyed by
 source, size, and colour so identical formulas render once. Contrary to an earlier
 reading in this notebook, native Rust math renderers do exist: RaTeX (pure Rust, no
-JavaScript or WebView, emits a flat display list for SVG/PNG/canvas, self-reporting
-greater than 99.5% KaTeX syntax coverage), ReX (an older SVG math-typesetting
-library), and `pulldown-latex` or `katex-rs` (LaTeX to MathML); `pulldown-cmark-katex`
-already wires pulldown-cmark math runs to MathML. The honest calibration: these are
-younger and less proven than KaTeX, RaTeX's coverage figure is self-reported, and
-their licenses must be confirmed against the MIT-or-Apache constraint and their
-coverage validated against real note content. So math is a bounded implementation
-task in the preview pane, not a lost capability. (Discard the tempting HTML-plus-KaTeX
+JavaScript or WebView, emits a flat display list for SVG/PNG/canvas), ReX (an older
+SVG math-typesetting library), and `pulldown-latex` or `katex-rs` (LaTeX to MathML);
+`pulldown-cmark-katex` already wires pulldown-cmark math runs to MathML.
+
+RaTeX validated (July 2026). License: MIT, confirmed by the repo LICENSE, the GitHub
+sidebar, and the crates.io metadata; it bundles the KaTeX math fonts under OFL-1.1
+(`THIRD_PARTY_NOTICES.txt`), the same license class PensaGrex already vendors and the
+same fonts the current app ships, so it satisfies the MIT-or-Apache constraint
+cleanly. Coverage: the ">99.5% KaTeX syntax coverage" figure is backed by a real
+conformance harness (a golden suite comparing rendered output against KaTeX 0.16.45
+by ink-coverage IoU, row by row, over math, mhchem chemistry, and physics, plus a
+public support table and live demo), so it is evidence-based rather than marketing;
+the caveats are that the corpus is the project's own (self-measured, not independently
+audited) and the live table renders via JavaScript so the exact number was not read
+directly. Maturity is the residual risk, not coverage or license: pre-1.0 (v0.1.13,
+2026-07-07), a multi-crate workspace on crates.io, ~1.4k stars but apparently a single
+maintainer, so expect API churn and weigh bus-factor. The remaining validation, when
+the port is real, is to run representative note formulas through its harness. So math
+is a bounded implementation task in the preview pane, not a lost capability. (Discard the tempting HTML-plus-KaTeX
 in a WebView route: it reintroduces the webview Design B exists to remove, and belongs
 to Design A.)
 
