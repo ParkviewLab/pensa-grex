@@ -29,7 +29,8 @@ commitment — see the handbook's `documentation.md`.
 - [`mcp_ideas.md`](mcp_ideas.md) — the in-app MCP server design: the Electron
   main process as the single task authority, a Node in-process Streamable-HTTP
   server on loopback (fixed port 35899), and the settled binding, security, and
-  access decisions. The tool surface an agent gets is still open.
+  access decisions. The full task-level tool surface, across read-only,
+  read-write, and destructive scope tiers, is settled.
 
 # 1. Done (M7, draft): project intent (`docs/northstar.md`)
 

@@ -119,6 +119,54 @@ depth and composes with all of the above.
   in-process, it can push a change event to the renderer after any mutation,
   whoever made it, so the open window reflects an agent's edits at once.
 
+## Tool surface
+
+Task-level tools, not the coarse whole-forest load and save, across the three
+scope tiers. Full functionality: every mutation in `mutations.js` is exposed. A
+node is addressed by its id and a domain by name or path, defaulting to the open
+domain; every write returns the affected id and the re-rendered outline, and a
+write that would violate an invariant returns the mutation's descriptive error,
+since each write is mutation, then `validateForest`, then atomic write.
+
+Read-only tier:
+
+- `list_domains()` returns domains as name and path.
+- `list_projects(domain?)` returns each project node's id, title, kind, and
+  whether it is a root, for resolving a named project (for instance "the Pre-MCP
+  project") to an id. Titles are only a strong tendency to be unique (enforced
+  on rename and paste, not on add), so an ambiguous name returns all matches for
+  the agent to disambiguate.
+- `find_flagged(domain?)` returns the flagged nodes; the `flagged` mark is set to
+  select tasks for an assistant to work, so this serves "plan the flagged tasks."
+- `read_project(domain?, project_id?, include_notes=false)` returns the
+  `serializeProject` outline plus a structured node array (id, title, kind,
+  status, here, flagged, whether a note exists, and the next and branch links);
+  no `project_id` renders every top-level project, and a `project_id` scopes to
+  that project or sub-project's subtree.
+- `read_note(node_id, domain?)` returns a node's markdown note.
+- `copy_project(node_id, domain?)` returns a serializable clip for
+  `paste_as_tree`.
+
+Read-write tier (on by default):
+
+- `create_domain(name)`, `create_project(name, domain?)`.
+- `add_task(target_id, position, mode, title, side?, domain?)`, position above or
+  below, mode continue or branch, side for a branch.
+- `set_title`, `set_status`, `cycle_status`, `set_note`, `delete_note`.
+- `make_here`, `clear_here`, `toggle_flag`, `convert_kind`.
+- `paste_as_tree(clip, domain?)`.
+- `move_node`, `move_subtree`, `move_into_line`, `detach_to_project`,
+  `reorder_project`, `move_up`, `move_down`.
+
+Destructive tier (off unless enabled at startup):
+
+- `delete_task(node_id, mode=subtree|splice, domain?)`.
+- `delete_domain(name_or_path)`.
+
+Excluded: the library root (`getLibraryRoot` / `chooseLibraryRoot`), a user
+setting whose change needs a native dialog; an agent works within the existing
+library.
+
 ## Sequencing
 
 1. Authority inversion is its own PR and the first PR, tested thoroughly: move
@@ -171,9 +219,6 @@ depth and composes with all of the above.
 
 ## Open
 
-- The tool surface an agent receives: exactly which tools, how the reads render
-  a project as a legible outline, how the writes map onto the mutations, and how
-  the scope tiers gate them. To be designed next.
 - An optional discovery file (the current endpoint written to userData) so
   tooling can find the URL without the user copying it.
 - A designed HTML companion for this notebook, per the dual-track documentation
@@ -195,4 +240,7 @@ depth and composes with all of the above.
   (settled)
 - Sequencing: authority inversion is the first PR, tested thoroughly, before any
   MCP code. (settled)
-- Tool surface. (open)
+- Tool surface: the full task-level tool set across read-only, read-write, and
+  destructive tiers, addressing by id with name-to-id lookup via `list_projects`
+  and a `find_flagged` convenience; every mutation exposed; writes return the
+  re-rendered outline. (settled)
