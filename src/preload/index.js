@@ -24,6 +24,18 @@ contextBridge.exposeInMainWorld('pensagrex', {
   // The in-app MCP server: read its status (enabled/running/url) and turn it on/off.
   mcpStatus:         ()                  => ipcRenderer.invoke('pensagrex:mcp-status'),
   mcpSetEnabled:     (enabled)           => ipcRenderer.invoke('pensagrex:mcp-set-enabled', enabled),
+  // Live updates: another writer (the MCP server) changed a domain's forest/notes,
+  // or the domain list. Each returns an unsubscribe function.
+  onDomainChanged:   (cb) => {
+    const handler = (_e, data) => cb(data && data.dir)
+    ipcRenderer.on('pensagrex:domain-changed', handler)
+    return () => ipcRenderer.removeListener('pensagrex:domain-changed', handler)
+  },
+  onDomainsChanged:  (cb) => {
+    const handler = () => cb()
+    ipcRenderer.on('pensagrex:domains-changed', handler)
+    return () => ipcRenderer.removeListener('pensagrex:domains-changed', handler)
+  },
   readNote:          (dir, file)         => ipcRenderer.invoke('pensagrex:read-note', dir, file),
   writeNote:         (dir, file, text)   => ipcRenderer.invoke('pensagrex:write-note', dir, file, text),
   deleteNote:        (dir, file)         => ipcRenderer.invoke('pensagrex:delete-note', dir, file),
