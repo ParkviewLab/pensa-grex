@@ -558,3 +558,11 @@ FOSDEM 2026 rclrs talk (Esteve Fernandez); the ROS 2 alternative-middleware repo
   comments and formatting to honour axiom 6. A Joplin-style sync server is a
   separate, optional, off-by-default capability that can pair with any design.
   Captured as an in-flight idea for exploration, not yet a plan.
+- 2026-07-21 — RaTeX dependency stance (agreed): if Design B proceeds and RaTeX is
+  used for in-note math, vendor the typeset-to-SVG subset (`ratex-types`, `-lexer`,
+  `-parser`, `-layout`, `-render`, `-svg`, and the font crates) into our tree for
+  supply-chain safety, track upstream while it stays active, and reserve a full fork
+  for the day upstream is abandoned. The MIT license makes the fork always available,
+  so adoption does not bet on the single maintainer. Vendored files keep their MIT
+  headers; the bundled math fonts keep OFL-1.1, per the existing font-vendoring
+  pattern. A Design B decision; no action until that path is taken.
