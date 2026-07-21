@@ -26,6 +26,11 @@ commitment — see the handbook's `documentation.md`.
 - [`theme_ideas.md`](theme_ideas.md) — the Googie / atomic-age / mid-century
   visual direction, held for the theming stage (skin comes after the grammar
   and data model).
+- [`mcp_ideas.md`](mcp_ideas.md) — the in-app MCP server design: the Electron
+  main process as the single task authority, a Node in-process Streamable-HTTP
+  server on loopback (fixed port 35899), and the settled binding, security, and
+  access decisions. The full task-level tool surface, across read-only,
+  read-write, and destructive scope tiers, is settled.
 
 # 1. Done (M7, draft): project intent (`docs/northstar.md`)
 
