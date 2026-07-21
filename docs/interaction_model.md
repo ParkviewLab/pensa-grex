@@ -69,6 +69,30 @@ caller draws a ring on a fork target or an insertion caret across a gap. Panning
 untouched because it is the empty-canvas gesture, so `viewport.js` skips a press
 that lands on a card.
 
+## Card gestures: clicks, not drags
+
+Beyond the drag above, a card answers direct clicks on its parts, each part owning a
+distinct sub-region so the gestures never collide:
+
+- **status glyph**, single-click — cycles the task's status (todo → in-progress →
+  completed → cancelled → todo), the click-free counterpart of the right-click
+  Status submenu (`cycleStatus` in `mutations.js`).
+- **notepad icon** (bottom-right, shown when the node has a note), single-click —
+  opens the note editor.
+- **card body**, double-click — toggles the node's **flag**, drawn as the atomic
+  orbits (`toggleFlag`). The status glyph and note icon are excluded, so a
+  double-click on either runs its own single-click action twice rather than flagging.
+
+The flag is persisted in the forest file — a shared annotation, not client view
+state (contrast the collapse set and camera, which stay in the client's own
+sidecar; northstar axiom 8) — so a selection made by flagging survives a reload and
+can be read by another tool. See `docs/node-visual-system.md` for how the orbits
+render.
+
+A toolbar toggle, "Flagged," switches the view to show only flagged nodes and locks
+editing — a read-only review of the selection. The toggle is live client view state
+(like the collapse set and camera), never written to the forest.
+
 ## Bookmark cameras: anchor to a node, not a coordinate
 
 A bookmark is a named saved view: a collapse set, a zoom, and a camera. The camera

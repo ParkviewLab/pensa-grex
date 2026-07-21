@@ -36,6 +36,7 @@ function newTask(title) {
     completedAt: null,
     note: null,
     here: false,
+    flagged: false,
     next: null,
     branches: [],
   }
@@ -48,6 +49,7 @@ function newProjectNode(title) {
     kind: 'project',
     createdAt: nowISO(),
     note: null,
+    flagged: false,
     next: null,
     branches: [],
   }
@@ -141,10 +143,31 @@ export function addTree(raw, name) {
   return next
 }
 
-/** Set a node's title. */
+// Return `desired` if no other node in the domain already uses it, else the lowest
+// free `base-N`, so titles stay unique across the forest. The base is `desired`
+// with any trailing `-<digits>` stripped, so re-editing "Foo-1" into a name that is
+// already taken yields "Foo-2", not "Foo-1-1" (a bare "Foo" collision starts at
+// "Foo-1"). `excludeId` is the node being renamed, whose own current title must not
+// count as a collision. A deliberate consequence of stripping: a genuine numeric
+// tail ("Rev-2020") is renumbered from its base on collision (see docs/model_ideas.md).
+export function uniqueTitle(raw, desired, excludeId) {
+  const want = String(desired)
+  const taken = new Set()
+  for (const [id, t] of Object.entries(raw.tasks || {})) {
+    if (id !== excludeId && t && typeof t.title === 'string') taken.add(t.title)
+  }
+  if (!taken.has(want)) return want
+  const baseName = want.replace(/-\d+$/, '')
+  for (let n = 1; ; n++) {
+    const candidate = baseName + '-' + n
+    if (!taken.has(candidate)) return candidate
+  }
+}
+
+/** Set a node's title, kept unique within the domain (see uniqueTitle). */
 export function setTitle(raw, taskId, title) {
   const next = clone(raw)
-  requireTask(next, taskId).title = String(title)
+  requireTask(next, taskId).title = uniqueTitle(next, title, taskId)
   return next
 }
 
@@ -168,6 +191,18 @@ export function setStatus(raw, taskId, status) {
 }
 
 /**
+ * Advance a task's status one step along STATUSES, wrapping cancelled -> todo. The
+ * click-free counterpart of the right-click Status submenu; an unknown current
+ * status starts the cycle at todo.
+ */
+export function cycleStatus(raw, taskId) {
+  const task = requireTask(raw, taskId)
+  if (task.kind === 'project') throw new Error('a project node has no status')
+  const i = STATUSES.indexOf(task.status)
+  return setStatus(raw, taskId, STATUSES[(i + 1) % STATUSES.length])
+}
+
+/**
  * Toggle a node between task and project (a "sub-project"). Task -> project
  * DISCARDS status/completedAt and clears the cursor (a project has none); a
  * round-trip therefore resets a task to 'todo'. A root is always a project node,
@@ -188,6 +223,18 @@ export function convertKind(raw, taskId) {
     delete task.completedAt
     delete task.here
   }
+  return next
+}
+
+/**
+ * Toggle a node's "flagged" mark, drawn as the atomic orbits. A persisted, shared
+ * annotation (it rides in the forest file, not the client's view state), used to
+ * select nodes, e.g. for an assistant to examine next. Any node may be flagged.
+ */
+export function toggleFlag(raw, taskId) {
+  const next = clone(raw)
+  const task = requireTask(next, taskId)
+  task.flagged = !task.flagged
   return next
 }
 
@@ -367,6 +414,9 @@ export function pasteAsTree(raw, clip) {
       node.note = newId + '.md'
       notes.push({ file: node.note, content: (clip.notes && clip.notes[oldId]) || '' })
     }
+    // Keep pasted titles unique in the destination: check against the domain's
+    // existing nodes and the pasted nodes already placed (uniqueTitle walks next.tasks).
+    if (typeof node.title === 'string') node.title = uniqueTitle(next, node.title, null)
     next.tasks[newId] = node
   }
   next.rootOrder.push(map(clip.rootId))

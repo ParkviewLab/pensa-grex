@@ -66,6 +66,7 @@ body{
 .btn.danger:hover{ background:color-mix(in srgb, var(--c-prog) 16%, transparent); }
 .btn:disabled{ opacity:.4; cursor:default; }
 .btn:disabled:hover{ background:transparent; }
+.btn.toggle[aria-pressed="true"]{ background:var(--ink); color:var(--ground); border-color:var(--ink); }
 .pct{ font-size:11px; color:var(--muted); min-width:42px; text-align:center; font-variant-numeric:tabular-nums; }
 
 .viewport{
@@ -126,16 +127,35 @@ body{
 .card{ position:relative; background:transparent; padding:11px 16px;
   width:188px; display:flex; flex-direction:column; gap:3px; }
 .card.cursor{ padding-left:24px; padding-right:24px; }
+/* A project node has no status tag and no cursor, so a one-word name left the hull
+   too short. Reserve two label lines (2 x 15px x 1.2 = 36px) plus the 11px vertical
+   padding, and centre the content, so every project card is at least two lines tall. */
+.card.project{ min-height:58px; justify-content:center; }
 .card > .hd, .card > .tag, .card > .here{ position:relative; z-index:1; }
 .cardbg{ position:absolute; inset:0; width:100%; height:100%; overflow:visible; z-index:0; pointer-events:none; }
 .cardbg .outer{ fill:var(--line); }
 .cardbg .inner{ fill:var(--panel); }
-.card .hd{ display:flex; align-items:center; gap:7px; }
+.card .hd{ display:flex; align-items:center; justify-content:center; gap:7px; }
 .card .lbl{ font-family:var(--font-display); font-size:15px; line-height:1.2; color:var(--ink);
-  overflow-wrap:break-word; }
+  overflow-wrap:break-word; text-align:center; }
 .card.cancel .lbl{ text-decoration:line-through; color:var(--muted); }
 .card .tag{ font-size:8.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
-.card.note::after{ content:""; position:absolute; top:9px; right:15px; width:6px; height:6px; border-radius:50%; background:var(--c-todo); z-index:1; }
+/* A note shows a clickable memo-pad glyph in the card's bottom-right corner (built
+   in render/card.js); clicking it opens the note editor (app.js). */
+.noteicon{ position:absolute; right:11px; bottom:8px; width:14px; height:14px; z-index:2; cursor:pointer; }
+.noteicon .np-body{ fill:none; stroke:var(--muted); stroke-width:1.2; }
+.noteicon .np-ring{ stroke:var(--muted); stroke-width:1.2; stroke-linecap:round; }
+.noteicon .np-rule{ stroke:var(--muted); stroke-width:1; stroke-linecap:round; }
+.noteicon:hover .np-body, .noteicon:hover .np-ring, .noteicon:hover .np-rule{ stroke:var(--ink); }
+
+/* "Show only flagged" read-only view (toggled from the toolbar): hide the track
+   layer, the line dots, and every non-flagged card, and make all cards
+   non-interactive so the view cannot edit — drag included, since drag.js starts from
+   the pointer's DOM target, which pointer-events:none removes. */
+.flagged-only > svg,
+.flagged-only > .dot,
+.flagged-only .card:not(.flagged){ display:none; }
+.flagged-only .card{ pointer-events:none; }
 /* The HERE pill's background is set per-task to the status colour in render/card.js;
    --here-ink is the ground's dark tone so the label stays legible on any status colour. */
 .here{ align-self:flex-start; font-size:8px; font-weight:800; letter-spacing:.14em; color:var(--here-ink);

@@ -125,6 +125,19 @@ document.getElementById('zin').addEventListener('click', () => {
 document.getElementById('zout').addEventListener('click', () => {
   viewport.zoomAt(1 / 1.2, viewportEl.clientWidth / 2, viewportEl.clientHeight / 2)
 })
+
+// "Show only flagged" read-only view: a client-local toggle (never written to the
+// forest, per northstar axiom 8). The class on the content element hides everything
+// but flagged cards and makes cards non-interactive (which also disables drag, since
+// drag.js resolves its source from the pointer's DOM target); the context menu is
+// gated separately so no canvas-level edit (e.g. Paste as new tree) is reachable.
+let flaggedOnly = false
+const flagFilterBtn = document.getElementById('flagfilter')
+flagFilterBtn.addEventListener('click', () => {
+  flaggedOnly = !flaggedOnly
+  contentEl.classList.toggle('flagged-only', flaggedOnly)
+  flagFilterBtn.setAttribute('aria-pressed', String(flaggedOnly))
+})
 domainSel.addEventListener('change', () => {
   if (domainSel.value === NEW_DOMAIN) { createDomainFlow(); return }
   openDomain(domainSel.value, domainSel.selectedOptions[0]?.textContent)
@@ -666,16 +679,39 @@ function openCanvasMenu(x, y) {
 viewportEl.addEventListener('contextmenu', (e) => {
   e.preventDefault()
   if (!currentRaw) return
+  if (flaggedOnly) return // read-only view; card gestures are already disabled via CSS
   const taskId = taskIdFromEvent(e)
   if (taskId && currentRaw.tasks[taskId]) openTaskMenu(e.clientX, e.clientY, taskId)
   else openCanvasMenu(e.clientX, e.clientY)
 })
 
-// Double-clicking a task label opens its note (the same as Edit note).
-viewportEl.addEventListener('dblclick', (e) => {
+// Clicking a card's notepad icon opens its note.
+viewportEl.addEventListener('click', (e) => {
   if (!currentRaw) return
+  if (!e.target.closest('.noteicon')) return
   const taskId = taskIdFromEvent(e)
   if (taskId && currentRaw.tasks[taskId]) openNote(taskId)
+})
+
+// Double-clicking a card's body toggles its flag (drawn as atomic orbits). The
+// status glyph and note icon own their own single-click actions, so a double-click
+// on either is left to them and does not toggle the flag.
+viewportEl.addEventListener('dblclick', (e) => {
+  if (!currentRaw) return
+  if (e.target.closest('.gl') || e.target.closest('.noteicon')) return
+  const taskId = taskIdFromEvent(e)
+  if (taskId && currentRaw.tasks[taskId]) applyEdit(M.toggleFlag(currentRaw, taskId))
+})
+
+// Single-clicking a task's status glyph cycles its status
+// (todo -> in-progress -> completed -> cancelled -> todo). A project glyph, which
+// carries no status, is ignored.
+viewportEl.addEventListener('click', (e) => {
+  if (!currentRaw) return
+  const gl = e.target.closest('.gl')
+  if (!gl || gl.classList.contains('project')) return
+  const taskId = taskIdFromEvent(e)
+  if (taskId && currentRaw.tasks[taskId]) applyEdit(M.cycleStatus(currentRaw, taskId))
 })
 
 const NEW_DOMAIN = '__new__'
