@@ -31,6 +31,11 @@ commitment — see the handbook's `documentation.md`.
   server on loopback (fixed port 35899), and the settled binding, security, and
   access decisions. The full task-level tool surface, across read-only,
   read-write, and destructive scope tiers, is settled.
+- [`rust_port_ideas.md`](rust_port_ideas.md) — moving PensaGrex off Electron
+  toward a 100% Rust app: what "100% Rust" means (a Rust-native GUI such as egui
+  or iced, not Tauri), the model re-homing decision that any port turns on, how
+  the current architecture ports, the northstar and licensing fit, and the costs.
+  See entry 7 below.
 
 # 1. Done (M7, draft): project intent (`docs/northstar.md`)
 
@@ -94,3 +99,38 @@ optional `vitest --ui` dev server running; this repo never adds a `--ui`
 script or invokes one (only `vitest run`, in `npm test` and CI), so the
 practical exposure is nil in normal use. Revisit when `electron-vite` and
 `vite` are ready to move together, or if the `--ui` server is ever wanted.
+
+# 7. Under study: a Rust port (off Electron) — [`rust_port_ideas.md`](rust_port_ideas.md)
+
+The author has settled on a direction: PensaGrex should become a 100% Rust app,
+off Electron and its bundled Chromium and its forced JavaScript. The deeper
+notebook is [`rust_port_ideas.md`](rust_port_ideas.md), which now works through
+three designs, a survey of other options, and an orthogonal sync-server idea. In
+brief:
+
+- Design A (Tauri hybrid): web UI kept, store/authority/MCP rewritten in Rust.
+  Viable and the cleanest Tauri form, but not 100% Rust, and it keeps both the
+  multi-webview fidelity QA (WebKitGTK is the weak engine) and a model-duplication
+  hazard. Best as an interim.
+- Design B (100% Rust GUI, egui or iced): no JavaScript, no webview. The widest
+  rewrite but the only literally-100%-Rust path; it removes the webview problem and
+  collapses the model to one Rust crate. egui is the recommended toolkit for the
+  subway-map-plus-notes shape; the note editor is not CodeMirror (that needs a
+  webview) but `TextEdit` + `egui_commonmark`; math is a preview-pane task with real
+  native Rust renderers (RaTeX, ReX, pulldown-latex), not a lost capability. The
+  recommended end state.
+- Design C (Rust + Python): keep Python only across a wire, as a federated peer
+  service (FastAPI, smalt-mcp). Every in-app shape (PyO3 embed, sidecar, Python MCP
+  server) forfeits the one-static-binary win and, for embedding, pulls the Python
+  under AGPL; rejected inside the app. The Rust core stays the single authority.
+- Any hybrid turns on re-homing the model (`src/shared/`, ~1,100 lines; the
+  correctness of the port to be preserved against the existing test suite); the
+  JSON5 write path must preserve comments/formatting to honour axiom 6.
+- Other options recorded (Dioxus, Dioxus Native/Blitz, Flutter+Rust, a PWA, trim
+  Electron, Freya, and gpui/slint noted as excluded on licensing). The data is
+  untouched throughout (axiom 6).
+- A Joplin-style sync server is captured as a separate, optional, off-by-default
+  capability (reuse WebDAV/S3/git/Syncthing; conflict-copy, not CRDT-in-the-file),
+  which may graduate to its own `sync_ideas.md` if it firms up.
+
+This is a question under study, not a plan or a commitment.
