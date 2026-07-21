@@ -36,6 +36,7 @@ function newTask(title) {
     completedAt: null,
     note: null,
     here: false,
+    flagged: false,
     next: null,
     branches: [],
   }
@@ -48,6 +49,7 @@ function newProjectNode(title) {
     kind: 'project',
     createdAt: nowISO(),
     note: null,
+    flagged: false,
     next: null,
     branches: [],
   }
@@ -221,6 +223,18 @@ export function convertKind(raw, taskId) {
     delete task.completedAt
     delete task.here
   }
+  return next
+}
+
+/**
+ * Toggle a node's "flagged" mark, drawn as the atomic orbits. A persisted, shared
+ * annotation (it rides in the forest file, not the client's view state), used to
+ * select nodes, e.g. for an assistant to examine next. Any node may be flagged.
+ */
+export function toggleFlag(raw, taskId) {
+  const next = clone(raw)
+  const task = requireTask(next, taskId)
+  task.flagged = !task.flagged
   return next
 }
 

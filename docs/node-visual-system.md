@@ -52,12 +52,16 @@ The mapping is policy, set in `renderCard`, not a property of the shapes:
   `--c-cancel`);
 - task marked "here" → **marquee** + the **Atomic Starburst**, keeping the status
   colour;
-- project node → **hull** + **orbits**, in the reserved project colour
-  `--c-project` (a violet: `#7d54a6` on the azure ground, `#bd93e6` on navy);
+- project node → **hull**, in the reserved project colour `--c-project` (a violet:
+  `#7d54a6` on the azure ground, `#bd93e6` on navy);
+- any **flagged** node → the **orbits**, in the node's own colour (its status colour
+  for a task, the project violet for a project);
 - a **collapsed** project node additionally casts a **shadow**.
 
 A project node shows no status glyph and no tag and can never be the cursor, so the
-violet and the orbits read unambiguously as "this is a project, not a task."
+violet and the hull shape read unambiguously as "this is a project, not a task." The
+orbits are no longer tied to project-ness: they mark the flagged state, toggled by
+double-clicking a node (see `docs/interaction_model.md`).
 
 ## The three decorators
 
@@ -67,7 +71,7 @@ overflow the card box.
 - **orbits** — three thin, off-axis elliptical rings centred on the card, each
   carrying one solid electron set back from apogee. Off-axis and irregular on
   purpose: rings at 0/90/180 would read as a tidy modern diagram, not atomic-age.
-  Worn by every project node.
+  Worn by any flagged node, in the node's own colour.
 - **shadow** — a filled echo of the silhouette, offset down and right at low
   opacity, drawn when a project is collapsed so a folded project reads as a stack
   of hidden cards.

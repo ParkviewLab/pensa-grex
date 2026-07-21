@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import { validateForest } from './validate.js'
 import {
-  setTitle, uniqueTitle, setNote, setStatus, cycleStatus, makeHere, clearHere, addTree, convertKind,
+  setTitle, uniqueTitle, setNote, toggleFlag, setStatus, cycleStatus, makeHere, clearHere, addTree, convertKind,
   addTaskAbove, addTaskBelow, addBranchAbove, addBranchBelow, deleteTask, pasteAsTree,
   moveTaskNode, moveSubtree, detachToTree, reorderRoot, moveIntoLine, moveUp, moveDown,
 } from './mutations.js'
@@ -113,6 +113,31 @@ describe('uniqueTitle — unique node titles within a domain', () => {
   it('does not count the renamed node itself as a collision', () => {
     const out = setTitle(base(), 'm2', 'm2') // renaming m2 to its own title
     expect(out.tasks.m2.title).toBe('m2')
+  })
+})
+
+describe('toggleFlag', () => {
+  it('toggles a node between flagged and not (defaulting from unset)', () => {
+    const on = toggleFlag(base(), 'm2')
+    expect(on.tasks.m2.flagged).toBe(true)
+    const off = toggleFlag(on, 'm2')
+    expect(off.tasks.m2.flagged).toBe(false)
+    valid(on); valid(off)
+  })
+
+  it('flags a project node too — any node is flaggable', () => {
+    const out = toggleFlag(base(), 'r')
+    expect(out.tasks.r.flagged).toBe(true)
+    valid(out)
+  })
+
+  it('survives a kind conversion in both directions', () => {
+    const flagged = toggleFlag(base(), 'm2') // task, flagged
+    const asProject = convertKind(flagged, 'm2')
+    expect(asProject.tasks.m2.flagged).toBe(true)
+    const backToTask = convertKind(asProject, 'm2')
+    expect(backToTask.tasks.m2.flagged).toBe(true)
+    valid(asProject); valid(backToTask)
   })
 })
 

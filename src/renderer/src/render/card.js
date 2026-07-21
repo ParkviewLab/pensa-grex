@@ -62,6 +62,7 @@ export function buildCard(task, { isCursor } = {}) {
   if (cursor) card.classList.add('cursor')
   if (!isProject && task.status === 'cancelled') card.classList.add('cancel')
   if (task.note) card.classList.add('note')
+  if (task.flagged) card.classList.add('flagged')
 
   if (cursor) {
     const here = document.createElement('span')

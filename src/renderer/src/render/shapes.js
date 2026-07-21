@@ -123,13 +123,14 @@ function drawOrbits(group, cx, cy, colour) {
 
 // Build or update a card's .cardbg silhouette (a decorator group, then the outer
 // and inner filled paths) from its size and its kind/here classes. A project
-// node draws the hull in the reserved project colour and wears the orbits; a
+// node draws the hull in the reserved project colour; a
 // task marked "here" draws the marquee; every other task draws the screen. The
 // colour tracks the node's status (a task) or is the project colour.
 export function renderCard(cardEl) {
   const isProject = cardEl.classList.contains('project')
   const isCursor = cardEl.classList.contains('cursor')
   const collapsed = cardEl.classList.contains('collapsed')
+  const flagged = cardEl.classList.contains('flagged')
   const shape = isProject ? 'hull' : isCursor ? 'marquee' : 'screen'
   const w = cardEl.offsetWidth, h = cardEl.offsetHeight
 
@@ -161,13 +162,14 @@ export function renderCard(cardEl) {
   outerEl.style.fill = 'var(--c-' + colour + ')'
 
   // Decorators, behind the card. A collapsed project casts a filled shadow; a
-  // project wears the atomic orbits.
+  // flagged node wears the atomic orbits in its own colour (the status colour for a
+  // task, the project colour for a project).
   const deco = svg.querySelector('.deco')
   deco.textContent = ''
   if (collapsed) {
     deco.appendChild(svgEl('path', { d: outer, transform: 'translate(9 -9)', fill: 'var(--c-project)', 'fill-opacity': 0.45 }))
   }
-  if (isProject) drawOrbits(deco, w / 2, h / 2, 'var(--c-project)')
+  if (flagged) drawOrbits(deco, w / 2, h / 2, 'var(--c-' + colour + ')')
 }
 
 // Render every .card element under root (defaults to the whole document).
