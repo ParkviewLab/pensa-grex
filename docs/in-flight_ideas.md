@@ -104,25 +104,32 @@ practical exposure is nil in normal use. Revisit when `electron-vite` and
 
 The author has settled on a direction: PensaGrex should become a 100% Rust app,
 off Electron and its bundled Chromium and its forced JavaScript. The deeper
-notebook is [`rust_port_ideas.md`](rust_port_ideas.md); in brief:
+notebook is [`rust_port_ideas.md`](rust_port_ideas.md), which now works through
+three designs, a survey of other options, and an orthogonal sync-server idea. In
+brief:
 
-- "100% Rust" means a Rust-native GUI (egui or iced), not Tauri. Tauri gives a
-  Rust backend but keeps a web frontend in the OS webview, so it is not 100% Rust
-  and it retains the multi-webview fidelity QA. For a bespoke-renderer app like
-  this one, a Rust-native GUI is arguably the more coherent fit and removes the
-  webview problem outright; Tauri is at most an interim.
-- Any port turns on re-homing the model. The shared model in `src/shared/`
-  (~1,100 lines; `mutations.js` is 658) is used by both the authority and the
-  renderer, so a Rust backend must move the model wholly server-side (return the
-  frontend derived data) or it duplicates the app's core across two languages.
-  Correctness to be preserved against the existing model test suite.
-- `store.js` ports to Rust as routine work; the MCP server ports via rmcp
-  (Streamable-HTTP server transport confirmed present). The data is untouched
-  (northstar axiom 6: JSON5 forests + markdown notes on disk are
-  framework-agnostic).
-- Open: staged migration versus big-bang rewrite; the new Rust-desktop packaging,
-  signing, and notarization CI profile (no handbook profile exists yet). A
-  separate research thread on whether the ROS community is itself moving from
-  C++/Python to Rust/Python will be folded into the notebook as precedent.
+- Design A (Tauri hybrid): web UI kept, store/authority/MCP rewritten in Rust.
+  Viable and the cleanest Tauri form, but not 100% Rust, and it keeps both the
+  multi-webview fidelity QA (WebKitGTK is the weak engine) and a model-duplication
+  hazard. Best as an interim.
+- Design B (100% Rust GUI, egui or iced): no JavaScript, no webview. The widest
+  rewrite but the only literally-100%-Rust path; it removes the webview problem and
+  collapses the model to one Rust crate. egui is the recommended toolkit for the
+  subway-map-plus-notes shape; the note editor is not CodeMirror (that needs a
+  webview) but `TextEdit` + `egui_commonmark`, with KaTeX-style math the one real
+  regression. The recommended end state.
+- Design C (Rust + Python): keep Python only across a wire, as a federated peer
+  service (FastAPI, smalt-mcp). Every in-app shape (PyO3 embed, sidecar, Python MCP
+  server) forfeits the one-static-binary win and, for embedding, pulls the Python
+  under AGPL; rejected inside the app. The Rust core stays the single authority.
+- Any hybrid turns on re-homing the model (`src/shared/`, ~1,100 lines; the
+  correctness of the port to be preserved against the existing test suite); the
+  JSON5 write path must preserve comments/formatting to honour axiom 6.
+- Other options recorded (Dioxus, Dioxus Native/Blitz, Flutter+Rust, a PWA, trim
+  Electron, Freya, and gpui/slint noted as excluded on licensing). The data is
+  untouched throughout (axiom 6).
+- A Joplin-style sync server is captured as a separate, optional, off-by-default
+  capability (reuse WebDAV/S3/git/Syncthing; conflict-copy, not CRDT-in-the-file),
+  which may graduate to its own `sync_ideas.md` if it firms up.
 
 This is a question under study, not a plan or a commitment.
