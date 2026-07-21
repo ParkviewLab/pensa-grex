@@ -107,10 +107,27 @@ a{color:var(--c-done);}
 .pt p{font-size:14px; color:var(--muted); margin:0;}
 .pt .k{color:var(--c-done);}
 
-/* The 2.0 note. */
-.newnote{border:1px solid var(--line); border-left:4px solid var(--c-done); border-radius:10px;
-  background:color-mix(in srgb, var(--c-done) 8%, transparent); padding:16px 20px; margin:16px 0 48px; font-size:14px;}
-.newnote strong{font-family:var(--font-display); font-weight:400; font-size:16px; letter-spacing:.02em;}
+/* Connect-to-Claude-Code section. */
+.connect{margin:8px 0 48px;}
+.connect h2{font-family:var(--font-display); font-weight:400; font-size:26px; letter-spacing:.02em; margin:0 0 6px; color:var(--ink);}
+.connect-lede{font-size:15px; color:var(--muted); max-width:60ch; margin:0 0 22px;}
+.steps{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:18px;}
+.steps > li{display:flex; gap:14px; align-items:flex-start;}
+.step-n{flex:none; width:30px; height:30px; border-radius:50%; display:grid; place-items:center;
+  background:var(--c-done); color:var(--here-ink); font-family:var(--font-display); font-size:17px; line-height:1;}
+.step-body{min-width:0;}
+.steps h3{font-family:var(--font-display); font-weight:400; font-size:18px; letter-spacing:.01em; margin:3px 0 3px; color:var(--ink);}
+.steps p{font-size:14px; color:var(--muted); margin:0 0 8px;}
+.steps code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.9em;
+  background:color-mix(in srgb, var(--line) 16%, transparent); padding:1px 6px; border-radius:4px; color:var(--ink);}
+.cmd{display:flex; align-items:center; gap:10px; margin-top:2px;
+  background:color-mix(in srgb, var(--line) 14%, transparent); border:1px solid var(--line);
+  border-radius:8px; padding:10px 12px; overflow-x:auto;}
+.cmd code{background:transparent; padding:0; color:var(--ink); white-space:nowrap; font-size:13px;}
+.copy{flex:none; font:inherit; font-size:11px; letter-spacing:.06em; text-transform:uppercase; cursor:pointer;
+  border:1px solid var(--line); background:var(--panel); color:var(--muted); border-radius:5px; padding:6px 11px;}
+.copy:hover{color:var(--ink); border-color:var(--ink);}
+.copy.done{color:var(--c-done); border-color:var(--c-done);}
 
 footer{border-top:1px solid var(--line); padding:26px 0 40px; font-size:12.5px; color:var(--muted);}
 footer .wrap{display:flex; flex-wrap:wrap; justify-content:space-between; gap:10px;}
@@ -194,10 +211,41 @@ footer a{color:var(--muted); text-decoration:underline;}
     <div class="pt"><h3><span class="k">Yours</span>, and local.</h3><p>One JSON5 file per domain beside its markdown notes. Grep it, diff it, sync it, keep it.</p></div>
   </section>
 
-  <div class="newnote">
-    <strong>New in 2.0:</strong> an in-app MCP server. With PensaGrex open, an agent such as Claude
-    can read and edit your tasks over loopback while you watch the forest change, live.
-  </div>
+  <section class="connect">
+    <h2>Connect Claude Code</h2>
+    <p class="connect-lede">PensaGrex is an MCP server. Point Claude Code at it and it can read
+      and edit your tasks while you watch the forest change.</p>
+    <ol class="steps">
+      <li>
+        <span class="step-n">1</span>
+        <div class="step-body">
+          <h3>Run PensaGrex.</h3>
+          <p>The server starts on <code>127.0.0.1:35899</code> while the app is open; the green
+            MCP dot in the toolbar shows it running.</p>
+        </div>
+      </li>
+      <li>
+        <span class="step-n">2</span>
+        <div class="step-body">
+          <h3>Register it with Claude Code.</h3>
+          <p>Run this once in a terminal (<code>--scope user</code> makes it available in every
+            Claude Code session):</p>
+          <div class="cmd">
+            <code id="mcp-cmd">claude mcp add --transport http --scope user pensagrex http://127.0.0.1:35899/mcp</code>
+            <button class="copy" type="button" data-copy="mcp-cmd">Copy</button>
+          </div>
+        </div>
+      </li>
+      <li>
+        <span class="step-n">3</span>
+        <div class="step-body">
+          <h3>Restart Claude Code.</h3>
+          <p>It loads its connections at startup, so a fresh session sees PensaGrex's tools;
+            confirm with <code>claude mcp list</code>. Keep PensaGrex open while you use them.</p>
+        </div>
+      </li>
+    </ol>
+  </section>
 
 </main>
 
@@ -242,6 +290,27 @@ footer a{color:var(--muted); text-decoration:underline;}
       document.querySelectorAll('.ver').forEach(function(e){ e.textContent='latest'; });
       // tiles already point at /releases/latest as their static href
     });
+})();
+
+// Copy the connect command to the clipboard.
+(function(){
+  function fallbackCopy(text){
+    var t=document.createElement('textarea'); t.value=text; t.style.position='fixed'; t.style.opacity='0';
+    document.body.appendChild(t); t.focus(); t.select();
+    try{ document.execCommand('copy'); }catch(e){}
+    document.body.removeChild(t);
+  }
+  document.querySelectorAll('.copy').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var el=document.getElementById(btn.dataset.copy); if(!el) return;
+      var text=el.textContent.trim();
+      var done=function(){ btn.textContent='Copied'; btn.classList.add('done');
+        setTimeout(function(){ btn.textContent='Copy'; btn.classList.remove('done'); }, 1400); };
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(text).then(done, function(){ fallbackCopy(text); done(); });
+      } else { fallbackCopy(text); done(); }
+    });
+  });
 })();
 </script>
 </body>
