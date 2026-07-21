@@ -679,11 +679,14 @@ viewportEl.addEventListener('click', (e) => {
   if (taskId && currentRaw.tasks[taskId]) openNote(taskId)
 })
 
-// Double-clicking a task label opens its note (the same as Edit note).
+// Double-clicking a card's body toggles its flag (drawn as atomic orbits). The
+// status glyph and note icon own their own single-click actions, so a double-click
+// on either is left to them and does not toggle the flag.
 viewportEl.addEventListener('dblclick', (e) => {
   if (!currentRaw) return
+  if (e.target.closest('.gl') || e.target.closest('.noteicon')) return
   const taskId = taskIdFromEvent(e)
-  if (taskId && currentRaw.tasks[taskId]) openNote(taskId)
+  if (taskId && currentRaw.tasks[taskId]) applyEdit(M.toggleFlag(currentRaw, taskId))
 })
 
 // Single-clicking a task's status glyph cycles its status
