@@ -121,6 +121,36 @@ export function setLastDomain(name) {
   return { ok: true }
 }
 
+// The in-app MCP server's configuration, in the same settings.json. Defaults:
+// enabled, the fixed loopback port (which does not roam — see docs/mcp_ideas.md),
+// and the read-write scope tier (destructive tools off). The scope may be
+// overridden per launch by PENSAGREX_MCP_SCOPE, so an operator can widen or
+// narrow it without editing settings.
+const MCP_DEFAULT_PORT = 35899
+const MCP_SCOPES = ['read-only', 'read-write', 'destructive']
+
+export function getMcpConfig() {
+  const s = readSettingsSafe()
+  const envScope = process.env.PENSAGREX_MCP_SCOPE
+  const scope = MCP_SCOPES.includes(envScope) ? envScope
+    : MCP_SCOPES.includes(s.mcpScope) ? s.mcpScope
+      : 'read-write'
+  const port = Number.isInteger(s.mcpPort) && s.mcpPort > 0 ? s.mcpPort : MCP_DEFAULT_PORT
+  return { enabled: s.mcpEnabled !== false, port, scope }
+}
+
+export function setMcpEnabled(enabled) {
+  let s
+  try {
+    s = readSettings()
+  } catch (e) {
+    return { error: 'settings.json is unreadable; refusing to overwrite it: ' + e.message }
+  }
+  s.mcpEnabled = !!enabled
+  writeSettings(s)
+  return { ok: true, enabled: !!enabled }
+}
+
 function viewStatePath() {
   return join(app.getPath('userData'), 'viewstate.json')
 }

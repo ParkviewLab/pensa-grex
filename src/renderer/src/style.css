@@ -67,6 +67,11 @@ body{
 .btn:disabled{ opacity:.4; cursor:default; }
 .btn:disabled:hover{ background:transparent; }
 .btn.toggle[aria-pressed="true"]{ background:var(--ink); color:var(--ground); border-color:var(--ink); }
+.btn.mcp{ display:inline-flex; align-items:center; gap:7px; }
+.mcp-dot{ width:8px; height:8px; border-radius:50%; background:var(--c-cancel);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--ink) 25%, transparent); }
+.mcp-dot.on{ background:var(--c-done); }
+.mcp-dot.err{ background:var(--c-prog); }
 .pct{ font-size:11px; color:var(--muted); min-width:42px; text-align:center; font-variant-numeric:tabular-nums; }
 
 .viewport{

@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 
 import { describe, it, expect } from 'vitest'
-import { validateForest } from '../../../shared/model/validate.js'
+import { validateForest } from '../model/validate.js'
 import { serializeProject } from './markdown.js'
 
 // A project exercising every shape rule: project-root nesting, a flat main-line

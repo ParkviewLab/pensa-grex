@@ -10,7 +10,9 @@ import {
   listDomains, createForest, deleteForest, loadForest, saveForest, readNote, writeNote, deleteNote,
   getViewState, setViewState, writeExport, getBookmarks, setBookmarks,
 } from './store.js'
+import * as store from './store.js'
 import * as taskService from './taskService.js'
+import { createMcpService } from './mcp/index.js'
 
 const isDev = !app.isPackaged
 const GITHUB_URL = 'https://github.com/ParkviewLab/pensa-grex'
@@ -237,6 +239,8 @@ function buildMenu() {
 // authority over the task data (and, for the coming MCP server, one binder of the
 // fixed loopback port), enforced by the single-instance lock below.
 let mainWindow = null
+// The in-app MCP server (created and started once the app is ready).
+let mcpService = null
 
 if (!app.requestSingleInstanceLock()) {
   // A second launch hands off to the running instance and exits.
@@ -309,6 +313,14 @@ app.whenReady().then(() => {
   ipcMain.handle('pensagrex:read-forest', (_e, dir) => taskService.readForest(dir))
   ipcMain.handle('pensagrex:task-op', (_e, dir, op, ...args) => taskService.taskOp(dir, op, args))
 
+  // The in-app MCP server: start it now (enabled by default) so a local agent can
+  // reach the live app on loopback. The renderer's status indicator reads and
+  // toggles it. It shares this process's single taskService authority.
+  mcpService = createMcpService({ taskService, store, version: pkg.version })
+  mcpService.start()
+  ipcMain.handle('pensagrex:mcp-status', () => mcpService.status())
+  ipcMain.handle('pensagrex:mcp-set-enabled', (_e, enabled) => mcpService.setEnabled(enabled))
+
   // Safety net: keep the window from navigating away from the app; open any
   // external URL that slips through in the system browser instead.
   mainWindow.webContents.on('will-navigate', (e, url) => {
@@ -328,6 +340,9 @@ app.whenReady().then(() => {
     if (BrowserWindow.getAllWindows().length === 0) mainWindow = createWindow()
   })
 })
+
+// Stop the MCP endpoint on quit so its loopback port is released promptly.
+app.on('will-quit', () => { if (mcpService) mcpService.stop() })
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
