@@ -50,8 +50,8 @@ The mapping is policy, set in `renderCard`, not a property of the shapes:
 
 - task → **screen**, coloured by status (`--c-todo` / `--c-prog` / `--c-done` /
   `--c-cancel`);
-- task marked "here" → **marquee** + the **Atomic Starburst**, keeping the status
-  colour;
+- task marked "here" → **marquee** (in the status colour) + the **Atomic Starburst**
+  (in the ink colour, `var(--ink)`);
 - project node → **hull**, in the reserved project colour `--c-project` (a violet:
   `#7d54a6` on the azure ground, `#bd93e6` on navy);
 - any **flagged** node → the **orbits**, in the node's own colour (its status colour
@@ -77,10 +77,10 @@ overflow the card box.
   of hidden cards.
 - **Atomic Starburst** (the "here" mark, `#sputnik` in `tracks.js`) — solid rays
   of irregular length at irregular angles, each tipped with a ball, around a solid
-  centre. It marks the branch cursor beside the marquee, and takes the here-node's
-  own status colour (set per-instance in `scene.js` via `buildCursorMark`, with
-  `.cursor-mark`'s `var(--ink)` as the fallback), so the mark matches its card. (The
-  older four-plus spoke `#starburst` remains in the defs but is not the cursor mark.)
+  centre. It marks the branch cursor beside the marquee. Its colour is `.cursor-mark`'s
+  `var(--ink)` (near-white on navy, near-black on azure), and it is drawn 15% larger
+  than the def. (The older four-plus spoke `#starburst` remains in the defs but is not
+  the cursor mark.)
 
 ## Reserved colour
 

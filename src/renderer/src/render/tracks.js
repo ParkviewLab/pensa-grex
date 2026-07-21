@@ -71,15 +71,10 @@ export function buildForkMarker(cx, cy, size = 8) {
   })
 }
 
-// The "here" mark, coloured per-instance to the here-node's own status colour
-// (passed in) so it matches its card; defaults to the .cursor-mark ink. The inline
-// fill/stroke override .cursor-mark and inherit into the <use> shadow tree,
-// colouring the rays (stroke) and the balls and centre (fill).
-export function buildCursorMark(x, y, colour = 'var(--ink)') {
-  const use = el('use', { href: '#sputnik', class: 'cursor-mark', transform: 'translate(' + x + ',' + y + ')' })
-  use.style.fill = colour
-  use.style.stroke = colour
-  return use
+// The "here" mark. Its colour comes from .cursor-mark (var(--ink): near-black on the
+// azure ground, near-white on navy), and it is scaled up 15% from the #sputnik def.
+export function buildCursorMark(x, y) {
+  return el('use', { href: '#sputnik', class: 'cursor-mark', transform: 'translate(' + x + ',' + y + ') scale(1.15)' })
 }
 
 export function buildBurst(x, y, scale, variant) {

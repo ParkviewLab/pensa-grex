@@ -8,7 +8,7 @@
 
 import { renderCards } from './shapes.js'
 import { ensureDefs, buildTrack, buildForkMarker, buildCursorMark } from './tracks.js'
-import { buildStationBox, statusGlyphClass } from './card.js'
+import { buildStationBox } from './card.js'
 
 const SVGNS = 'http://www.w3.org/2000/svg'
 
@@ -37,7 +37,7 @@ export function mountLayout(contentEl, layout, forest) {
 
   for (const t of layout.tracks) svg.appendChild(buildTrack(t.points, t.kind))
   for (const j of layout.junctions) svg.appendChild(buildForkMarker(j.x, j.y))
-  for (const c of layout.cursors) svg.appendChild(buildCursorMark(c.x, c.y, 'var(--c-' + statusGlyphClass(c.status) + ')'))
+  for (const c of layout.cursors) svg.appendChild(buildCursorMark(c.x, c.y))
   contentEl.appendChild(svg)
 
   for (const d of layout.dots) contentEl.appendChild(buildDot(d.x, d.y))
