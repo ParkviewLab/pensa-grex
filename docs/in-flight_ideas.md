@@ -31,6 +31,11 @@ commitment — see the handbook's `documentation.md`.
   server on loopback (fixed port 35899), and the settled binding, security, and
   access decisions. The full task-level tool surface, across read-only,
   read-write, and destructive scope tiers, is settled.
+- [`rust_port_ideas.md`](rust_port_ideas.md) — moving PensaGrex off Electron
+  toward a 100% Rust app: what "100% Rust" means (a Rust-native GUI such as egui
+  or iced, not Tauri), the model re-homing decision that any port turns on, how
+  the current architecture ports, the northstar and licensing fit, and the costs.
+  See entry 7 below.
 
 # 1. Done (M7, draft): project intent (`docs/northstar.md`)
 
@@ -94,3 +99,30 @@ optional `vitest --ui` dev server running; this repo never adds a `--ui`
 script or invokes one (only `vitest run`, in `npm test` and CI), so the
 practical exposure is nil in normal use. Revisit when `electron-vite` and
 `vite` are ready to move together, or if the `--ui` server is ever wanted.
+
+# 7. Under study: a Rust port (off Electron) — [`rust_port_ideas.md`](rust_port_ideas.md)
+
+The author has settled on a direction: PensaGrex should become a 100% Rust app,
+off Electron and its bundled Chromium and its forced JavaScript. The deeper
+notebook is [`rust_port_ideas.md`](rust_port_ideas.md); in brief:
+
+- "100% Rust" means a Rust-native GUI (egui or iced), not Tauri. Tauri gives a
+  Rust backend but keeps a web frontend in the OS webview, so it is not 100% Rust
+  and it retains the multi-webview fidelity QA. For a bespoke-renderer app like
+  this one, a Rust-native GUI is arguably the more coherent fit and removes the
+  webview problem outright; Tauri is at most an interim.
+- Any port turns on re-homing the model. The shared model in `src/shared/`
+  (~1,100 lines; `mutations.js` is 658) is used by both the authority and the
+  renderer, so a Rust backend must move the model wholly server-side (return the
+  frontend derived data) or it duplicates the app's core across two languages.
+  Correctness to be preserved against the existing model test suite.
+- `store.js` ports to Rust as routine work; the MCP server ports via rmcp
+  (Streamable-HTTP server transport confirmed present). The data is untouched
+  (northstar axiom 6: JSON5 forests + markdown notes on disk are
+  framework-agnostic).
+- Open: staged migration versus big-bang rewrite; the new Rust-desktop packaging,
+  signing, and notarization CI profile (no handbook profile exists yet). A
+  separate research thread on whether the ROS community is itself moving from
+  C++/Python to Rust/Python will be folded into the notebook as precedent.
+
+This is a question under study, not a plan or a commitment.
