@@ -141,10 +141,31 @@ export function addTree(raw, name) {
   return next
 }
 
-/** Set a node's title. */
+// Return `desired` if no other node in the domain already uses it, else the lowest
+// free `base-N`, so titles stay unique across the forest. The base is `desired`
+// with any trailing `-<digits>` stripped, so re-editing "Foo-1" into a name that is
+// already taken yields "Foo-2", not "Foo-1-1" (a bare "Foo" collision starts at
+// "Foo-1"). `excludeId` is the node being renamed, whose own current title must not
+// count as a collision. A deliberate consequence of stripping: a genuine numeric
+// tail ("Rev-2020") is renumbered from its base on collision (see docs/model_ideas.md).
+export function uniqueTitle(raw, desired, excludeId) {
+  const want = String(desired)
+  const taken = new Set()
+  for (const [id, t] of Object.entries(raw.tasks || {})) {
+    if (id !== excludeId && t && typeof t.title === 'string') taken.add(t.title)
+  }
+  if (!taken.has(want)) return want
+  const baseName = want.replace(/-\d+$/, '')
+  for (let n = 1; ; n++) {
+    const candidate = baseName + '-' + n
+    if (!taken.has(candidate)) return candidate
+  }
+}
+
+/** Set a node's title, kept unique within the domain (see uniqueTitle). */
 export function setTitle(raw, taskId, title) {
   const next = clone(raw)
-  requireTask(next, taskId).title = String(title)
+  requireTask(next, taskId).title = uniqueTitle(next, title, taskId)
   return next
 }
 
@@ -367,6 +388,9 @@ export function pasteAsTree(raw, clip) {
       node.note = newId + '.md'
       notes.push({ file: node.note, content: (clip.notes && clip.notes[oldId]) || '' })
     }
+    // Keep pasted titles unique in the destination: check against the domain's
+    // existing nodes and the pasted nodes already placed (uniqueTitle walks next.tasks).
+    if (typeof node.title === 'string') node.title = uniqueTitle(next, node.title, null)
     next.tasks[newId] = node
   }
   next.rootOrder.push(map(clip.rootId))
