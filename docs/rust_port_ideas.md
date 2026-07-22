@@ -544,6 +544,72 @@ Sources: rclrs 0.5.0 and 0.6.0 release announcements (ROS Discourse, 2025); the
 FOSDEM 2026 rclrs talk (Esteve Fernandez); the ROS 2 alternative-middleware report
 (2023) and rmw_zenoh (ros2 org, Tier-1 in Kilted, 2025); dora-rs.ai.
 
+# Migration and repo strategy
+
+How to carry a full rewrite in the repo while `main` keeps shipping the Electron app
+until parity. This is a recommended execution shape, not an executed decision; it
+presumes the rewrite has been green-lit.
+
+The org already has the on-demand dev-build pattern to model on. `dev-release-electron.yml`
+is a `workflow_dispatch` that runs only from `develop`, refuses to build unless the
+version source-of-truth carries a `-dev` marker, builds the three-OS matrix, and uploads
+installers as artifacts with no `v*` tag and no GitHub Release, so `release-electron.yml`'s
+gate is never touched. `git dev-release --open` opens a dev cycle and `git dev-release`
+cuts the builds. That workflow is the template for the Rust app's dev builds.
+
+Branch model: a long-lived `rust` integration branch off `develop`. Keep it single-stack.
+On `rust`, remove the Electron tree entirely and make it Rust-native from the first commit,
+with `Cargo.toml` as the one version source-of-truth. `develop` and `main` go on shipping
+the Electron app untouched, and each branch then has exactly one version source, which the
+org's `git bump`/`git release`/`git dev-release` require, since they auto-detect a single
+source and would be ambiguous with two in one tree. Work lands on `rust` through PRs based
+on `rust`, squash-merged as elsewhere; in the contained worktree layout, add a
+`pensa-grex-rust` worktree beside `-main` and `-develop`. A long-lived branch is usually a
+hazard, but it is safe here because this is a replacement, not two live codebases to
+reconcile.
+
+Cutover at parity: `rust` becomes `develop` (a wholesale replace, since the Rust app
+supersedes the JS app), then promote `develop` to `main`, `git bump` to `3.0.0`, and retire
+the Electron tree. Because the Rust app is never tagged before that moment,
+`release-electron.yml`'s gate (the tag must match `package.json` and be reachable from
+`main`) stays inert throughout, which is what keeps `main` genuinely untouched until parity.
+
+CI on the `rust` branch, four workflows, each modeled on an existing one:
+
+- `checks-rust.yml` (push and PRs to `rust`): `cargo fmt --check`, `cargo clippy -D warnings`,
+  `cargo build`, `cargo test`; the analogue of `test-electron.yml`.
+- `dev-release-rust.yml` (`workflow_dispatch` from `rust`): gate on a `-dev` marker in
+  `Cargo.toml`, then a macOS/Windows/Linux `cargo` build packaged by `cargo-packager` and
+  signed by `apple-codesign`/`rcodesign`, published as artifacts or a GitHub pre-release,
+  no `v*` tag. The on-demand parity build; a direct clone of `dev-release-electron.yml`.
+- `reuse.yml`: carried over unchanged.
+- a Rust `version-guard.yml` for PRs into `rust` that checks `Cargo.toml` (the existing
+  guard is keyed to `develop` and `package.json`, so it does not cover `rust`).
+
+Two enabling gaps to close first, both small. The dev-tools SoT helper (`_sot.sh`) detects
+`pyproject.toml`, `package.json`, and `VERSION.txt` but not `Cargo.toml`, so
+`git bump`/`git release`/`git dev-release` need a Cargo kind added before they work on
+`rust` (read and write `[package].version`, for instance via `cargo set-version`). And the
+handbook has no rust-desktop profile yet, which both this notebook and the Conception-Space
+study flag as needed; the `*-rust.yml` workflows and the signing recipe become that profile
+once proven here.
+
+Versioning during the rewrite: put `3.0.0-dev0` in the branch's `Cargo.toml`, since the
+parity release is a major bump from v2.x; dev builds increment the suffix, and the cutover
+is `git bump release` to `3.0.0` (the dev suffix sorts below it, per the handbook's
+development-versioning rule). Keep the branch fresh by merging only `develop`'s shared
+surface into it (the `docs/`, the northstar, and any model or JSON5-schema decisions); the
+JS implementation never merges into a Rust tree, so the sync burden is light.
+
+Alternatives, and why not lead with them. In-tree coexistence (both apps on `develop`
+behind path-gated CI) integrates more continuously and makes the cutover a one-line flip of
+which app the release builds, but it puts two version sources in one tree, which fights the
+single-source release tooling, and it changes what `develop` builds; defensible for a
+trunk-based team, more friction against current conventions. A separate repo is right for a
+genuinely separate app (the visionOS enactive mode is its own RealityKit repo for exactly
+this reason) but wrong for a replacement, because it forces a repo rename, a split release
+history, and a harder cutover than swapping a branch.
+
 # Decisions log
 
 - 2026-07-21 — Direction set (author): PensaGrex should become a 100% Rust app.
@@ -566,3 +632,11 @@ FOSDEM 2026 rclrs talk (Esteve Fernandez); the ROS 2 alternative-middleware repo
   so adoption does not bet on the single maintainer. Vendored files keep their MIT
   headers; the bundled math fonts keep OFL-1.1, per the existing font-vendoring
   pattern. A Design B decision; no action until that path is taken.
+- 2026-07-21 — Repo strategy (recommended, from the "Migration and repo strategy"
+  section): carry the rewrite on a long-lived single-stack `rust` branch off `develop`
+  (Cargo.toml the one SoT, Electron tree removed there), keep `main`/`develop` shipping
+  Electron until a parity cutover that replaces `develop` with `rust` and releases 3.0.0.
+  Cut on-demand three-OS dev builds via a `dev-release-rust.yml` cloned from
+  `dev-release-electron.yml`. Two prerequisites: a `Cargo.toml` kind in dev-tools
+  `_sot.sh`, and a handbook rust-desktop profile. Recommended, not executed; gated on the
+  rewrite being green-lit.
