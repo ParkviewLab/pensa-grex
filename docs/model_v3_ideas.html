@@ -209,7 +209,9 @@ contains the scope rather than straddling it; section&nbsp;7 is about why that m
 
 <p>A TaskNode carries a status and may hold the cursor. A ProjectNode opens a scope and carries neither. A
 TerminusNode closes one: no title, no status, no flag, no cursor, and not movable. It does carry a note, the
-one expressive field it keeps, and the natural thing to write there is what closing the scope required. Every
+one expressive field it keeps, and the natural thing to write there is what closing the scope required, though
+the interface does not offer one for now (decided at implementation; the field stays, so it can be offered later
+without a migration). Every
 ProjectNode has exactly one TerminusNode, so a plan with three sub-projects has four project nodes and four
 terminus nodes in total, counting its own base and close.</p>
 
@@ -775,8 +777,9 @@ the part that stays laminar, and section&nbsp;8's rule is what keeps branch span
 <p>Three verbs replace push and pop. A task is inserted at an edge; a run of a body is wrapped to name it as a
 project, which is to say given a ProjectNode below it and a TerminusNode above it; and a branch is opened at an
 edge. Axiom 1 survives with its operations renamed, since the creating action still decides the structure and
-ordering still decides nothing. The default edge for a bare insertion wants deciding, and the edge above the
-cursor is the obvious candidate.</p>
+ordering still decides nothing. An insertion always names its edge and has no default: every edit is a
+right-click on a node, and that click is what names the edge, so a bare insertion with an edge to be guessed
+does not arise.</p>
 
 <p>Opening a branch is one move that creates three things at once: the attachment, a first task inside it, and
 the return line. Its merge point defaults to its own edge, the smallest legal branch, and its position in the
@@ -980,8 +983,7 @@ faithful, and the pass writes <code>domains/</code> while leaving <code>forests/
 <ul class="log">
 <li>Reading a tall plan: hover magnification, constant-screen-size labels with collisions culled, or both.
 Deferred by decision to its own investigation; see section&nbsp;10.</li>
-<li>The default edge for a bare insertion, presumably the one above the cursor.</li>
-<li>Where the note dot is drawn on a terminus bar, which has no card to put it on.</li>
+
 <li>Whether the app reports how many crossings an ordering costs, now that the order is the author's to
 change.</li>
 </ul>

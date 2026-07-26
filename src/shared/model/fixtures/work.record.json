@@ -55,7 +55,7 @@
       "createdAt": "2026-06-22T17:06:00Z",
       "note": null,
       "flagged": false,
-      "next": null,
+      "next": "t_road",
       "rightBranches": [],
       "leftBranches": [],
       "status": "todo",
@@ -110,7 +110,7 @@
       "createdAt": "2026-06-16T09:00:00Z",
       "note": null,
       "flagged": false,
-      "next": null,
+      "next": "t_hire",
       "rightBranches": [],
       "leftBranches": [],
       "status": "todo",
@@ -130,6 +130,24 @@
       "status": "cancelled",
       "completedAt": null,
       "here": false
+    },
+    "t_road": {
+      "id": "t_road",
+      "kind": "terminus",
+      "createdAt": "2026-06-22T17:06:00Z",
+      "note": null,
+      "next": null,
+      "rightBranches": [],
+      "leftBranches": []
+    },
+    "t_hire": {
+      "id": "t_hire",
+      "kind": "terminus",
+      "createdAt": "2026-06-16T09:00:00Z",
+      "note": null,
+      "next": null,
+      "rightBranches": [],
+      "leftBranches": []
     }
   }
 }

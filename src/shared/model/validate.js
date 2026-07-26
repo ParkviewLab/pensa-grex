@@ -18,6 +18,7 @@
 // arrive with stages 5 and 6.
 
 const VALID_STATUSES = ['todo', 'in-progress', 'completed', 'cancelled']
+const KINDS = ['task', 'project', 'terminus']
 
 // A node's forks, both sides, in one list. Order is left then right; within a
 // side it is the author's stored order.
@@ -27,28 +28,84 @@ export function branchChildrenOf(node) {
   return [...left.map((child) => ({ child, side: 'left' })), ...right.map((child) => ({ child, side: 'right' }))]
 }
 
-// Every node belongs to exactly one "line": the maximal run reached by following
-// .next from a line start. A line starts at a root or at any branch's child (a
-// fork begins a new line). Returns an array of arrays of node ids, one per line.
-function collectLines(record, rootIds) {
-  const starts = [...rootIds]
-  for (const node of Object.values(record.nodes || {})) {
-    for (const b of branchChildrenOf(node)) starts.push(b.child)
+// Which TerminusNode closes which ProjectNode, by matching brackets up each trunk.
+// A scope is an interval on ONE trunk, so the pairing never leaves the trunk it
+// starts on: reading a trunk from the base upward, a project node opens and a
+// terminus closes the nearest scope still open. Exported because the operations need
+// the same pairing (unwrapping a project, deleting one, finding a scope's extent),
+// and two implementations of it would be two chances to disagree.
+//
+// Returns { pairs, closes, errors }: pairs maps a project id to its terminus id,
+// closes is the reverse, and errors names every unbalanced position. A caller that
+// has already validated can ignore errors.
+export function pairScopes(record, lines) {
+  const nodes = (record && record.nodes) || {}
+  const pairs = new Map()
+  const closes = new Map()
+  const errors = []
+  for (const line of lines) {
+    const open = []
+    for (const id of line) {
+      const node = nodes[id]
+      if (!node) continue
+      if (node.kind === 'project') open.push(id)
+      else if (node.kind === 'terminus') {
+        if (!open.length) {
+          errors.push('terminus "' + id + '" closes nothing: no project is open below it on its trunk')
+          continue
+        }
+        const projectId = open.pop()
+        pairs.set(projectId, id)
+        closes.set(id, projectId)
+      }
+    }
+    for (const id of open) {
+      errors.push('project node "' + id + '" is never closed: no terminus above it on its trunk')
+    }
   }
-  const lines = []
-  for (const start of starts) {
-    const line = []
+  return { pairs, closes, errors }
+}
+
+// Whether `id` is the terminus that closes a plan, which is the one node with no
+// edge above it: the grammar ends the plan there, so nothing may be inserted,
+// attached, or grown above it. A sub-project's close has an edge above it and is
+// unrestricted.
+export function isPlanClose(record, id) {
+  const nodes = (record && record.nodes) || {}
+  const node = nodes[id]
+  if (!node || node.kind !== 'terminus') return false
+  const { closes } = pairScopes(record, trunksOf(record))
+  const projectId = closes.get(id)
+  if (!projectId) return false
+  // The project it closes is a plan's base exactly when nothing points at it.
+  for (const n of Object.values(nodes)) {
+    if (n.next === projectId) return false
+    if ((n.leftBranches || []).includes(projectId)) return false
+    if ((n.rightBranches || []).includes(projectId)) return false
+  }
+  return true
+}
+
+// Every node sits on exactly one trunk: the maximal .next run it belongs to. A
+// trunk starts wherever nothing arrives by .next, which is a plan's base or a
+// branch's first node, and runs up to a node with no successor. Returns an array of
+// arrays of node ids, base-to-top, one per trunk.
+export function trunksOf(record) {
+  const nodes = (record && record.nodes) || {}
+  const arrivesByNext = new Set(Object.values(nodes).map((n) => n.next).filter(Boolean))
+  const trunks = []
+  for (const start of Object.keys(nodes).filter((id) => !arrivesByNext.has(id))) {
+    const trunk = []
     let id = start
     const seen = new Set()
-    while (id && !seen.has(id)) {
+    while (id && nodes[id] && !seen.has(id)) {
       seen.add(id)
-      line.push(id)
-      const node = record.nodes[id]
-      id = node ? node.next : null
+      trunk.push(id)
+      id = nodes[id].next
     }
-    lines.push(line)
+    trunks.push(trunk)
   }
-  return lines
+  return trunks
 }
 
 // DFS from every root, following .next and both branch arrays, detecting cycles
@@ -121,7 +178,7 @@ export function validateRecord(record) {
 
   for (const [id, node] of Object.entries(nodes)) {
     if (node.id !== id) errors.push('node key "' + id + '" does not match its own id field "' + node.id + '"')
-    if (node.kind !== 'task' && node.kind !== 'project') {
+    if (!KINDS.includes(node.kind)) {
       errors.push('node "' + id + '" has an invalid kind: ' + node.kind)
       continue
     }
@@ -129,10 +186,21 @@ export function validateRecord(record) {
       if (!VALID_STATUSES.includes(node.status)) errors.push('task "' + id + '" has an invalid status: ' + node.status)
       if (node.status === 'completed' && !node.completedAt) errors.push('task "' + id + '" is completed but has no completedAt')
       if (node.status !== 'completed' && node.completedAt) errors.push('task "' + id + '" has completedAt but is not completed')
-    } else {
+    } else if (node.kind === 'project') {
       if (node.status != null) errors.push('project node "' + id + '" must not have a status')
       if (node.completedAt != null) errors.push('project node "' + id + '" must not have completedAt')
       if (node.here) errors.push('project node "' + id + '" must not be "here"')
+    } else {
+      // A terminus is the one node kind that says nothing of its own. It closes a
+      // scope, and the only expressive field it keeps is a note, which is where one
+      // records what closing the scope took. It carries no title, so it cannot be
+      // searched for by name, and no flag, so a flag query cannot sweep it up; its
+      // paired ProjectNode is the scope's handle for both.
+      if (node.title != null) errors.push('terminus "' + id + '" must not have a title')
+      if (node.status != null) errors.push('terminus "' + id + '" must not have a status')
+      if (node.completedAt != null) errors.push('terminus "' + id + '" must not have completedAt')
+      if (node.here) errors.push('terminus "' + id + '" must not be "here"')
+      if (node.flagged) errors.push('terminus "' + id + '" must not be flagged')
     }
   }
 
@@ -153,9 +221,40 @@ export function validateRecord(record) {
     }
   }
 
-  for (const line of collectLines(record, rootIds)) {
+  const lines = trunksOf(record)
+
+  // Scopes: every project node closes, every terminus closes something, and both
+  // happen on one trunk.
+  const { pairs, errors: scopeErrors } = pairScopes(record, lines)
+  errors.push(...scopeErrors)
+
+  // A terminus arrives by a trunk edge, never as a branch child: a scope that opened
+  // on one trunk cannot close at the foot of another.
+  for (const id of nodeIds) {
+    if (nodes[id].kind !== 'terminus') continue
+    if (incoming.get(id).some((s) => s.includes(' branch of '))) {
+      errors.push('terminus "' + id + '" is a branch child; a scope closes on the trunk it opened on')
+    }
+  }
+
+  // A plan's own close is the end of the plan: the grammar puts nothing after it, so
+  // it has no edge above it and nothing can be attached there. A sub-project's
+  // terminus is unrestricted, since it does have an edge above it.
+  for (const rootId of rootIds) {
+    const terminusId = pairs.get(rootId)
+    if (!terminusId) continue
+    const terminus = nodes[terminusId]
+    if (terminus.next) {
+      errors.push('the plan\'s closing terminus "' + terminusId + '" has a node above it; a plan ends at its close')
+    }
+    if (branchChildrenOf(terminus).length) {
+      errors.push('the plan\'s closing terminus "' + terminusId + '" has a branch; there is no edge above it to hold one')
+    }
+  }
+
+  for (const line of lines) {
     const hereCount = line.filter((id) => nodes[id] && nodes[id].here).length
-    if (hereCount > 1) errors.push('line starting at "' + line[0] + '" has ' + hereCount + ' "here" cursors; at most one is allowed')
+    if (hereCount > 1) errors.push('line starting at "' + line[0] + '" has ' + hereCount + ' "here" marks; at most one is allowed')
   }
 
   return { ok: errors.length === 0, errors }

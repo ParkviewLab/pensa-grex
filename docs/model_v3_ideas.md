@@ -39,7 +39,9 @@ follows; the larger half is that a branch now comes back.
 
 A TaskNode carries a status and may hold the cursor. A ProjectNode opens a scope and carries neither. A
 TerminusNode closes one: no title, no status, no flag, no cursor, and not movable. It does carry a note, the
-one expressive field it keeps, and the natural thing to write there is what closing the scope required. Every
+one expressive field it keeps, and the natural thing to write there is what closing the scope required, though
+the interface does not offer one for now (decided at implementation; the field stays, so it can be offered later
+without a migration). Every
 ProjectNode has exactly one TerminusNode, so a plan with three sub-projects has four project nodes and four
 terminus nodes in total, counting its own base and close.
 
@@ -321,8 +323,9 @@ that stays laminar, and section 8's rule is what keeps branch spans consistent w
 Three verbs replace push and pop. A task is inserted at an edge; a run of a body is wrapped to name it as a
 project, which is to say given a ProjectNode below it and a TerminusNode above it; and a branch is opened at an
 edge. Axiom 1 survives with its operations renamed, since the creating action still decides the structure and
-ordering still decides nothing. The default edge for a bare insertion wants deciding, and the edge above the
-cursor is the obvious candidate.
+ordering still decides nothing. An insertion always names its edge and has no default: every edit is a
+right-click on a node, and that click is what names the edge, so a bare insertion with an edge to be guessed does
+not arise.
 
 Opening a branch is one move that creates three things at once: the attachment, a first task inside it, and the
 return line. Its merge point defaults to its own edge, the smallest legal branch, and its position in the
@@ -478,8 +481,10 @@ All of it is settled unless listed as open below, and the whole of it is schedul
 - `mergePoint` names the node below the join edge, the convention the branch arrays use.
 - Nesting between a branch span and a scope span is kept, on both sides, because collapsing a scope is what it
   protects. Nesting between two branch spans is not required.
-- A TerminusNode may carry a note, and only a note. It has no title, status, cursor, or flag, so the paired
-  ProjectNode is the scope's handle for a flag query.
+- A TerminusNode may carry a note, and only a note, and the interface does not offer even that for now. It has
+  no title, status, cursor, or flag, so the paired ProjectNode is the scope's handle for a flag query. It is
+  drawn as the ProjectNode's own hull turned upside down: the same shape says the two are one pair, and the
+  inversion says which end this is.
 - Empty is a resting state for a project and not for a branch: deleting a project's last task leaves the pair
   standing, deleting a branch's last task removes the branch and its return, and opening a branch creates it
   with one task inside.
@@ -522,6 +527,5 @@ All of it is settled unless listed as open below, and the whole of it is schedul
 
 - Reading a tall plan: hover magnification, constant-screen-size labels with collisions culled, or both.
   Deferred by decision to its own investigation; see section 10.
-- The default edge for a bare insertion, presumably the one above the cursor.
-- Where the note dot is drawn on a terminus bar, which has no card to put it on.
+
 - Whether the app reports how many crossings an ordering costs, now that the order is the author's to change.

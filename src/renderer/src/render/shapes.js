@@ -128,7 +128,11 @@ function drawOrbits(group, cx, cy, colour) {
 // task marked "here" draws the marquee; every other task draws the screen. The
 // colour tracks the node's status (a task) or is the project colour.
 export function renderCard(cardEl) {
-  const isProject = cardEl.classList.contains('project')
+  const isTerminus = cardEl.classList.contains('terminus')
+  // A scope's close wears the project hull, turned upside down: the same shape says
+  // it belongs to the same pair, and the inversion says which end of it this is. It
+  // carries no title, so the hull is empty.
+  const isProject = cardEl.classList.contains('project') || isTerminus
   const isCursor = cardEl.classList.contains('cursor')
   const collapsed = cardEl.classList.contains('collapsed')
   const flagged = cardEl.classList.contains('flagged')
@@ -147,9 +151,14 @@ export function renderCard(cardEl) {
   svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h)
   const { outer, innerT } = buildShape(shape, w, h)
   const outerEl = svg.querySelector('.outer'), innerEl = svg.querySelector('.inner')
+  // The close is the same path, mirrored about the card's horizontal axis, so the two
+  // halves of a pair are visibly one shape and its reflection rather than two
+  // drawings that have to be kept in step.
+  const flip = isTerminus ? `translate(0 ${h}) scale(1 -1) ` : ''
   outerEl.setAttribute('d', outer)
+  outerEl.setAttribute('transform', flip.trim())
   innerEl.setAttribute('d', outer)
-  innerEl.setAttribute('transform', innerT)
+  innerEl.setAttribute('transform', flip + innerT)
 
   let colour = 'todo'
   if (isProject) {

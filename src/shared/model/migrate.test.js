@@ -3,7 +3,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { migrateRecord } from './migrate.js'
-import { validateRecord } from './validate.js'
+import { validateRecord, pairScopes, trunksOf } from './validate.js'
 
 function v1() {
   return {
@@ -23,7 +23,8 @@ function v1() {
 // A schema-2 record: the old envelope (schema/domain/rootOrder/tasks) and the old
 // node shape, whose forks are one list of { child, side, at }. Every `at` case the
 // 2 -> 3 pass has to place is here: `above`, `below` with a main-line predecessor,
-// `below` on a root, and `below` at the foot of a branch.
+// `below` on a root, and `below` at the foot of a branch. It holds one project node,
+// the plan's base, so the pass owes the migrated record exactly one terminus.
 function v2() {
   return {
     schema: 2, domain: 'D', rootOrder: ['p'],
@@ -63,6 +64,16 @@ function byTitle(record, title) {
   return node
 }
 
+// Termini: a minted terminus has no title, so it cannot be found by one. It is found
+// through the project node it closes, using the same bracket-matching the record's
+// invariants are checked with rather than a second reading of the trunk.
+function closeOf(record, projectId) {
+  const { pairs } = pairScopes(record, trunksOf(record))
+  const terminus = record.nodes[pairs.get(projectId)]
+  if (!terminus) throw new Error('no terminus closes project "' + projectId + '"')
+  return terminus
+}
+
 describe('migrateRecord — schema 1 to the current schema', () => {
   it('prepends a named project root per tree, builds planOrder, and validates', () => {
     // One call carries a schema-1 record the whole way, so the result is a schema-3
@@ -91,6 +102,22 @@ describe('migrateRecord — schema 1 to the current schema', () => {
     expect(r1.title).toBe('Beta')
     expect(r1.next).toBe(byTitle(record, 'C').id)
 
+    // Termini: schema 3 closes every scope, so the pass that mints a plan's root node
+    // mints its close too — and nothing else: 3 old tasks, 2 roots, 2 closes. Alpha's
+    // close sits above B, the top of that trunk; Beta's above C. A plan's close ends
+    // the plan, so it has no node and no fork above it.
+    expect(Object.keys(record.nodes)).toHaveLength(7)
+    const alphaClose = closeOf(record, r0.id)
+    expect(alphaClose.kind).toBe('terminus')
+    expect(byTitle(record, 'B').next).toBe(alphaClose.id)
+    expect(alphaClose.next).toBe(null)
+    expect(alphaClose.leftBranches).toEqual([])
+    expect(alphaClose.rightBranches).toEqual([])
+    const betaClose = closeOf(record, r1.id)
+    expect(betaClose.kind).toBe('terminus')
+    expect(byTitle(record, 'C').next).toBe(betaClose.id)
+    expect(betaClose.next).toBe(null)
+
     expect(validateRecord(record).ok).toBe(true)
   })
 
@@ -102,10 +129,17 @@ describe('migrateRecord — schema 1 to the current schema', () => {
   })
 
   it('is a no-op on a record already at the current schema', () => {
+    // Termini: the minimal current-schema record is now a base and its close, since a
+    // project node with nothing closing it is no longer a legal record. The empty plan
+    // is what the fixture was and still is.
     const already = {
       schemaVersion: 3, id: 'd_mrtwgppt00', title: 'D', planOrder: ['p'],
-      nodes: { p: { id: 'p', title: 'P', kind: 'project', createdAt: 'x', note: null, flagged: false, next: null, leftBranches: [], rightBranches: [] } },
+      nodes: {
+        p: { id: 'p', title: 'P', kind: 'project', createdAt: 'x', note: null, flagged: false, next: 'z', leftBranches: [], rightBranches: [] },
+        z: { id: 'z', kind: 'terminus', createdAt: 'x', note: null, next: null, leftBranches: [], rightBranches: [] },
+      },
     }
+    expect(validateRecord(already).ok).toBe(true)
     const { record, changed, notes } = migrateRecord(already)
     expect(changed).toBe(false)
     expect(record).toBe(already)
@@ -127,7 +161,11 @@ describe('migrateRecord — schema 2 to 3', () => {
       expect(id).toMatch(/^n_[0-9a-z]{10}$/)
       expect(node.id).toBe(id)
     }
-    expect(Object.keys(record.nodes)).toHaveLength(9)
+    // Termini: the nine schema-2 nodes come across one for one, and the pass adds the
+    // one close the record's single scope needs. Only the nine reminted nodes are in
+    // idMap; a terminus is new here, so nothing outside the record points at it.
+    expect(Object.keys(record.nodes)).toHaveLength(10)
+    expect(Object.keys(idMap)).toHaveLength(9)
     expect(idMap.a).toBe(byTitle(record, 'A').id) // old id -> new, for the note files and bookmarks
 
     // The node's own fields survive the pass unchanged.
@@ -138,11 +176,22 @@ describe('migrateRecord — schema 2 to 3', () => {
     expect(byTitle(record, 'C').completedAt).toBe('y')
     expect(byTitle(record, 'Plan').status).toBeUndefined() // a project node has none
 
-    // The trunk is unchanged: p -> a -> b -> c by .next.
+    // The trunk is unchanged: p -> a -> b -> c by .next, with the plan's close above c.
     expect(byTitle(record, 'Plan').next).toBe(byTitle(record, 'A').id)
     expect(byTitle(record, 'A').next).toBe(b.id)
     expect(b.next).toBe(byTitle(record, 'C').id)
-    expect(byTitle(record, 'C').next).toBe(null)
+
+    // Termini: C was the top of the trunk and its .next was null. The top is now the
+    // terminus closing the plan, which is where "nothing above it" is asserted; a
+    // close says nothing of its own, so it has no title, status or flag.
+    const close = closeOf(record, byTitle(record, 'Plan').id)
+    expect(byTitle(record, 'C').next).toBe(close.id)
+    expect(close.next).toBe(null)
+    expect(close.leftBranches).toEqual([])
+    expect(close.rightBranches).toEqual([])
+    expect(close.title).toBeUndefined()
+    expect(close.status).toBeUndefined()
+    expect(close.flagged).toBeUndefined()
 
     expect(validateRecord(record).ok).toBe(true)
   })

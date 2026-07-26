@@ -36,6 +36,17 @@ export function serializeProject(record, rootId, notes = {}) {
   const out = []
   const seen = new Set()
 
+  // A node's note, as an indented paragraph beneath its bullet.
+  function emitNote(id, depth) {
+    const note = notes[id]
+    if (typeof note !== 'string' || !note.trim().length) return
+    out.push('') // a blank line so the note starts a new paragraph inside the item
+    const notePad = INDENT.repeat(depth + 1)
+    for (const line of note.replace(/\n+$/, '').split('\n')) {
+      out.push(line.length ? notePad + line : '')
+    }
+  }
+
   // Emit `id` and its subtree. `depth` is this node's indent level. A task's
   // main-line successor stays at `depth` (a flat run); a project's successor and
   // every fork nest at `depth + 1`.
@@ -43,16 +54,21 @@ export function serializeProject(record, rootId, notes = {}) {
     const node = record.nodes[id]
     if (!node || seen.has(id)) return
     seen.add(id)
+
+    // A scope's close gets no bullet of its own: the outline's indentation already
+    // shows where the scope ends, and a terminus has no title to put on a line. Its
+    // note is content, though, so that is emitted at the scope's own level, reading
+    // as a closing remark on the project it closes. A close never nests what follows.
+    if (node.kind === 'terminus') {
+      emitNote(id, depth)
+      for (const b of branchChildrenOf(node)) emit(b.child, depth + 1)
+      if (node.next) emit(node.next, depth)
+      return
+    }
+
     out.push(INDENT.repeat(depth) + bulletFor(node))
 
-    const note = notes[id]
-    if (typeof note === 'string' && note.trim().length) {
-      out.push('') // a blank line so the note starts a new paragraph inside the item
-      const notePad = INDENT.repeat(depth + 1)
-      for (const line of note.replace(/\n+$/, '').split('\n')) {
-        out.push(line.length ? notePad + line : '')
-      }
-    }
+    emitNote(id, depth)
 
     // Forks are emitted before the main-line successor: a nested sub-list placed
     // after a shallower successor line would attach to the wrong parent.

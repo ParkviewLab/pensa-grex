@@ -51,6 +51,7 @@ function noteIconEl() {
 // card can be measured/rendered consistently either way. A project node is never
 // a cursor.
 export function buildCard(task, { isCursor } = {}) {
+  if (task.kind === 'terminus') return buildTerminus(task)
   const isProject = task.kind === 'project'
   const cursor = isCursor && !isProject
 
@@ -97,6 +98,20 @@ export function buildCard(task, { isCursor } = {}) {
   // A memo-pad glyph in the bottom-right corner marks a note and opens it on click.
   if (task.note) card.appendChild(noteIconEl())
 
+  return card
+}
+
+// A scope's close wears the project hull upside down (see render/shapes.js): the
+// same shape says the two belong to one pair, and the inversion says which end this
+// is. It carries no title, no status glyph and no tag, so the hull is empty, and it
+// is sized to match an empty project card so the mirror is exact.
+//
+// A terminus may hold a note in the record, but the interface does not offer one for
+// now, so nothing is drawn for it here either.
+function buildTerminus(node) {
+  const card = document.createElement('div')
+  card.className = 'card terminus'
+  card.dataset.taskId = node.id
   return card
 }
 
