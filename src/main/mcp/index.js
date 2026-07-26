@@ -52,9 +52,9 @@ export function createMcpService({ taskService, store, version, notify }) {
   // taskService, wrapped so a successful write pushes a domain-changed event for
   // the live view. Reads pass through untouched.
   const notifyingTaskService = {
-    readForest: (dir) => taskService.readForest(dir),
-    taskOp: (dir, op, args) => {
-      const res = taskService.taskOp(dir, op, args)
+    readRecord: (dir) => taskService.readRecord(dir),
+    runOp: (dir, op, args) => {
+      const res = taskService.runOp(dir, op, args)
       if (!res.error) emit('pensagrex:domain-changed', { dir })
       return res
     },

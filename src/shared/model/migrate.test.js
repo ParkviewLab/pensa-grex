@@ -2,8 +2,8 @@
 // SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 
 import { describe, it, expect } from 'vitest'
-import { migrateForest } from './migrate.js'
-import { validateForest } from './validate.js'
+import { migrateRecord } from './migrate.js'
+import { validateRecord } from './validate.js'
 
 function v1() {
   return {
@@ -20,44 +20,44 @@ function v1() {
   }
 }
 
-describe('migrateForest — schema 1 to 2', () => {
+describe('migrateRecord — schema 1 to 2', () => {
   it('prepends a named project root per tree, builds rootOrder, and validates', () => {
-    const { raw, changed } = migrateForest(v1())
+    const { record, changed } = migrateRecord(v1())
     expect(changed).toBe(true)
-    expect(raw.schema).toBe(2)
-    expect(raw.trees).toBeUndefined()
-    expect(raw.rootOrder).toHaveLength(2)
+    expect(record.schema).toBe(2)
+    expect(record.trees).toBeUndefined()
+    expect(record.rootOrder).toHaveLength(2)
 
-    expect(raw.tasks.a.kind).toBe('task') // existing tasks become tasks, keeping their status
-    expect(raw.tasks.a.status).toBe('completed')
+    expect(record.tasks.a.kind).toBe('task') // existing tasks become tasks, keeping their status
+    expect(record.tasks.a.status).toBe('completed')
 
-    const r0 = raw.tasks[raw.rootOrder[0]]
+    const r0 = record.tasks[record.rootOrder[0]]
     expect(r0.kind).toBe('project')
     expect(r0.title).toBe('Alpha')
     expect(r0.next).toBe('a') // the old root becomes the project's first real node
     expect(r0.status).toBeUndefined()
 
-    const r1 = raw.tasks[raw.rootOrder[1]]
+    const r1 = record.tasks[record.rootOrder[1]]
     expect(r1.title).toBe('Beta')
     expect(r1.next).toBe('c')
 
-    expect(validateForest(raw).ok).toBe(true)
+    expect(validateRecord(record).ok).toBe(true)
   })
 
   it('does not mutate its input', () => {
     const input = v1()
     const copy = structuredClone(input)
-    migrateForest(input)
+    migrateRecord(input)
     expect(input).toEqual(copy)
   })
 
-  it('is a no-op on a schema 2 forest', () => {
+  it('is a no-op on a schema 2 record', () => {
     const already = {
       schema: 2, domain: 'D', rootOrder: ['p'],
       tasks: { p: { id: 'p', title: 'P', kind: 'project', createdAt: 'x', note: null, next: null, branches: [] } },
     }
-    const { raw, changed } = migrateForest(already)
+    const { record, changed } = migrateRecord(already)
     expect(changed).toBe(false)
-    expect(raw).toBe(already)
+    expect(record).toBe(already)
   })
 })

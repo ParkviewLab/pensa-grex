@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 
-// The pure layout engine: forest model + measured sizes -> pixel positions
+// The pure layout engine: the domain model + measured sizes -> pixel positions
 // for every station, dot, cursor, track, and junction, plus the overall canvas
 // bounds. No DOM — see layout/measure.js for where the sizes this consumes come
 // from, and docs/model_ideas.md for the rules this implements (bottom-up growth,
@@ -24,20 +24,20 @@ const DEFAULTS = {
   branchTiltTan: Math.tan((12 * Math.PI) / 180), // 12° above horizontal = 78° from the vertical trunk
 }
 
-export function computeForestLayout(forest, sizes, opts = {}) {
+export function computeDomainLayout(model, sizes, opts = {}) {
   const o = { ...DEFAULTS, ...opts }
 
-  if (forest.trees.length === 0) {
+  if (model.trees.length === 0) {
     return { stations: [], dots: [], cursors: [], tracks: [], junctions: [], bounds: { w: o.margin * 2, h: o.margin * 2 } }
   }
 
-  const row = assignRows(forest)
-  const { cardTopY } = buildRowGrid(forest, row, sizes, o)
-  const { lineOfTask, lineRows, lane } = assignLanes(forest, row)
+  const row = assignRows(model)
+  const { cardTopY } = buildRowGrid(model, row, sizes, o)
+  const { lineOfTask, lineRows, lane } = assignLanes(model, row)
   const anchorYForRow = (r) => cardTopY.get(r) - o.anchorGap
 
   const rawX = new Map()
-  for (const id of forest.tasks.keys()) rawX.set(id, lane.get(lineOfTask.get(id)) * o.laneStep)
+  for (const id of model.tasks.keys()) rawX.set(id, lane.get(lineOfTask.get(id)) * o.laneStep)
 
   // ---- per-branch upward offset ----
   // Angling a branch up should carry the branch, and everything growing along
@@ -74,7 +74,7 @@ export function computeForestLayout(forest, sizes, opts = {}) {
   // parent line and leg rise; a line's total offset is its parent's plus its own
   // leg rise, with trunk lines at zero.
   const forkOfLine = new Map()
-  for (const [id, task] of forest.tasks) {
+  for (const [id, task] of model.tasks) {
     for (const b of task.branches) {
       forkOfLine.set(b.child, { parent: lineOfTask.get(id), rise: forkGeom(id, task, b).rise })
     }
@@ -98,11 +98,11 @@ export function computeForestLayout(forest, sizes, opts = {}) {
   }
 
   // ---- per-tree bounding box (pre-packing space) ----
-  const tasksByTree = new Map(forest.trees.map((t) => [t.id, []]))
-  for (const id of forest.tasks.keys()) tasksByTree.get(forest.getTreeIdForTask(id)).push(id)
+  const tasksByTree = new Map(model.trees.map((t) => [t.id, []]))
+  for (const id of model.tasks.keys()) tasksByTree.get(model.getTreeIdForTask(id)).push(id)
 
   const treeBBox = new Map()
-  for (const tree of forest.trees) {
+  for (const tree of model.trees) {
     let minX = Infinity, maxX = -Infinity, maxBottom = -Infinity
     for (const id of tasksByTree.get(tree.id)) {
       const box = cardBox(id)
@@ -116,18 +116,18 @@ export function computeForestLayout(forest, sizes, opts = {}) {
   // ---- pack trees left to right by bounding box ----
   const treeOffsetX = new Map()
   let packCursor = 0
-  for (const tree of forest.trees) {
+  for (const tree of model.trees) {
     const bbox = treeBBox.get(tree.id)
     const offset = packCursor - bbox.minX
     treeOffsetX.set(tree.id, offset)
     packCursor = bbox.maxX + offset + o.treeGap
   }
-  const finalX = (id) => rawX.get(id) + treeOffsetX.get(forest.getTreeIdForTask(id))
+  const finalX = (id) => rawX.get(id) + treeOffsetX.get(model.getTreeIdForTask(id))
 
   // ---- stations, dots, cursors ----
   const stations = []
   let minY = Infinity, maxY = -Infinity
-  for (const [id, task] of forest.tasks) {
+  for (const [id, task] of model.tasks) {
     const box = cardBox(id)
     const x = finalX(id)
     const anchorY = anchorYOf(id)
@@ -143,7 +143,7 @@ export function computeForestLayout(forest, sizes, opts = {}) {
 
   // ---- tracks: one straight riser per line, anchor to anchor ----
   const linesByStart = new Map()
-  for (const id of forest.tasks.keys()) {
+  for (const id of model.tasks.keys()) {
     const start = lineOfTask.get(id)
     if (!linesByStart.has(start)) linesByStart.set(start, [])
     linesByStart.get(start).push(id)
@@ -166,7 +166,7 @@ export function computeForestLayout(forest, sizes, opts = {}) {
   // task with several .branches at the same .at) share ONE diamond, keyed
   // by that point, not one per branch.
   const junctionByKey = new Map()
-  for (const [id, task] of forest.tasks) {
+  for (const [id, task] of model.tasks) {
     for (const b of task.branches) {
       const g = forkGeom(id, task, b)
       const offParent = offOf(id)

@@ -5,7 +5,7 @@ import { describe, it, expect } from 'vitest'
 import { centeredStationId, anchorChain, resolveAnchor } from './bookmarks.js'
 
 // r(project) -> a -> b ; a forks to f
-const raw = {
+const record = {
   schema: 2, domain: 'T', rootOrder: ['r'],
   tasks: {
     r: { id: 'r', title: 'r', kind: 'project', createdAt: 'x', note: null, next: 'a', branches: [] },
@@ -32,13 +32,13 @@ describe('centeredStationId', () => {
 
 describe('anchorChain', () => {
   it('walks a main-line node up to the root', () => {
-    expect(anchorChain(raw, 'b')).toEqual(['b', 'a', 'r'])
+    expect(anchorChain(record, 'b')).toEqual(['b', 'a', 'r'])
   })
   it('walks a fork child up through its parent to the root', () => {
-    expect(anchorChain(raw, 'f')).toEqual(['f', 'a', 'r'])
+    expect(anchorChain(record, 'f')).toEqual(['f', 'a', 'r'])
   })
   it('a root is its own single-element chain', () => {
-    expect(anchorChain(raw, 'r')).toEqual(['r'])
+    expect(anchorChain(record, 'r')).toEqual(['r'])
   })
 })
 

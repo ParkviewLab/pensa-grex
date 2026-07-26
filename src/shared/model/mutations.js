@@ -2,10 +2,10 @@
 // SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 
 // The pure edit operations, one per right-click menu action (see
-// docs/model_ideas.md, "Editing"). Each takes the raw forest object (the
-// parsed-and-validated JSON5 shape, not the buildForest() runtime model) and
-// returns a NEW raw forest object; none mutate their argument, so every edit is
-// serializable and can be re-validated with validateForest() before it is
+// docs/model_ideas.md, "Editing"). Each takes the record (the
+// parsed-and-validated JSON5 shape, not the buildModel() runtime model) and
+// returns a NEW record; none mutate their argument, so every edit is
+// serializable and can be re-validated with validateRecord() before it is
 // applied and saved. New node ids come from model/ids.js; timestamps are ISO
 // strings stamped at edit time.
 //
@@ -18,8 +18,8 @@ import { mintTaskId } from './ids.js'
 
 const STATUSES = ['todo', 'in-progress', 'completed', 'cancelled']
 
-function clone(raw) {
-  return structuredClone(raw)
+function clone(record) {
+  return structuredClone(record)
 }
 
 function nowISO() {
@@ -56,9 +56,9 @@ function newProjectNode(title) {
 }
 
 // The task whose .next or whose branch points at taskId, or null if taskId is a
-// root. validateForest guarantees at most one such incoming edge.
-function predecessorOf(raw, taskId) {
-  for (const [id, task] of Object.entries(raw.tasks)) {
+// root. validateRecord guarantees at most one such incoming edge.
+function predecessorOf(record, taskId) {
+  for (const [id, task] of Object.entries(record.tasks)) {
     if (task.next === taskId) return { id, kind: 'next' }
     const bi = (task.branches || []).findIndex((b) => b.child === taskId)
     if (bi !== -1) return { id, kind: 'branch', branchIndex: bi }
@@ -68,14 +68,14 @@ function predecessorOf(raw, taskId) {
 
 // Every id reachable from startId (inclusive), following .next and branches —
 // i.e. the subtree rooted at startId.
-function subtreeIds(raw, startId) {
+function subtreeIds(record, startId) {
   const ids = new Set()
   const stack = [startId]
   while (stack.length) {
     const id = stack.pop()
     if (ids.has(id)) continue
     ids.add(id)
-    const t = raw.tasks[id]
+    const t = record.tasks[id]
     if (!t) continue
     if (t.next) stack.push(t.next)
     for (const b of t.branches || []) stack.push(b.child)
@@ -86,20 +86,20 @@ function subtreeIds(raw, startId) {
 // The ids on taskId's line: the maximal .next chain it sits on. The line starts
 // at a root or a branch child (the first node with no main-line predecessor) and
 // runs up through .next to the tip.
-function lineIds(raw, taskId) {
+function lineIds(record, taskId) {
   let start = taskId
   for (;;) {
-    const pred = predecessorOf(raw, start)
+    const pred = predecessorOf(record, start)
     if (pred && pred.kind === 'next') start = pred.id
     else break
   }
   const ids = []
   let id = start
   const seen = new Set()
-  while (id && raw.tasks[id] && !seen.has(id)) {
+  while (id && record.tasks[id] && !seen.has(id)) {
     seen.add(id)
     ids.push(id)
-    id = raw.tasks[id].next
+    id = record.tasks[id].next
   }
   return ids
 }
@@ -107,35 +107,35 @@ function lineIds(raw, taskId) {
 // After a splice can merge two lines, a line may carry more than one "here".
 // Keep the one nearest the tip (the most-advanced cursor) and clear the rest,
 // so the <=1-here-per-line invariant holds. Harmless when nothing merged.
-function normalizeHeres(raw) {
+function normalizeHeres(record) {
   const seenLineStart = new Set()
-  for (const id of Object.keys(raw.tasks)) {
-    const line = lineIds(raw, id)
+  for (const id of Object.keys(record.tasks)) {
+    const line = lineIds(record, id)
     const startKey = line[0]
     if (seenLineStart.has(startKey)) continue
     seenLineStart.add(startKey)
-    const heres = line.filter((tid) => raw.tasks[tid].here)
+    const heres = line.filter((tid) => record.tasks[tid].here)
     if (heres.length > 1) {
       const keep = heres[heres.length - 1]
-      for (const tid of heres) if (tid !== keep) raw.tasks[tid].here = false
+      for (const tid of heres) if (tid !== keep) record.tasks[tid].here = false
     }
   }
-  return raw
+  return record
 }
 
-function requireTask(raw, taskId) {
-  if (!raw.tasks[taskId]) throw new Error('unknown task "' + taskId + '"')
-  return raw.tasks[taskId]
+function requireTask(record, taskId) {
+  if (!record.tasks[taskId]) throw new Error('unknown task "' + taskId + '"')
+  return record.tasks[taskId]
 }
 
 /**
- * Start a new project in the forest: a fresh project-node root titled `name`,
+ * Start a new project in the domain: a fresh project-node root titled `name`,
  * appended to rootOrder. The one way to begin a tree from nothing (an empty
  * domain, or after the last tree was deleted). The root carries the project's
  * name; tasks are grown above it.
  */
-export function addTree(raw, name) {
-  const next = clone(raw)
+export function addTree(record, name) {
+  const next = clone(record)
   const root = newProjectNode(name)
   addNode(next, root)
   if (!Array.isArray(next.rootOrder)) next.rootOrder = []
@@ -144,16 +144,16 @@ export function addTree(raw, name) {
 }
 
 // Return `desired` if no other node in the domain already uses it, else the lowest
-// free `base-N`, so titles stay unique across the forest. The base is `desired`
+// free `base-N`, so titles stay unique across the domain. The base is `desired`
 // with any trailing `-<digits>` stripped, so re-editing "Foo-1" into a name that is
 // already taken yields "Foo-2", not "Foo-1-1" (a bare "Foo" collision starts at
 // "Foo-1"). `excludeId` is the node being renamed, whose own current title must not
 // count as a collision. A deliberate consequence of stripping: a genuine numeric
 // tail ("Rev-2020") is renumbered from its base on collision (see docs/model_ideas.md).
-export function uniqueTitle(raw, desired, excludeId) {
+export function uniqueTitle(record, desired, excludeId) {
   const want = String(desired)
   const taken = new Set()
-  for (const [id, t] of Object.entries(raw.tasks || {})) {
+  for (const [id, t] of Object.entries(record.tasks || {})) {
     if (id !== excludeId && t && typeof t.title === 'string') taken.add(t.title)
   }
   if (!taken.has(want)) return want
@@ -164,33 +164,33 @@ export function uniqueTitle(raw, desired, excludeId) {
   }
 }
 
-// Place a freshly-created node into the forest with a domain-unique title (uniqueTitle),
+// Place a freshly-created node into the record with a domain-unique title (uniqueTitle),
 // so a name typed at creation is suffixed just as setTitle and pasteAsTree already do.
-// Used by every add* mutation; the node is not yet in raw, so excludeId is null.
-function addNode(raw, node) {
-  node.title = uniqueTitle(raw, node.title, null)
-  raw.tasks[node.id] = node
+// Used by every add* mutation; the node is not yet in the record, so excludeId is null.
+function addNode(record, node) {
+  node.title = uniqueTitle(record, node.title, null)
+  record.tasks[node.id] = node
   return node
 }
 
 /** Set a node's title, kept unique within the domain (see uniqueTitle). */
-export function setTitle(raw, taskId, title) {
-  const next = clone(raw)
+export function setTitle(record, taskId, title) {
+  const next = clone(record)
   requireTask(next, taskId).title = uniqueTitle(next, title, taskId)
   return next
 }
 
 /** Record (or clear, with null) a node's note filename, which drives the note dot. */
-export function setNote(raw, taskId, filename) {
-  const next = clone(raw)
+export function setNote(record, taskId, filename) {
+  const next = clone(record)
   requireTask(next, taskId).note = filename || null
   return next
 }
 
 /** Set a task's status. Completing stamps completedAt; leaving completed clears it. */
-export function setStatus(raw, taskId, status) {
+export function setStatus(record, taskId, status) {
   if (!STATUSES.includes(status)) throw new Error('invalid status "' + status + '"')
-  const next = clone(raw)
+  const next = clone(record)
   const task = requireTask(next, taskId)
   if (task.kind === 'project') throw new Error('a project node has no status')
   task.status = status
@@ -204,11 +204,11 @@ export function setStatus(raw, taskId, status) {
  * click-free counterpart of the right-click Status submenu; an unknown current
  * status starts the cycle at todo.
  */
-export function cycleStatus(raw, taskId) {
-  const task = requireTask(raw, taskId)
+export function cycleStatus(record, taskId) {
+  const task = requireTask(record, taskId)
   if (task.kind === 'project') throw new Error('a project node has no status')
   const i = STATUSES.indexOf(task.status)
-  return setStatus(raw, taskId, STATUSES[(i + 1) % STATUSES.length])
+  return setStatus(record, taskId, STATUSES[(i + 1) % STATUSES.length])
 }
 
 /**
@@ -217,8 +217,8 @@ export function cycleStatus(raw, taskId) {
  * round-trip therefore resets a task to 'todo'. A root is always a project node,
  * so its kind cannot be changed.
  */
-export function convertKind(raw, taskId) {
-  const next = clone(raw)
+export function convertKind(record, taskId) {
+  const next = clone(record)
   const task = requireTask(next, taskId)
   if (!predecessorOf(next, taskId)) throw new Error('cannot change the kind of a root node')
   if (task.kind === 'project') {
@@ -237,19 +237,19 @@ export function convertKind(raw, taskId) {
 
 /**
  * Toggle a node's "flagged" mark, drawn as the atomic orbits. A persisted, shared
- * annotation (it rides in the forest file, not the client's view state), used to
+ * annotation (it rides in the domain file, not the client's view state), used to
  * select nodes, e.g. for an assistant to examine next. Any node may be flagged.
  */
-export function toggleFlag(raw, taskId) {
-  const next = clone(raw)
+export function toggleFlag(record, taskId) {
+  const next = clone(record)
   const task = requireTask(next, taskId)
   task.flagged = !task.flagged
   return next
 }
 
 /** Mark taskId as "here" on its line, clearing any existing "here" on that same line. */
-export function makeHere(raw, taskId) {
-  const next = clone(raw)
+export function makeHere(record, taskId) {
+  const next = clone(record)
   const task = requireTask(next, taskId)
   if (task.kind === 'project') throw new Error('cannot set "here" on a project node')
   for (const id of lineIds(next, taskId)) next.tasks[id].here = false
@@ -258,8 +258,8 @@ export function makeHere(raw, taskId) {
 }
 
 /** Clear the "here" cursor on taskId's line (if any). */
-export function clearHere(raw, taskId) {
-  const next = clone(raw)
+export function clearHere(record, taskId) {
+  const next = clone(record)
   requireTask(next, taskId)
   for (const id of lineIds(next, taskId)) next.tasks[id].here = false
   return next
@@ -270,8 +270,8 @@ export function clearHere(raw, taskId) {
  * root), continuing the main line: the new task becomes taskId's main-line
  * successor and inherits taskId's old successor.
  */
-export function addTaskAbove(raw, taskId, title) {
-  const next = clone(raw)
+export function addTaskAbove(record, taskId, title) {
+  const next = clone(record)
   const task = requireTask(next, taskId)
   const n = newTask(title)
   n.next = task.next
@@ -285,8 +285,8 @@ export function addTaskAbove(raw, taskId, title) {
  * new task takes taskId's place under its predecessor and points up at taskId.
  * Refused below a root node — nothing precedes a project's base.
  */
-export function addTaskBelow(raw, taskId, title) {
-  const next = clone(raw)
+export function addTaskBelow(record, taskId, title) {
+  const next = clone(record)
   requireTask(next, taskId)
   const pred = predecessorOf(next, taskId)
   if (!pred) throw new Error('cannot add a task below a root node')
@@ -306,8 +306,8 @@ function branchSide(task, side) {
 }
 
 /** Fork a new parallel stack off taskId at the gap above it (alternating side). */
-export function addBranchAbove(raw, taskId, title, side) {
-  const next = clone(raw)
+export function addBranchAbove(record, taskId, title, side) {
+  const next = clone(record)
   const task = requireTask(next, taskId)
   const n = newTask(title)
   task.branches.push({ child: n.id, side: branchSide(task, side), at: 'above' })
@@ -319,8 +319,8 @@ export function addBranchAbove(raw, taskId, title, side) {
  * Fork a new parallel stack off taskId at the gap below it (alternating side).
  * Refused below a root node — a root has no gap below it.
  */
-export function addBranchBelow(raw, taskId, title, side) {
-  const next = clone(raw)
+export function addBranchBelow(record, taskId, title, side) {
+  const next = clone(record)
   const task = requireTask(next, taskId)
   if (!predecessorOf(next, taskId)) throw new Error('cannot add a branch below a root node')
   const n = newTask(title)
@@ -335,10 +335,10 @@ export function addBranchBelow(raw, taskId, title, side) {
  * project node). For a non-root: mode 'subtree' (default) removes the node and
  * everything growing from it; mode 'splice' removes only the node and reconnects
  * its main-line successor (or, lacking one, its first fork) into its place, with
- * any remaining forks reattached to that new head. Returns the new forest.
+ * any remaining forks reattached to that new head. Returns the new record.
  */
-export function deleteTask(raw, taskId, mode = 'subtree') {
-  const next = clone(raw)
+export function deleteTask(record, taskId, mode = 'subtree') {
+  const next = clone(record)
   requireTask(next, taskId)
   const pred = predecessorOf(next, taskId)
 
@@ -390,7 +390,7 @@ export function deleteTask(raw, taskId, mode = 'subtree') {
 }
 
 /**
- * Paste a copied project into `raw` as a fresh, independent tree. Every id in the
+ * Paste a copied project into `record` as a fresh, independent tree. Every id in the
  * clip is regenerated (so a paste never collides with the source and the same
  * clip may be pasted repeatedly), each node is stamped with a new createdAt, and
  * any "here" cursor is cleared — a pasted tree opens with no cursor. Notes travel
@@ -401,10 +401,10 @@ export function deleteTask(raw, taskId, mode = 'subtree') {
  *
  * `clip` is { rootId, tasks: { oldId: record }, notes: { oldId: content } }, the
  * snapshot bridge/api.js gathers at copy time. Returns { next, notes } where
- * notes is [{ file, content }]. Pure: neither `raw` nor `clip` is mutated.
+ * notes is [{ file, content }]. Pure: neither `record` nor `clip` is mutated.
  */
-export function pasteAsTree(raw, clip) {
-  const next = clone(raw)
+export function pasteAsTree(record, clip) {
+  const next = clone(record)
   if (!Array.isArray(next.rootOrder)) next.rootOrder = []
   const idMap = new Map()
   for (const oldId of Object.keys(clip.tasks)) idMap.set(oldId, mintTaskId())
@@ -511,8 +511,8 @@ function mainLineTip(next, id) {
  * repaired by normalizeHeres. Refuses a project node (use moveSubtree) and a drop
  * onto itself.
  */
-export function moveTaskNode(raw, id, targetId) {
-  const next = clone(raw)
+export function moveTaskNode(record, id, targetId) {
+  const next = clone(record)
   const task = requireTask(next, id)
   requireTask(next, targetId)
   if (id === targetId) throw new Error('cannot move a node onto itself')
@@ -529,8 +529,8 @@ export function moveTaskNode(raw, id, targetId) {
  * Refuses a drop onto itself or onto one of its own descendants (which would
  * detach a fragment and form a cycle).
  */
-export function moveSubtree(raw, rootId, targetId) {
-  const next = clone(raw)
+export function moveSubtree(record, rootId, targetId) {
+  const next = clone(record)
   requireTask(next, rootId)
   requireTask(next, targetId)
   if (rootId === targetId) throw new Error('cannot move a node onto itself')
@@ -545,8 +545,8 @@ export function moveSubtree(raw, rootId, targetId) {
  * append it to rootOrder, so it becomes a structural root. Only a project node
  * can be a root; refuses a task node and a node that is already a root.
  */
-export function detachToTree(raw, id) {
-  const next = clone(raw)
+export function detachToTree(record, id) {
+  const next = clone(record)
   const node = requireTask(next, id)
   if (node.kind !== 'project') throw new Error('only a project node can become a root')
   if (!predecessorOf(next, id)) throw new Error('node is already a root')
@@ -558,13 +558,13 @@ export function detachToTree(raw, id) {
 
 /**
  * Move a root to position `index` in the left-to-right tree order. rootOrder is
- * advisory and may omit some roots (buildForest appends the unlisted by
+ * advisory and may omit some roots (buildModel appends the unlisted by
  * createdAt); this canonicalises it to the full current root order first, then
  * places `rootId` at the clamped index, so the index is meaningful. Refuses a
  * non-root node.
  */
-export function reorderRoot(raw, rootId, index) {
-  const next = clone(raw)
+export function reorderRoot(record, rootId, index) {
+  const next = clone(record)
   requireTask(next, rootId)
   if (predecessorOf(next, rootId)) throw new Error('reorderRoot expects a root node')
   const isRoot = (id) => !predecessorOf(next, id)
@@ -589,8 +589,8 @@ export function reorderRoot(raw, rootId, index) {
  * its own line (a cycle) or above itself. "here" cursors travel; a merged line is
  * repaired by normalizeHeres.
  */
-export function moveIntoLine(raw, movedId, belowId) {
-  const next = clone(raw)
+export function moveIntoLine(record, movedId, belowId) {
+  const next = clone(record)
   const moved = requireTask(next, movedId)
   requireTask(next, belowId)
   if (movedId === belowId) throw new Error('cannot insert a node above itself')
@@ -633,8 +633,8 @@ function swapWithSuccessor(next, aId) {
  * preserving both nodes' branches. Refuses a node with no successor, and a root
  * (whose successor becoming the base would leave a non-project root).
  */
-export function moveUp(raw, id) {
-  const next = clone(raw)
+export function moveUp(record, id) {
+  const next = clone(record)
   const node = requireTask(next, id)
   if (!node.next) throw new Error('nothing above to swap with')
   if (!predecessorOf(next, id)) throw new Error('cannot move a root up')
@@ -647,8 +647,8 @@ export function moveUp(raw, id) {
  * Equivalent to moving that predecessor up. Refuses a node with no main-line
  * predecessor (a line start), and a swap that would drop the node below a root.
  */
-export function moveDown(raw, id) {
-  const next = clone(raw)
+export function moveDown(record, id) {
+  const next = clone(record)
   requireTask(next, id)
   const pred = predecessorOf(next, id)
   if (!pred || pred.kind !== 'next') throw new Error('no main-line predecessor to swap with')

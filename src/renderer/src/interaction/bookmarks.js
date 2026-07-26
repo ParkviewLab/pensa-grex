@@ -26,22 +26,22 @@ export function centeredStationId(stations, cx, cy) {
 }
 
 // The chain from a node up to its root: [id, predecessor, ..., root]. Follows the
-// one incoming edge (a valid forest gives each node at most one), stopping at a
+// one incoming edge (a valid record gives each node at most one), stopping at a
 // root (no predecessor). A self-contained predecessor walk, so this stays pure.
-export function anchorChain(raw, id) {
+export function anchorChain(record, id) {
   const chain = []
   const seen = new Set()
   let cur = id
-  while (cur && raw.tasks[cur] && !seen.has(cur)) {
+  while (cur && record.tasks[cur] && !seen.has(cur)) {
     seen.add(cur)
     chain.push(cur)
-    cur = predecessorId(raw, cur)
+    cur = predecessorId(record, cur)
   }
   return chain
 }
 
-function predecessorId(raw, id) {
-  for (const [pid, t] of Object.entries(raw.tasks)) {
+function predecessorId(record, id) {
+  for (const [pid, t] of Object.entries(record.tasks)) {
     if (t.next === id) return pid
     if ((t.branches || []).some((b) => b.child === id)) return pid
   }

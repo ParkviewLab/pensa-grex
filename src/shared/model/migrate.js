@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 
-// Forest schema migration. A parsed forest object may have been written by an
-// older version of the app; migrateForest brings it up to the current schema in
-// one lossless step so validate.js and buildForest only ever see the current
+// Record schema migration. A parsed record object may have been written by an
+// older version of the app; migrateRecord brings it up to the current schema in
+// one lossless step so validate.js and buildModel only ever see the current
 // shape. Pure: it does not mutate its argument (it clones before changing).
 //
 // schema 1 -> 2 (Sub-Projects). Introduces the node `kind` ('task' | 'project')
@@ -17,21 +17,21 @@ import { mintTaskId } from './ids.js'
 
 export const CURRENT_SCHEMA = 2
 
-// Bring raw up to CURRENT_SCHEMA. Returns { raw, changed }: `changed` is true
+// Bring record up to CURRENT_SCHEMA. Returns { record, changed }: `changed` is true
 // iff a migration ran, so the caller can persist the upgraded file once.
-export function migrateForest(raw) {
-  if (!raw || typeof raw !== 'object') return { raw, changed: false }
-  let cur = raw
+export function migrateRecord(record) {
+  if (!record || typeof record !== 'object') return { record, changed: false }
+  let cur = record
   let changed = false
   if (cur.schema === 1) {
     cur = migrate1to2(cur)
     changed = true
   }
-  return { raw: cur, changed }
+  return { record: cur, changed }
 }
 
-function migrate1to2(raw) {
-  const next = structuredClone(raw)
+function migrate1to2(record) {
+  const next = structuredClone(record)
   next.schema = 2
   for (const task of Object.values(next.tasks || {})) {
     if (!task.kind) task.kind = 'task'

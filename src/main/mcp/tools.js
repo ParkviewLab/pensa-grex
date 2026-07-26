@@ -36,7 +36,7 @@ function guard(fn) {
   }
 }
 
-// ---- forest helpers (read the authoritative forest, then reason over it) ----
+// ---- record helpers (read the authoritative record, then reason over it) ----
 
 function resolveDir(store, domainArg) {
   const domains = store.listDomains()
@@ -51,56 +51,56 @@ function resolveDir(store, domainArg) {
   return def.path
 }
 
-function readRaw(taskService, dir) {
-  const res = taskService.readForest(dir)
+function readRecordOrThrow(taskService, dir) {
+  const res = taskService.readRecord(dir)
   if (res.error) throw new Error(res.error)
-  return res.raw
+  return res.record
 }
 
-function incomingSet(raw) {
+function incomingSet(record) {
   const inc = new Set()
-  for (const t of Object.values(raw.tasks)) {
+  for (const t of Object.values(record.tasks)) {
     if (t.next) inc.add(t.next)
     for (const b of t.branches || []) inc.add(b.child)
   }
   return inc
 }
-function rootIds(raw) {
-  const inc = incomingSet(raw)
-  return Object.keys(raw.tasks).filter((id) => !inc.has(id))
+function rootIds(record) {
+  const inc = incomingSet(record)
+  return Object.keys(record.tasks).filter((id) => !inc.has(id))
 }
-function predecessorOf(raw, id) {
-  for (const [pid, t] of Object.entries(raw.tasks)) {
+function predecessorOf(record, id) {
+  for (const [pid, t] of Object.entries(record.tasks)) {
     if (t.next === id) return pid
     for (const b of t.branches || []) if (b.child === id) return pid
   }
   return null
 }
-function rootOf(raw, id) {
+function rootOf(record, id) {
   let cur = id
   for (let guard = 0; guard < 100000; guard++) {
-    const p = predecessorOf(raw, cur)
+    const p = predecessorOf(record, cur)
     if (!p) return cur
     cur = p
   }
   return cur
 }
-function subtreeIds(raw, start) {
+function subtreeIds(record, start) {
   const ids = new Set()
   const stack = [start]
   while (stack.length) {
     const id = stack.pop()
     if (ids.has(id)) continue
     ids.add(id)
-    const t = raw.tasks[id]
+    const t = record.tasks[id]
     if (!t) continue
     if (t.next) stack.push(t.next)
     for (const b of t.branches || []) stack.push(b.child)
   }
   return ids
 }
-function structuredNode(raw, id) {
-  const t = raw.tasks[id]
+function structuredNode(record, id) {
+  const t = record.tasks[id]
   const base = {
     id, title: t.title, kind: t.kind, flagged: !!t.flagged,
     hasNote: !!t.note, next: t.next || null,
@@ -109,11 +109,11 @@ function structuredNode(raw, id) {
   if (t.kind === 'task') { base.status = t.status; base.here = !!t.here }
   return base
 }
-function projectOutline(raw, rootId) {
-  return serializeProject(raw, rootId)
+function projectOutline(record, rootId) {
+  return serializeProject(record, rootId)
 }
-function domainOutline(raw) {
-  return rootIds(raw).map((r) => serializeProject(raw, r)).join('\n')
+function domainOutline(record) {
+  return rootIds(record).map((r) => serializeProject(record, r)).join('\n')
 }
 
 // ---- write helpers ---------------------------------------------------------
@@ -122,12 +122,12 @@ function domainOutline(raw) {
 // The affected id is the newly created node when the op made one (the new root
 // for creates/paste, otherwise the new inline node), else the node acted upon.
 function runWrite(taskService, dir, op, args, primaryId) {
-  const before = taskService.readForest(dir)
+  const before = taskService.readRecord(dir)
   if (before.error) return fail(before.error)
-  const beforeKeys = new Set(Object.keys(before.raw.tasks))
-  const res = taskService.taskOp(dir, op, args)
+  const beforeKeys = new Set(Object.keys(before.record.tasks))
+  const res = taskService.runOp(dir, op, args)
   if (res.error) return fail(res.error)
-  const after = res.raw
+  const after = res.record
   const newIds = Object.keys(after.tasks).filter((id) => !beforeKeys.has(id))
   let affected = primaryId ?? null
   if (newIds.length) {
@@ -149,7 +149,7 @@ export function registerTools(server, deps, scope) {
   const { taskService, store } = deps
   const notify = typeof deps.notify === 'function' ? deps.notify : () => {}
   const dirOf = (a) => resolveDir(store, a.domain)
-  const raw = (dir) => readRaw(taskService, dir)
+  const record = (dir) => readRecordOrThrow(taskService, dir)
 
   // A prompt (a client "workflow") baking in the re-read-first discipline for the
   // common "work the flagged tasks" case; exposed in every scope tier.
@@ -182,7 +182,7 @@ export function registerTools(server, deps, scope) {
     description: 'List the project nodes in a domain (id, title, kind, whether it is a top-level root), for resolving a named project to an id. Node titles are domain-unique.',
     inputSchema: { domain: z.string().optional() },
   }, guard(async (a) => {
-    const dir = dirOf(a); const r = raw(dir); const inc = incomingSet(r)
+    const dir = dirOf(a); const r = record(dir); const inc = incomingSet(r)
     const projects = Object.values(r.tasks).filter((t) => t.kind === 'project')
       .map((t) => ({ id: t.id, title: t.title, kind: t.kind, root: !inc.has(t.id) }))
     return json({ domain: dir, projects })
@@ -192,7 +192,7 @@ export function registerTools(server, deps, scope) {
     description: 'List the flagged nodes in a domain (the flag marks tasks selected for an assistant to work on). Results reflect this instant only; the flag set changes as the user works, so re-read rather than reusing an earlier result.',
     inputSchema: { domain: z.string().optional() },
   }, guard(async (a) => {
-    const dir = dirOf(a); const r = raw(dir)
+    const dir = dirOf(a); const r = record(dir)
     const flagged = Object.values(r.tasks).filter((t) => t.flagged).map((t) => structuredNode(r, t.id))
     return json({ domain: dir, flagged })
   }))
@@ -205,7 +205,7 @@ export function registerTools(server, deps, scope) {
       include_notes: z.boolean().optional(),
     },
   }, guard(async (a) => {
-    const dir = dirOf(a); const r = raw(dir)
+    const dir = dirOf(a); const r = record(dir)
     const roots = a.project_id ? [a.project_id] : rootIds(r).filter((id) => r.tasks[id].kind === 'project')
     for (const id of roots) if (!r.tasks[id]) throw new Error(`no node "${id}" in this domain`)
     const ids = a.project_id ? [...subtreeIds(r, a.project_id)] : Object.keys(r.tasks)
@@ -229,7 +229,7 @@ export function registerTools(server, deps, scope) {
     description: "Read a node's markdown note. Empty if the node has no note.",
     inputSchema: { node_id: z.string(), domain: z.string().optional() },
   }, guard(async (a) => {
-    const dir = dirOf(a); const r = raw(dir); const t = r.tasks[a.node_id]
+    const dir = dirOf(a); const r = record(dir); const t = r.tasks[a.node_id]
     if (!t) throw new Error(`no node "${a.node_id}" in this domain`)
     const content = t.note ? ((store.readNote(dir, t.note) || {}).content || '') : ''
     return json({ id: a.node_id, note: t.note || null, content })
@@ -239,7 +239,7 @@ export function registerTools(server, deps, scope) {
     description: 'Snapshot a project subtree (records and note contents) into a clip for paste_as_tree.',
     inputSchema: { node_id: z.string(), domain: z.string().optional() },
   }, guard(async (a) => {
-    const dir = dirOf(a); const r = raw(dir)
+    const dir = dirOf(a); const r = record(dir)
     if (!r.tasks[a.node_id]) throw new Error(`no node "${a.node_id}" in this domain`)
     const ids = subtreeIds(r, a.node_id)
     const tasks = {}; const notes = {}
@@ -314,14 +314,14 @@ export function registerTools(server, deps, scope) {
     description: "Set a node's markdown note contents (writes the note file and records it on the node).",
     inputSchema: { node_id: z.string(), content: z.string(), domain: z.string().optional() },
   }, guard(async (a) => {
-    const dir = dirOf(a); const r = raw(dir); const t = r.tasks[a.node_id]
+    const dir = dirOf(a); const r = record(dir); const t = r.tasks[a.node_id]
     if (!t) throw new Error(`no node "${a.node_id}" in this domain`)
     const file = t.note || a.node_id + '.md'
     const w = store.writeNote(dir, file, a.content)
     if (w && w.error) return fail(w.error)
     if (!t.note) return runWrite(taskService, dir, 'setNote', [a.node_id, file], a.node_id)
-    // The forest is unchanged (the note filename was already recorded), so the
-    // taskOp wrapper did not fire; push the note change for the live view/editor.
+    // The record is unchanged (the note filename was already recorded), so the
+    // runOp wrapper did not fire; push the note change for the live view/editor.
     notify('pensagrex:domain-changed', { dir })
     return json({ id: a.node_id, note: file, outline: projectOutline(r, rootOf(r, a.node_id)) })
   }))
@@ -330,7 +330,7 @@ export function registerTools(server, deps, scope) {
     description: "Delete a node's note file and clear it from the node.",
     inputSchema: { node_id: z.string(), domain: z.string().optional() },
   }, guard(async (a) => {
-    const dir = dirOf(a); const r = raw(dir); const t = r.tasks[a.node_id]
+    const dir = dirOf(a); const r = record(dir); const t = r.tasks[a.node_id]
     if (!t) throw new Error(`no node "${a.node_id}" in this domain`)
     if (t.note) store.deleteNote(dir, t.note)
     return runWrite(taskService, dir, 'setNote', [a.node_id, null], a.node_id)
@@ -362,9 +362,9 @@ export function registerTools(server, deps, scope) {
     inputSchema: { node_id: z.string(), mode: z.enum(['subtree', 'splice']).optional(), domain: z.string().optional() },
   }, guard(async (a) => {
     const dir = dirOf(a)
-    const res = taskService.taskOp(dir, 'deleteTask', [a.node_id, a.mode || 'subtree'])
+    const res = taskService.runOp(dir, 'deleteTask', [a.node_id, a.mode || 'subtree'])
     if (res.error) return fail(res.error)
-    return json({ deleted: a.node_id, outline: domainOutline(res.raw) })
+    return json({ deleted: a.node_id, outline: domainOutline(res.record) })
   }))
 
   server.registerTool('delete_domain', {

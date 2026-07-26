@@ -4,16 +4,16 @@
 import { describe, it, expect } from 'vitest'
 import JSON5 from 'json5'
 import fixtureRaw from '../../../shared/model/fixtures/homelab.forest.json5?raw'
-import { buildForest } from '../../../shared/model/forest.js'
-import { computeForestLayout } from './layout.js'
-import { validateForest } from '../../../shared/model/validate.js'
+import { buildModel } from '../../../shared/model/model.js'
+import { computeDomainLayout } from './layout.js'
+import { validateRecord } from '../../../shared/model/validate.js'
 import * as M from '../../../shared/model/mutations.js'
 
 // Synthetic, deterministic sizes standing in for layout/measure.js's real DOM
 // measurement — layout.js is pure and must not need a DOM to be exercised.
-function syntheticSizes(forest) {
+function syntheticSizes(model) {
   const sizes = new Map()
-  for (const [id, task] of forest.tasks) {
+  for (const [id, task] of model.tasks) {
     const lines = task.here ? 3 : task.title.length > 18 ? 2 : 2
     sizes.set(id, { cardW: 188, cardH: task.here ? 68 : 30 + lines * 12 })
   }
@@ -21,10 +21,10 @@ function syntheticSizes(forest) {
 }
 
 function loadFixtureLayout() {
-  const raw = JSON5.parse(fixtureRaw)
-  const forest = buildForest(raw)
-  const { sizes } = syntheticSizes(forest)
-  return { forest, layout: computeForestLayout(forest, sizes) }
+  const record = JSON5.parse(fixtureRaw)
+  const model = buildModel(record)
+  const { sizes } = syntheticSizes(model)
+  return { model, layout: computeDomainLayout(model, sizes) }
 }
 
 function rectOf(station) {
@@ -34,7 +34,7 @@ function overlaps(a, b) {
   return !(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top)
 }
 
-describe('computeForestLayout — the HomeLab fixture', () => {
+describe('computeDomainLayout — the HomeLab fixture', () => {
   it('places every station with finite, positive coordinates inside finite bounds', () => {
     const { layout } = loadFixtureLayout()
     expect(layout.stations).toHaveLength(18) // 15 tasks + 3 project-node roots
@@ -48,7 +48,7 @@ describe('computeForestLayout — the HomeLab fixture', () => {
     }
   })
 
-  it('never overlaps two station cards, anywhere in the forest', () => {
+  it('never overlaps two station cards, anywhere in the model', () => {
     const { layout } = loadFixtureLayout()
     const rects = layout.stations.map(rectOf)
     for (let i = 0; i < rects.length; i++) {
@@ -102,11 +102,11 @@ describe('computeForestLayout — the HomeLab fixture', () => {
   })
 
   it('an oversized cursor card still collides with nothing', () => {
-    const raw = JSON5.parse(fixtureRaw)
-    const forest = buildForest(raw)
-    const { sizes } = syntheticSizes(forest)
+    const record = JSON5.parse(fixtureRaw)
+    const model = buildModel(record)
+    const { sizes } = syntheticSizes(model)
     sizes.set('k_migrate', { cardW: 138, cardH: 400 }) // a wildly tall "here" trapezium
-    const layout = computeForestLayout(forest, sizes)
+    const layout = computeDomainLayout(model, sizes)
     const rects = layout.stations.map(rectOf)
     for (let i = 0; i < rects.length; i++) {
       for (let j = i + 1; j < rects.length; j++) {
@@ -116,24 +116,24 @@ describe('computeForestLayout — the HomeLab fixture', () => {
   })
 })
 
-describe('computeForestLayout — edge cases', () => {
-  it('returns finite empty-forest bounds rather than NaN', () => {
-    const emptyForest = { trees: [], tasks: new Map(), getTreeIdForTask: () => null }
-    const layout = computeForestLayout(emptyForest, new Map())
+describe('computeDomainLayout — edge cases', () => {
+  it('returns finite empty-model bounds rather than NaN', () => {
+    const emptyModel = { trees: [], tasks: new Map(), getTreeIdForTask: () => null }
+    const layout = computeDomainLayout(emptyModel, new Map())
     expect(layout.stations).toEqual([])
     expect(Number.isFinite(layout.bounds.w)).toBe(true)
     expect(Number.isFinite(layout.bounds.h)).toBe(true)
   })
 
   it('lays out a single-task tree (root only) without error', () => {
-    const raw = {
+    const record = {
       schema: 1, domain: 'D',
       trees: [{ id: 't1', name: 'Solo', rootTaskId: 'a' }],
       tasks: { a: { id: 'a', title: 'Alone', status: 'todo', createdAt: '2026-01-01T00:00:00Z', completedAt: null, note: null, here: false, next: null, branches: [] } },
     }
-    const forest = buildForest(raw)
+    const model = buildModel(record)
     const sizes = new Map([['a', { cardW: 138, cardH: 49 }]])
-    const layout = computeForestLayout(forest, sizes)
+    const layout = computeDomainLayout(model, sizes)
     expect(layout.stations).toHaveLength(1)
     expect(Number.isFinite(layout.bounds.w)).toBe(true)
   })
@@ -141,7 +141,7 @@ describe('computeForestLayout — edge cases', () => {
   // Regression: a fork "below" a bare root (no .next) once produced NaN junction
   // and branch-track coordinates. assignRows now rises such a child to row 1.
   it('lays out a below-branch on a bare root with finite coordinates', () => {
-    const raw = {
+    const record = {
       schema: 1, domain: 'D',
       trees: [{ id: 't1', name: 'Solo', rootTaskId: 'r' }],
       tasks: {
@@ -149,9 +149,9 @@ describe('computeForestLayout — edge cases', () => {
         b: { id: 'b', title: 'Below', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: null, branches: [] },
       },
     }
-    const forest = buildForest(raw)
+    const model = buildModel(record)
     const sizes = new Map([['r', { cardW: 138, cardH: 49 }], ['b', { cardW: 138, cardH: 49 }]])
-    const layout = computeForestLayout(forest, sizes)
+    const layout = computeDomainLayout(model, sizes)
     for (const j of layout.junctions) {
       expect(Number.isFinite(j.x)).toBe(true)
       expect(Number.isFinite(j.y)).toBe(true)
@@ -176,10 +176,10 @@ function mkTask(id, over = {}) {
   }
 }
 
-function layoutOf(raw) {
-  const forest = buildForest(raw)
-  const { sizes } = syntheticSizes(forest)
-  return computeForestLayout(forest, sizes)
+function layoutOf(record) {
+  const model = buildModel(record)
+  const { sizes } = syntheticSizes(model)
+  return computeDomainLayout(model, sizes)
 }
 
 // All track segments (risers, L-connectors, and the new tip-fork stubs).
@@ -217,7 +217,7 @@ function countCrossings(layout) {
   return n
 }
 
-describe('computeForestLayout — non-crossing branches', () => {
+describe('computeDomainLayout — non-crossing branches', () => {
   // The Wide tree: trunk Alpha->Bravo->Charlie->Delta; Charlie forks below to
   // One (left) and Two (right); Delta forks below to Apple (left) and Banana
   // (right); Two continues up to Wonder. Adding Wonder used to push Banana into
@@ -258,15 +258,15 @@ describe('computeForestLayout — non-crossing branches', () => {
   })
 })
 
-// Drag-and-drop rearranges the forest through the pure move mutations; the layout
+// Drag-and-drop rearranges the model through the pure move mutations; the layout
 // must stay drawable (valid, no overlaps, no branch crossings) after each. These
 // exercise the four moves against the real HomeLab fixture.
-describe('computeForestLayout — after drag-and-drop moves', () => {
+describe('computeDomainLayout — after drag-and-drop moves', () => {
   const fresh = () => JSON5.parse(fixtureRaw)
-  function drawable(raw) {
-    expect(validateForest(raw)).toEqual({ ok: true, errors: [] })
-    const forest = buildForest(raw)
-    const layout = computeForestLayout(forest, syntheticSizes(forest).sizes)
+  function drawable(record) {
+    expect(validateRecord(record)).toEqual({ ok: true, errors: [] })
+    const model = buildModel(record)
+    const layout = computeDomainLayout(model, syntheticSizes(model).sizes)
     expect(countCrossings(layout)).toBe(0)
     const rects = layout.stations.map(rectOf)
     for (let i = 0; i < rects.length; i++) {
@@ -291,7 +291,7 @@ describe('computeForestLayout — after drag-and-drop moves', () => {
   })
 })
 
-describe('computeForestLayout — tip-fork connector', () => {
+describe('computeDomainLayout — tip-fork connector', () => {
   // The Move tree: Alpha (root) -> Beta (the tip of the main line), and Beta
   // forks left to Gamma above it. Beta must be connected up to the fork junction.
   const move = {
@@ -321,7 +321,7 @@ describe('computeForestLayout — tip-fork connector', () => {
   })
 })
 
-describe('computeForestLayout — angled branch connectors', () => {
+describe('computeDomainLayout — angled branch connectors', () => {
   // a is the trunk root (a -> b); a forks right to c, one row above. The branch
   // connector's flat leg tilts up to c's lane, then a short vertical riser into c,
   // while the junction diamond stays put at [a.x, junctionY].

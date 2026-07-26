@@ -46,7 +46,7 @@ discards the renderer, not only the `src/main` backend.
   which `mutations.js` alone is 658 (with a 661-line test file). It is imported in
   three places, not one: the main-process authority (`taskService.js`), the
   renderer's no-Electron fallback (`bridge/api.js`), and the renderer's view spine
-  (`app.js`, which calls `buildForest` to derive what it lays out). This shared
+  (`app.js`, which calls `buildModel` to derive what it lays out). This shared
   reuse is the crux of the whole port.
 - `store.js` (file I/O, JSON5, atomic write-to-temp-then-rename, settings,
   library-root bounds-checking) ports to Rust as routine work, with one caveat
@@ -86,12 +86,12 @@ authority and the renderer because both are JavaScript, so the sharing is free. 
 the authority becomes Rust while the UI stays web (the Tauri option), the sharing
 is no longer free, and three shapes present themselves:
 
-1. Port only the mutation half to Rust for the authority, and keep `buildForest`
+1. Port only the mutation half to Rust for the authority, and keep `buildModel`
    (pure layout derivation) in JavaScript in the webview; after each edit Rust
    returns the updated forest and the webview lays it out. One mutation authority,
    but the model is split along the mutate/derive seam.
 2. Move everything, derivation included, into Rust and return the webview a fully
-   derived scene to paint. Least JavaScript, but it discards `buildForest` and
+   derived scene to paint. Least JavaScript, but it discards `buildModel` and
    kills the in-browser fallback outright.
 3. Keep the full JS model for the fallback and also port it to Rust for the
    authority. The worst case: two implementations of the same mutation semantics
@@ -415,7 +415,7 @@ zoom, collapse) sits in a `userData` sidecar and is excluded per axiom 9. So "wh
 to sync versus what to keep local" is a solved question. The on-disk format is
 already the sync unit (an id-keyed `forest.json5` per domain, per-task markdown
 notes, `bookmarks.json`), the atomic write path and single authority are exactly
-what a sync layer needs to serialize its applies, and `validateForest` becomes the
+what a sync layer needs to serialize its applies, and `validateRecord` becomes the
 safety gate that any incoming or merged forest must pass before it is written.
 
 Recommended shape. Do not build a bespoke server first. Implement a
