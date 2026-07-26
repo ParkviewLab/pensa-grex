@@ -9,13 +9,17 @@
 // applied and saved. New node ids come from model/ids.js; timestamps are ISO
 // strings stamped at edit time.
 //
-// Two node kinds (schema 2): a `task` carries a status and can hold the "here"
-// cursor; a `project` node has neither and roots a project (its subtree). Every
-// tree's root is a project node, and a root has no incoming edge, so nothing can
-// be added below it (see docs/northstar.md, axiom 2).
+// Three node kinds. A `task` carries a status and can hold the "here" mark; a
+// `project` node opens a scope and carries neither; a `terminus` closes one and says
+// nothing of its own beyond a note. Every plan's base is a project node with no
+// incoming edge, so nothing can be added below it, and every plan ends at the
+// terminus closing that base, so nothing can be added above it either (northstar
+// axiom 2). Every project node closes, and the pairing is derived by matching
+// brackets up the trunk rather than stored (see validate.js).
 
 import { mintNodeId } from './ids.js'
 import { noteFileName } from './notes.js'
+import { pairScopes, trunksOf, isPlanClose } from './validate.js'
 
 const STATUSES = ['todo', 'in-progress', 'completed', 'cancelled']
 
@@ -54,6 +58,28 @@ function branchCount(node) {
 
 function addBranch(node, childId, side) {
   sideArray(node, side).push(childId)
+}
+
+// A scope's close. It says nothing of its own: no title, no status, no flag, no
+// "here". The one expressive field it keeps is a note, which is where one records
+// what closing the scope took.
+function newTerminus() {
+  return {
+    id: mintNodeId(),
+    kind: 'terminus',
+    createdAt: nowISO(),
+    note: null,
+    next: null,
+    rightBranches: [],
+    leftBranches: [],
+  }
+}
+
+// Which terminus closes which project, derived by matching brackets up each trunk
+// (see validate.js). Recomputed per call rather than cached, for the same reason the
+// predecessor is not stored: two copies are two chances to disagree.
+function scopes(record) {
+  return pairScopes(record, trunksOf(record))
 }
 
 function newTask(title) {
@@ -161,15 +187,21 @@ function requireTask(record, taskId) {
 }
 
 /**
- * Start a new project in the domain: a fresh project-node root titled `name`,
- * appended to planOrder. The one way to begin a tree from nothing (an empty
- * domain, or after the last tree was deleted). The root carries the project's
- * name; tasks are grown above it.
+ * Start a new plan in the domain: a base project node titled `name` and the
+ * terminus that closes it, appended to planOrder. The one way to begin a plan from
+ * nothing (an empty domain, or after the last plan was deleted). The base carries
+ * the plan's name; tasks are inserted into the edge between the two.
+ *
+ * An empty plan is a legal resting state, and this is how every plan begins: a
+ * project carries a title, so an empty one still asserts something.
  */
 export function addTree(record, name) {
   const next = clone(record)
   const root = newProjectNode(name)
+  const close = newTerminus()
+  root.next = close.id
   addNode(next, root)
+  next.nodes[close.id] = close
   if (!Array.isArray(next.planOrder)) next.planOrder = []
   next.planOrder.push(root.id)
   return next
@@ -208,7 +240,9 @@ function addNode(record, node) {
 /** Set a node's title, kept unique within the domain (see uniqueTitle). */
 export function setTitle(record, taskId, title) {
   const next = clone(record)
-  requireTask(next, taskId).title = uniqueTitle(next, title, taskId)
+  const node = requireTask(next, taskId)
+  if (node.kind === 'terminus') throw new Error('a terminus has no title')
+  node.title = uniqueTitle(next, title, taskId)
   return next
 }
 
@@ -224,7 +258,7 @@ export function setStatus(record, taskId, status) {
   if (!STATUSES.includes(status)) throw new Error('invalid status "' + status + '"')
   const next = clone(record)
   const task = requireTask(next, taskId)
-  if (task.kind === 'project') throw new Error('a project node has no status')
+  if (task.kind !== 'task') throw new Error('only a task has a status')
   task.status = status
   if (status === 'completed') task.completedAt = task.completedAt || nowISO()
   else task.completedAt = null
@@ -238,33 +272,179 @@ export function setStatus(record, taskId, status) {
  */
 export function cycleStatus(record, taskId) {
   const task = requireTask(record, taskId)
-  if (task.kind === 'project') throw new Error('a project node has no status')
+  if (task.kind !== 'task') throw new Error('only a task has a status')
   const i = STATUSES.indexOf(task.status)
   return setStatus(record, taskId, STATUSES[(i + 1) % STATUSES.length])
 }
 
 /**
  * Toggle a node between task and project (a "sub-project"). Task -> project
- * DISCARDS status/completedAt and clears the cursor (a project has none); a
- * round-trip therefore resets a task to 'todo'. A root is always a project node,
- * so its kind cannot be changed.
+ * DISCARDS status/completedAt and clears the "here" mark (a project has none), so a
+ * round-trip resets a task to 'todo'. A root is always a project node, so its kind
+ * cannot be changed.
+ *
+ * A project has a scope, so the conversion has to open or close one. Becoming a
+ * project acquires a terminus at the top of the node's own trunk, which is the
+ * extent schema 2 always meant by a project node (everything above it); becoming a
+ * task gives up that terminus, and its note with it, since there is no longer a
+ * close to record anything about. A terminus itself cannot be converted either way:
+ * it is not an independent node but one half of a pair, and the way to be rid of it
+ * is to unwrap its project.
  */
 export function convertKind(record, taskId) {
   const next = clone(record)
   const task = requireTask(next, taskId)
+  if (task.kind === 'terminus') throw new Error('a terminus cannot change kind; unwrap its project instead')
   if (!predecessorOf(next, taskId)) throw new Error('cannot change the kind of a root node')
   if (task.kind === 'project') {
+    const terminusId = scopes(next).pairs.get(taskId)
     task.kind = 'task'
     task.status = 'todo'
     task.completedAt = null
     task.here = false
+    if (terminusId) spliceOutNode(next, terminusId)
   } else {
     task.kind = 'project'
     delete task.status
     delete task.completedAt
     delete task.here
+    insertCloseForScopeOpenedAt(next, taskId)
   }
   return next
+}
+
+// Put a close for the scope that has just opened at `openId`, at the extent schema 2
+// meant by a project node: everything above it on its trunk.
+//
+// "The top of the trunk" is not quite the place, because the closes of the scopes
+// this one sits inside are already stacked up there, and this close has to go below
+// them: an inner scope closes before its container does. So walk up and stop at the
+// first close belonging to a scope opened BELOW us; a close belonging to a scope
+// opened above us is inside ours and stays below it.
+function insertCloseForScopeOpenedAt(next, openId) {
+  const trunk = lineIds(next, openId)
+  const at = trunk.indexOf(openId)
+  const { closes } = scopes(next)
+  const close = newTerminus()
+
+  let beforeId = null
+  for (let i = at + 1; i < trunk.length; i++) {
+    const id = trunk[i]
+    if (next.nodes[id].kind !== 'terminus') continue
+    const opened = closes.get(id)
+    if (opened && trunk.indexOf(opened) < at) { beforeId = id; break }
+  }
+
+  if (beforeId) {
+    const pred = predecessorOf(next, beforeId)
+    close.next = beforeId
+    // A close always arrives by a trunk edge, so its predecessor is a main-line one.
+    next.nodes[pred.id].next = close.id
+  } else {
+    const top = trunk[trunk.length - 1]
+    next.nodes[top].next = close.id
+  }
+  next.nodes[close.id] = close
+  return close
+}
+
+/**
+ * Name a run of a trunk as a project: a project node goes in below the run's first
+ * node and a terminus above its last, so the run becomes a scope. `toId` defaults to
+ * `fromId`, which wraps one node.
+ *
+ * Refused unless the run is a contiguous piece of one trunk, read base-to-top, and
+ * unless the scopes inside it balance: wrapping half of a sub-project would leave
+ * one of its ends outside the new scope, which is the straddle the grammar forbids.
+ */
+export function wrapRun(record, fromId, toId, title) {
+  const next = clone(record)
+  requireTask(next, fromId)
+  const endId = toId || fromId
+  requireTask(next, endId)
+
+  const trunk = lineIds(next, fromId)
+  const from = trunk.indexOf(fromId)
+  const to = trunk.indexOf(endId)
+  if (from === -1 || to === -1) throw new Error('a run must lie on one trunk')
+  if (to < from) throw new Error('a run reads from the base upward: its first node must be below its last')
+
+  const run = trunk.slice(from, to + 1)
+  const { closes } = scopes(next)
+  const inside = new Set(run)
+  for (const id of run) {
+    const node = next.nodes[id]
+    if (node.kind === 'terminus' && !inside.has(closes.get(id))) {
+      throw new Error('a run cannot end inside a sub-project: its close is in the run but its opening is not')
+    }
+    if (node.kind === 'project' && !inside.has(scopes(next).pairs.get(id))) {
+      throw new Error('a run cannot begin inside a sub-project: its opening is in the run but its close is not')
+    }
+  }
+
+  const open = newProjectNode(title)
+  const close = newTerminus()
+  const pred = predecessorOf(next, fromId)
+
+  open.next = fromId
+  next.nodes[endId].next = close.id
+  close.next = trunk[to + 1] || null
+  addNode(next, open)
+  next.nodes[close.id] = close
+
+  if (!pred) {
+    // The run starts at a plan's base, so the new project becomes the plan's base
+    // and takes its place in planOrder.
+    next.planOrder = (next.planOrder || []).map((id) => (id === fromId ? open.id : id))
+  } else if (pred.kind === 'next') {
+    next.nodes[pred.id].next = open.id
+  } else {
+    sideArray(next.nodes[pred.id], pred.side)[pred.index] = open.id
+  }
+  return next
+}
+
+/**
+ * Undo a wrap: remove a project node and the terminus that closes it, leaving what
+ * was inside on the trunk. The scope goes; nothing inside it moves.
+ *
+ * Refused on a plan's base, since a plan is bounded by its base and close and a root
+ * must be a project node: removing a plan's own scope is deleting the plan.
+ */
+export function unwrapProject(record, projectId) {
+  const next = clone(record)
+  const node = requireTask(next, projectId)
+  if (node.kind !== 'project') throw new Error('only a project node can be unwrapped')
+  if (!predecessorOf(next, projectId)) throw new Error('a plan\'s base cannot be unwrapped; delete the plan instead')
+  const terminusId = scopes(next).pairs.get(projectId)
+  spliceOutNode(next, projectId)
+  if (terminusId) spliceOutNode(next, terminusId)
+  return next
+}
+
+// Take one node off its trunk, joining its predecessor to its successor. The node
+// must have no branches of its own (a project node's and a terminus's forks stay
+// where they are, so unwrap and convert check nothing: both of those nodes may carry
+// branches, and those branches move to whatever now holds the edge).
+function spliceOutNode(next, id) {
+  const node = next.nodes[id]
+  const pred = predecessorOf(next, id)
+  const succ = node.next || null
+  if (!pred) {
+    next.planOrder = (next.planOrder || []).map((rid) => (rid === id ? succ : rid)).filter(Boolean)
+  } else if (pred.kind === 'next') {
+    next.nodes[pred.id].next = succ
+  } else if (succ) {
+    sideArray(next.nodes[pred.id], pred.side)[pred.index] = succ
+  } else {
+    sideArray(next.nodes[pred.id], pred.side).splice(pred.index, 1)
+  }
+  // Its own forks belong to the edge it held, which is now the predecessor's.
+  const host = pred && pred.kind === 'next' ? next.nodes[pred.id] : (succ ? next.nodes[succ] : null)
+  if (host) {
+    for (const b of branchesOf(node)) addBranch(host, b.child, b.side)
+  }
+  delete next.nodes[id]
 }
 
 /**
@@ -275,6 +455,9 @@ export function convertKind(record, taskId) {
 export function toggleFlag(record, taskId) {
   const next = clone(record)
   const task = requireTask(next, taskId)
+  // A terminus carries no flag, so a flag query cannot sweep one up; its paired
+  // project node is the scope's handle.
+  if (task.kind === 'terminus') throw new Error('a terminus cannot be flagged; flag its project instead')
   task.flagged = !task.flagged
   return next
 }
@@ -283,7 +466,7 @@ export function toggleFlag(record, taskId) {
 export function makeHere(record, taskId) {
   const next = clone(record)
   const task = requireTask(next, taskId)
-  if (task.kind === 'project') throw new Error('cannot set "here" on a project node')
+  if (task.kind !== 'task') throw new Error('only a task can hold the "here" mark')
   for (const id of lineIds(next, taskId)) next.nodes[id].here = false
   next.nodes[taskId].here = true
   return next
@@ -298,18 +481,31 @@ export function clearHere(record, taskId) {
 }
 
 /**
- * Push a new task onto the stack immediately above taskId (further from the
- * root), continuing the main line: the new task becomes taskId's main-line
- * successor and inherits taskId's old successor.
+ * Insert a task into the edge rising from `edgeId`: the new task becomes that
+ * node's main-line successor and inherits its old one. This is the one way a task
+ * is created, and it always names its edge — there is no default, because every
+ * edit begins with a right-click on a node, and that click is what names it.
+ *
+ * Refused on a plan's closing terminus, which has no edge above it (the grammar
+ * ends the plan there).
  */
-export function addTaskAbove(record, taskId, title) {
+export function insertTask(record, edgeId, title) {
   const next = clone(record)
-  const task = requireTask(next, taskId)
+  const at = requireTask(next, edgeId)
+  if (isPlanClose(next, edgeId)) throw new Error('nothing can be inserted above a plan\'s closing terminus')
   const n = newTask(title)
-  n.next = task.next
-  task.next = n.id
+  n.next = at.next
+  at.next = n.id
   addNode(next, n)
   return next
+}
+
+/**
+ * The edge above taskId, as the right-click menu's "add task above" means it.
+ * Kept as its own name because that is what the menu says.
+ */
+export function addTaskAbove(record, taskId, title) {
+  return insertTask(record, taskId, title)
 }
 
 /**
@@ -322,10 +518,14 @@ export function addTaskBelow(record, taskId, title) {
   requireTask(next, taskId)
   const pred = predecessorOf(next, taskId)
   if (!pred) throw new Error('cannot add a task below a root node')
+  // The edge below taskId rises from its main-line predecessor, so on that trunk
+  // this is an insertion like any other. Below a branch's first node the edge is the
+  // branch line itself, which holds nothing, so the new task takes its place as the
+  // branch's first node instead.
+  if (pred.kind === 'next') return insertTask(next, pred.id, title)
   const n = newTask(title)
   n.next = taskId
-  if (pred.kind === 'next') next.nodes[pred.id].next = n.id
-  else sideArray(next.nodes[pred.id], pred.side)[pred.index] = n.id
+  sideArray(next.nodes[pred.id], pred.side)[pred.index] = n.id
   addNode(next, n)
   return next
 }
@@ -420,10 +620,35 @@ export function deleteTask(record, taskId, mode = 'subtree') {
     return normalizeHeres(next)
   }
 
-  // subtree
+  // subtree. What is above the deleted node includes the closes of every scope that
+  // opened below it, and those scopes still have to close, so their termini are
+  // spared and re-stacked above what remains. They are moved rather than replaced
+  // because a terminus carries a note, and minting fresh ones would drop it.
   const doomed = subtreeIds(next, taskId)
+  const { closes } = scopes(next)
+  const spared = [...doomed].filter((id) => {
+    const node = next.nodes[id]
+    if (!node || node.kind !== 'terminus') return false
+    const opened = closes.get(id)
+    return !!opened && !doomed.has(opened)
+  })
+  // In trunk order, so the innermost still closes first.
+  const trunk = lineIds(next, taskId)
+  spared.sort((a, b) => trunk.indexOf(a) - trunk.indexOf(b))
+
   detachFromPred(null)
-  for (const id of doomed) delete next.nodes[id]
+  for (const id of doomed) {
+    if (!spared.includes(id)) delete next.nodes[id]
+  }
+  let top = pred.id
+  for (const id of spared) {
+    const terminus = next.nodes[id]
+    terminus.next = null
+    terminus.leftBranches = []
+    terminus.rightBranches = []
+    next.nodes[top].next = id
+    top = id
+  }
   return next
 }
 

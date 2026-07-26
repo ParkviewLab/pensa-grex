@@ -13,7 +13,7 @@ import { initTheme } from './theme/theme.js'
 import { createViewport } from './interaction/viewport.js'
 import { mountLayout } from './render/scene.js'
 import { buildModel } from '../../shared/model/model.js'
-import { branchChildrenOf } from '../../shared/model/validate.js'
+import { branchChildrenOf, isPlanClose } from '../../shared/model/validate.js'
 import { measureDomain } from './layout/measure.js'
 import { computeDomainLayout } from './layout/layout.js'
 import { createApi } from './bridge/api.js'
@@ -338,6 +338,9 @@ function resolveDropIntent(sourceId, clientX, clientY) {
   if (!currentRecord || !currentLayout) return { kind: 'none' }
   const src = currentRecord.nodes[sourceId]
   if (!src) return { kind: 'none' }
+  // A scope's close is not movable: it is one half of a pair, and it sits where the
+  // scope ends. Moving the scope means moving its project node, which carries it.
+  if (src.kind === 'terminus') return { kind: 'none' }
   const { wx, wy } = clientToWorld(clientX, clientY)
   const sub = subtreeIdsOf(currentRecord, sourceId)
   const byId = new Map(currentLayout.stations.map((s) => [s.id, s]))
@@ -347,6 +350,8 @@ function resolveDropIntent(sourceId, clientX, clientY) {
     wx >= s.x - s.cardW / 2 && wx <= s.x + s.cardW / 2 && wy >= s.cardTop && wy <= s.cardTop + s.cardH)
   if (onCard) {
     if (onCard.id === sourceId || sub.has(onCard.id)) return { kind: 'none' }
+    // A fork hangs on the edge rising from its target, and a plan's close has none.
+    if (isPlanClose(currentRecord, onCard.id)) return { kind: 'none' }
     return { kind: 'fork', targetId: onCard.id }
   }
 
@@ -633,6 +638,19 @@ function openTaskMenu(x, y, taskId) {
   const isRoot = isRootId(currentRecord, taskId)
   const items = []
 
+  // A scope's close has almost no menu of its own: no title to rename, no status, no
+  // flag, no kind to change, and it cannot be moved or deleted on its own, since it
+  // is one half of a pair. A note is not offered for now, by decision, though the
+  // record still allows one. What is left is the edge above it, unless it closes a
+  // plan, in which case there is no edge and so no menu at all.
+  if (task.kind === 'terminus') {
+    if (isPlanClose(currentRecord, taskId)) return
+    items.push({ label: 'Add task above', onClick: () => addTaskFlow('above', taskId) })
+    items.push({ label: 'Add branch above', onClick: () => addBranchFlow('above', taskId) })
+    openContextMenu(x, y, items)
+    return
+  }
+
   if (!isProject) {
     const status = (label, value) => ({
       label, checked: task.status === value,
@@ -724,7 +742,10 @@ viewportEl.addEventListener('dblclick', (e) => {
   if (!currentRecord) return
   if (e.target.closest('.gl') || e.target.closest('.noteicon')) return
   const taskId = taskIdFromEvent(e)
-  if (taskId && currentRecord.nodes[taskId]) applyOp('toggleFlag', taskId)
+  const node = taskId && currentRecord.nodes[taskId]
+  // A scope's close carries no flag, so a double-click on it does nothing rather than
+  // asking the authority for something it will refuse.
+  if (node && node.kind !== 'terminus') applyOp('toggleFlag', taskId)
 })
 
 // Single-clicking a task's status glyph cycles its status

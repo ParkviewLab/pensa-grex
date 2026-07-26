@@ -30,7 +30,8 @@ import * as M from './model/mutations.js'
 // because it also writes note files; helpers such as `uniqueTitle` are
 // deliberately not exposed.
 const DOMAIN_OPS = new Set([
-  'addTree', 'addTaskAbove', 'addTaskBelow', 'addBranchAbove', 'addBranchBelow',
+  'addTree', 'insertTask', 'addTaskAbove', 'addTaskBelow', 'addBranchAbove', 'addBranchBelow',
+  'wrapRun', 'unwrapProject',
   'setTitle', 'setNote', 'setStatus', 'cycleStatus', 'convertKind', 'toggleFlag',
   'makeHere', 'clearHere', 'deleteTask',
   'moveTaskNode', 'moveSubtree', 'detachToTree', 'reorderRoot', 'moveIntoLine',

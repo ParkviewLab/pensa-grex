@@ -40,6 +40,11 @@ describe('buildModel — the HomeLab fixture', () => {
 
     expect(model.getNode('k_nas').predecessorId).toBe('p_media') // grows above the project root
     expect(model.getNode('p_media').predecessorId).toBeNull() // the root
+    // Termini: a terminus is a node like any other here — its predecessor is derived
+    // from the .next that points at it and is not stored on it either.
+    expect(record.nodes.t_media.predecessorId).toBeUndefined()
+    expect(model.getNode('t_media').predecessorId).toBe('k_restore')
+    expect(model.getNode('t_media').predecessorKind).toBe('next')
   })
 
   it('assigns every node to the tree its root reaches, forks included', () => {
@@ -49,12 +54,18 @@ describe('buildModel — the HomeLab fixture', () => {
     expect(model.getTreeIdForTask('k_btrfs')).toBe('p_media')
     expect(model.getTreeIdForTask('k_wifi')).toBe('p_net')
     expect(model.getTreeIdForTask('k_energy')).toBe('p_auto')
+    expect(model.getTreeIdForTask('t_net')).toBe('p_net') // Termini: a close belongs to the tree it closes
   })
 
   it('walks the main-line chain via .next, stopping at a tip', () => {
-    expect(model.getMainLineChain('p_media')).toEqual(['p_media', 'k_nas', 'k_migrate', 'k_backups', 'k_restore'])
-    expect(model.getMainLineChain('k_nas')).toEqual(['k_nas', 'k_migrate', 'k_backups', 'k_restore'])
-    expect(model.getMainLineChain('k_wifi')).toEqual(['k_wifi', 'k_roam'])
+    // Termini: a plan's trunk no longer stops at its last task — it runs up to the
+    // terminus closing the base project node, which is the tip of that trunk. The
+    // chain is still every node reachable by .next from the start, and the walk still
+    // stops where .next is null; the fixture's plan trunks simply end one node higher.
+    expect(model.getMainLineChain('p_media')).toEqual(['p_media', 'k_nas', 'k_migrate', 'k_backups', 'k_restore', 't_media'])
+    expect(model.getMainLineChain('k_nas')).toEqual(['k_nas', 'k_migrate', 'k_backups', 'k_restore', 't_media'])
+    expect(model.getNode('t_media').kind).toBe('terminus') // the tip above is the plan's close, not a task
+    expect(model.getMainLineChain('k_wifi')).toEqual(['k_wifi', 'k_roam']) // a branch line still ends at a task tip
     expect(model.getMainLineChain('k_plex')).toEqual(['k_plex']) // a single-task branch tip
   })
 

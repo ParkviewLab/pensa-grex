@@ -14,6 +14,12 @@ import * as M from '../../../shared/model/mutations.js'
 function syntheticSizes(model) {
   const sizes = new Map()
   for (const [id, node] of model.nodes) {
+    // A terminus carries no title, so there is no text to wrap: it renders as a
+    // short bar (style.css .card.terminus{width:64px;height:10px}).
+    if (node.kind === 'terminus') {
+      sizes.set(id, { cardW: 64, cardH: 10 })
+      continue
+    }
     const lines = node.here ? 3 : node.title.length > 18 ? 2 : 2
     sizes.set(id, { cardW: 188, cardH: node.here ? 68 : 30 + lines * 12 })
   }
@@ -37,7 +43,10 @@ function overlaps(a, b) {
 describe('computeDomainLayout — the HomeLab fixture', () => {
   it('places every station with finite, positive coordinates inside finite bounds', () => {
     const { layout } = loadFixtureLayout()
-    expect(layout.stations).toHaveLength(18) // 15 tasks + 3 project-node roots
+    // Termini: was 18 (15 tasks + 3 project-node roots). Every project node is now
+    // closed by a terminus, and a terminus is a station like any other, so the three
+    // plans' closes are drawn too.
+    expect(layout.stations).toHaveLength(21) // 15 tasks + 3 project-node roots + their 3 termini
     expect(Number.isFinite(layout.bounds.w)).toBe(true)
     expect(Number.isFinite(layout.bounds.h)).toBe(true)
     for (const s of layout.stations) {
@@ -64,6 +73,8 @@ describe('computeDomainLayout — the HomeLab fixture', () => {
     expect(byId.get('k_nas').cardTop).toBeGreaterThan(byId.get('k_migrate').cardTop)
     expect(byId.get('k_migrate').cardTop).toBeGreaterThan(byId.get('k_backups').cardTop)
     expect(byId.get('k_backups').cardTop).toBeGreaterThan(byId.get('k_restore').cardTop)
+    // and the plan's closing terminus tops the trunk, above the last task on it
+    expect(byId.get('k_restore').cardTop).toBeGreaterThan(byId.get('t_media').cardTop)
   })
 
   it('puts exactly one cursor (sputnik) per tree, matching each tree\'s "here" task', () => {
@@ -128,41 +139,58 @@ describe('computeDomainLayout — edge cases', () => {
   })
 
   // Schema 3: a root has no incoming edge and must be a project node, so the
-  // smallest tree there is is one project root on its own. That is the same
-  // single-station, root-only case this has always covered.
-  it('lays out a single-node tree (root only) without error', () => {
+  // smallest tree there is is one project root on its own.
+  //
+  // Termini: that root must now be closed by a terminus above it on its trunk, so
+  // the smallest tree is a base and its close — the empty plan every plan begins
+  // as — and it draws TWO stations, not one. The case is the same one (a tree with
+  // no task in it at all); only its floor has risen by one node.
+  it('lays out an empty plan (base and its close) without error', () => {
     const record = {
       schemaVersion: 3, id: 'd_solo000000', title: 'D', planOrder: ['a'],
       nodes: {
-        a: { id: 'a', title: 'Solo', kind: 'project', createdAt: '2026-01-01T00:00:00Z', note: null, flagged: false, next: null, leftBranches: [], rightBranches: [] },
+        a: { id: 'a', title: 'Solo', kind: 'project', createdAt: '2026-01-01T00:00:00Z', note: null, flagged: false, next: 'z', leftBranches: [], rightBranches: [] },
+        z: { id: 'z', kind: 'terminus', createdAt: '2026-01-01T00:00:00Z', note: null, next: null, leftBranches: [], rightBranches: [] },
       },
     }
+    expect(validateRecord(record)).toEqual({ ok: true, errors: [] })
     const model = buildModel(record)
-    const sizes = new Map([['a', { cardW: 138, cardH: 49 }]])
+    const sizes = new Map([['a', { cardW: 138, cardH: 49 }], ['z', { cardW: 64, cardH: 10 }]])
     const layout = computeDomainLayout(model, sizes)
-    expect(layout.stations).toHaveLength(1)
+    expect(layout.stations).toHaveLength(2)
     expect(Number.isFinite(layout.bounds.w)).toBe(true)
   })
 
-  // Regression: a fork on a bare root (no .next, so the junction has no card
-  // above it) once produced NaN junction and branch-track coordinates. assignRows
-  // now rises such a child to row 1.
+  // Regression: a fork whose upper node is absent — the parent is a bare tip, so
+  // the junction has no card above it — once produced NaN junction and branch-track
+  // coordinates. assignRows now rises such a child to the next row.
   //
   // Schema 3: this case was written as a fork "below" the root. A root has no
   // trunk edge below it, so geometry.js already drew that fork in the gap ABOVE
   // it — the only gap a branch array can name now — and the migration leaves such
-  // a fork on the root. The scenario (a fork whose upper node is absent) is
-  // unchanged; only its spelling is.
-  it('lays out a fork on a bare root with finite coordinates', () => {
+  // a fork on the root.
+  //
+  // Termini: the fork was on a BARE root (.next null). A project node must now be
+  // closed by a terminus above it on its trunk, so no root is ever bare and the
+  // scenario cannot be spelled there. It survives one row up, on the branch line:
+  // b is a tip (nothing above it but its own fork to c), which is exactly the
+  // absent-upper-node gap the regression is about.
+  it('lays out a fork on a bare tip with finite coordinates', () => {
     const record = {
       schemaVersion: 3, id: 'd_solo000000', title: 'D', planOrder: ['r'],
       nodes: {
-        r: { id: 'r', title: 'Root', kind: 'project', createdAt: 'x', note: null, flagged: false, next: null, leftBranches: ['b'], rightBranches: [] },
-        b: { id: 'b', title: 'Branch', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, flagged: false, here: false, next: null, leftBranches: [], rightBranches: [] },
+        r: { id: 'r', title: 'Root', kind: 'project', createdAt: 'x', note: null, flagged: false, next: 'z', leftBranches: ['b'], rightBranches: [] },
+        z: { id: 'z', kind: 'terminus', createdAt: 'x', note: null, next: null, leftBranches: [], rightBranches: [] },
+        b: { id: 'b', title: 'Branch', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, flagged: false, here: false, next: null, leftBranches: ['c'], rightBranches: [] },
+        c: { id: 'c', title: 'Twig', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, flagged: false, here: false, next: null, leftBranches: [], rightBranches: [] },
       },
     }
+    expect(validateRecord(record)).toEqual({ ok: true, errors: [] })
     const model = buildModel(record)
-    const sizes = new Map([['r', { cardW: 138, cardH: 49 }], ['b', { cardW: 138, cardH: 49 }]])
+    const sizes = new Map([
+      ['r', { cardW: 138, cardH: 49 }], ['z', { cardW: 64, cardH: 10 }],
+      ['b', { cardW: 138, cardH: 49 }], ['c', { cardW: 138, cardH: 49 }],
+    ])
     const layout = computeDomainLayout(model, sizes)
     for (const j of layout.junctions) {
       expect(Number.isFinite(j.x)).toBe(true)
@@ -195,8 +223,20 @@ function mkProject(id, over = {}) {
     note: null, flagged: false, next: null, leftBranches: [], rightBranches: [], ...over,
   }
 }
+// A scope's close, which says nothing of its own: no title, no status, no flag, no
+// "here". Every project node below needs one, or validateRecord refuses the record.
+function mkTerminus(id, over = {}) {
+  return {
+    id, kind: 'terminus', createdAt: '2026-01-01T00:00:00Z',
+    note: null, next: null, leftBranches: [], rightBranches: [], ...over,
+  }
+}
 
 function layoutOf(record) {
+  // Termini: these fixtures are now hand-balanced (every project node closed by a
+  // terminus above it on its trunk), so validate them here — an unbalanced fixture
+  // would otherwise be laid out happily and prove nothing about a legal domain.
+  expect(validateRecord(record)).toEqual({ ok: true, errors: [] })
   const model = buildModel(record)
   const { sizes } = syntheticSizes(model)
   return computeDomainLayout(model, sizes)
@@ -248,13 +288,17 @@ describe('computeDomainLayout — non-crossing branches', () => {
   // names the edge whose upper node is X, i.e. the one rising from X's main-line
   // predecessor, so the migration moves each fork one node down the trunk. The
   // drawing is the same one: the same junction gap, the same rows for the children.
+  //
+  // Termini: alpha, the plan's base, is closed by omega above Delta, the top of its
+  // trunk — the same trunk, one card longer.
   const wide = {
     schemaVersion: 3, id: 'd_wide000000', title: 'W', planOrder: ['alpha'],
     nodes: {
       alpha: mkProject('alpha', { next: 'bravo' }),
       bravo: mkTask('bravo', { next: 'charlie', leftBranches: ['one'], rightBranches: ['two'] }),
       charlie: mkTask('charlie', { next: 'delta', leftBranches: ['apple'], rightBranches: ['banana'] }),
-      delta: mkTask('delta'),
+      delta: mkTask('delta', { next: 'omega' }),
+      omega: mkTerminus('omega'),
       one: mkTask('one'), two: mkTask('two', { next: 'wonder' }), wonder: mkTask('wonder'),
       apple: mkTask('apple'), banana: mkTask('banana'),
     },
@@ -270,11 +314,13 @@ describe('computeDomainLayout — non-crossing branches', () => {
 
   it('draws a deep both-sides nest with no crossing', () => {
     // a spine with nested sub-branches on both sides at overlapping rows
+    // (Termini: r is closed by rEnd above r2, the top of the spine)
     const deep = {
       schemaVersion: 3, id: 'd_deep000000', title: 'D', planOrder: ['r'],
       nodes: {
         r: mkProject('r', { next: 'r2', leftBranches: ['L'], rightBranches: ['R'] }),
-        r2: mkTask('r2', { leftBranches: ['L2'], rightBranches: ['R2'] }),
+        r2: mkTask('r2', { next: 'rEnd', leftBranches: ['L2'], rightBranches: ['R2'] }),
+        rEnd: mkTerminus('rEnd'),
         L: mkTask('L', { next: 'La', leftBranches: ['Lb'] }), La: mkTask('La'), Lb: mkTask('Lb'),
         R: mkTask('R', { next: 'Ra', rightBranches: ['Rb'] }), Ra: mkTask('Ra'), Rb: mkTask('Rb'),
         L2: mkTask('L2'), R2: mkTask('R2'),
@@ -308,8 +354,17 @@ describe('computeDomainLayout — after drag-and-drop moves', () => {
     drawable(M.moveSubtree(fresh(), 'p_net', 'k_nas'))
   })
 
+  // Termini: the subject was k_migrate, a node on the media plan's own trunk.
+  // Converting it now opens a scope closed above it on that trunk, and the plan's
+  // own close sits above that again, so cutting k_migrate's incoming edge carries
+  // the plan's close away with it and leaves p_media unclosed — detachToTree does
+  // not refuse it, but the result is not a legal record and there is nothing for
+  // this test to draw. A sub-project that CAN be detached is one whose trunk is a
+  // branch line, since its close tops that line: k_wifi (a branch of k_vlan, with
+  // k_roam above it) converts to a project closed above k_roam, and detaching the
+  // branch takes the whole scope, close and all. Same operation, same assertions.
   it('stays drawable after detaching a converted sub-project into its own tree', () => {
-    drawable(M.detachToTree(M.convertKind(fresh(), 'k_migrate'), 'k_migrate'))
+    drawable(M.detachToTree(M.convertKind(fresh(), 'k_wifi'), 'k_wifi'))
   })
 
   it('stays drawable after reordering a root', () => {
@@ -318,13 +373,20 @@ describe('computeDomainLayout — after drag-and-drop moves', () => {
 })
 
 describe('computeDomainLayout — tip-fork connector', () => {
-  // The Move tree: Alpha (root) -> Beta (the tip of the main line), and Beta
-  // forks left to Gamma, one row above it. Beta must be connected up to the fork
-  // junction.
+  // The Move tree: Beta is the tip of its line, and Beta forks left to Gamma, one
+  // row above it. Beta must be connected up to the fork junction.
+  //
+  // Termini: Beta was Alpha's main-line successor and the tip of the plan's trunk.
+  // A plan's trunk now ends at its close, and that close may hold no branch, so the
+  // tip of a plan's trunk can never fork; a tip that can is a BRANCH line's.
+  // Beta therefore hangs off Alpha as a branch instead, which leaves the geometry
+  // this test is about untouched (a fork off a line tip, its junction floating
+  // above the line's riser) and costs one extra junction, Alpha's own fork.
   const move = {
     schemaVersion: 3, id: 'd_move000000', title: 'M', planOrder: ['alpha'],
     nodes: {
-      alpha: mkProject('alpha', { next: 'beta' }),
+      alpha: mkProject('alpha', { next: 'omega', rightBranches: ['beta'] }),
+      omega: mkTerminus('omega'),
       beta: mkTask('beta', { leftBranches: ['gamma'] }),
       gamma: mkTask('gamma'),
     },
@@ -332,9 +394,10 @@ describe('computeDomainLayout — tip-fork connector', () => {
 
   it('connects the tip parent up to its floating fork junction', () => {
     const layout = layoutOf(move)
-    expect(layout.junctions).toHaveLength(1)
-    const j = layout.junctions[0]
+    expect(layout.junctions).toHaveLength(2) // Alpha's fork to Beta, and Beta's own to Gamma
     const beta = layout.stations.find((s) => s.id === 'beta')
+    const j = layout.junctions.find((jn) => Math.abs(jn.x - beta.x) < 0.5) // Beta's, the floating one
+    expect(j).toBeDefined()
     // a vertical stub at the parent's x runs from Beta's anchor up to the junction y
     const stub = layout.tracks.find((t) =>
       t.points.length === 2 &&
@@ -352,11 +415,13 @@ describe('computeDomainLayout — angled branch connectors', () => {
   // a is the trunk root (a -> b); a forks right to c, one row above. The branch
   // connector's flat leg tilts up to c's lane, then a short vertical riser into c,
   // while the junction diamond stays put at [a.x, junctionY].
+  // (Termini: a is closed by z above b, the top of its trunk.)
   const tilt = {
     schemaVersion: 3, id: 'd_tilt000000', title: 'T', planOrder: ['a'],
     nodes: {
       a: mkProject('a', { next: 'b', rightBranches: ['c'] }),
-      b: mkTask('b'),
+      b: mkTask('b', { next: 'z' }),
+      z: mkTerminus('z'),
       c: mkTask('c'),
     },
   }
@@ -396,11 +461,13 @@ describe('computeDomainLayout — angled branch connectors', () => {
     // a forks right to three branches at increasing lanes; sharing one junction,
     // their legs must all leave it at the same angle (a single ray), not flatten
     // as the lane gets further out.
+    // (Termini: a is closed by z above b, the top of its trunk.)
     const fan = {
       schemaVersion: 3, id: 'd_fan0000000', title: 'F', planOrder: ['a'],
       nodes: {
         a: mkProject('a', { next: 'b', rightBranches: ['c', 'd', 'e'] }),
-        b: mkTask('b'), c: mkTask('c'), d: mkTask('d'), e: mkTask('e'),
+        b: mkTask('b', { next: 'z' }), z: mkTerminus('z'),
+        c: mkTask('c'), d: mkTask('d'), e: mkTask('e'),
       },
     }
     const layout = layoutOf(fan)

@@ -94,7 +94,9 @@ describe('tools drive the task authority', () => {
     const cp = data(await s.call('create_project', { name: 'P' }))
     const res = await s.call('set_status', { node_id: cp.id, status: 'completed' })
     expect(res.isError).toBe(true)
-    expect(res.content[0].text).toMatch(/project/)
+    // The refusal now names what does have a status rather than what does not, since
+    // two kinds lack one: a project node and a terminus.
+    expect(res.content[0].text).toMatch(/only a task has a status/)
   })
 
   it('set_note writes the note file and read_note reads it back', async () => {
@@ -107,14 +109,24 @@ describe('tools drive the task authority', () => {
     const cp = data(await s.call('create_project', { name: 'Src' }))
     const at = data(await s.call('add_task', { target_id: cp.id, position: 'above', mode: 'continue', title: 'A task' }))
     const clip = data(await s.call('copy_project', { node_id: cp.id }))
-    // The clip carries the whole subtree under the key pasteAsTree reads, `nodes`:
-    // the record-wide tasks -> nodes rename reaches the clip snapshot too. Asserted
-    // by name so a producer that emits the old key fails here rather than downstream.
-    expect(Object.keys(clip.nodes || {}).sort()).toEqual([cp.id, at.id].sort())
+    // Termini: the subtree under a plan's base now includes the terminus closing it,
+    // so the clip carries three nodes, not two. Still asserted as the exact set, and
+    // still under the key pasteAsTree reads, `nodes`: the record-wide tasks -> nodes
+    // rename reaches the clip snapshot too, so a producer that emits the old key (or
+    // one that drops the close) fails here rather than downstream.
+    const close = data(await s.call('read_project', {})).nodes.find((n) => n.kind === 'terminus')
+    expect(close.id).toBeTruthy()
+    expect(Object.keys(clip.nodes || {}).sort()).toEqual([cp.id, at.id, close.id].sort())
     const pasted = data(await s.call('paste_as_tree', { clip }))
     expect(pasted.id).toBeTruthy()
     const lp = data(await s.call('list_projects', {}))
     expect(lp.projects.filter((p) => p.root)).toHaveLength(2)
+    // Termini: duplicating the tree now means duplicating its brackets, so the pasted
+    // copy carries a close of its own, freshly identified rather than the source's.
+    const pastedNodes = data(await s.call('read_project', { project_id: pasted.id })).nodes
+    const pastedClose = pastedNodes.find((n) => n.kind === 'terminus')
+    expect(pastedClose).toBeTruthy()
+    expect(pastedClose.id).not.toBe(close.id)
   })
 
   it('delete_task removes the node', async () => {

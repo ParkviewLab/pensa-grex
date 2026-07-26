@@ -19,8 +19,14 @@ vi.mock('electron', () => ({
 
 const { migrateLibraryIfNeeded } = await import('./migrateLibrary.js')
 const store = await import('./store.js')
-const { validateRecord } = await import('../shared/model/validate.js')
+const { validateRecord, pairScopes, trunksOf } = await import('../shared/model/validate.js')
 const { buildModel } = await import('../shared/model/model.js')
+
+// The nodes of a migrated record that carry a title, by that title. Termini have no
+// title, so they are not here; the helpers below reach them by kind.
+const titled = (record) =>
+  Object.fromEntries(Object.values(record.nodes).filter((n) => n.kind !== 'terminus').map((n) => [n.title, n]))
+const terminiOf = (record) => Object.values(record.nodes).filter((n) => n.kind === 'terminus')
 
 // A schema-2 domain as the 2.x app wrote it: JSON5 text with unquoted keys, notes
 // beside the record, and a bookmark with a zoom and an anchor chain.
@@ -96,7 +102,10 @@ describe('the schema-2 to schema-3 library move', () => {
     expect(d.title).toBe('HomeLab')
     expect(d.id).toMatch(/^d_[0-9a-z]{10}$/)
     expect(d.dir).toBe('pensagrex_domain_homelab_' + d.id)
-    expect(d.nodes).toBe(5)
+    // Termini: the old domain's five nodes, plus the one close schema 3 requires for
+    // its single project node. The count is six because the migration adds that close,
+    // not because anything of the old domain was dropped.
+    expect(d.nodes).toBe(6)
 
     const target = join(newRoot(), d.dir)
     const record = JSON.parse(readFileSync(join(target, 'domain.json'), 'utf-8'))
@@ -104,7 +113,19 @@ describe('the schema-2 to schema-3 library move', () => {
     expect(record.title).toBe('HomeLab')
     expect(record.id).toBe(d.id)
     expect(validateRecord(record)).toEqual({ ok: true, errors: [] })
-    expect(Object.keys(record.nodes)).toHaveLength(5)
+    expect(Object.keys(record.nodes)).toHaveLength(6)
+    expect(Object.keys(titled(record)).sort()).toEqual(
+      ['A project', 'First task', 'Second task', 'Sidelong', 'Underneath'],
+    )
+    // Termini: one close, and it says nothing of its own — no title, no flag, and, as
+    // the plan's own close, no edge above it to carry anything.
+    const termini = terminiOf(record)
+    expect(termini).toHaveLength(1)
+    expect(termini[0].title).toBeUndefined()
+    expect(termini[0].flagged).toBeUndefined()
+    expect(termini[0].next).toBe(null)
+    expect(termini[0].leftBranches).toEqual([])
+    expect(termini[0].rightBranches).toEqual([])
     // Every id is reminted, so none of the old ones survive.
     for (const id of Object.keys(record.nodes)) expect(id).toMatch(/^n_[0-9a-z]{10}$/)
   })
@@ -113,7 +134,7 @@ describe('the schema-2 to schema-3 library move', () => {
     oldDomain('HomeLab')
     const [d] = migrateLibraryIfNeeded().migrated
     const record = JSON.parse(readFileSync(join(newRoot(), d.dir, 'domain.json'), 'utf-8'))
-    const byTitle = Object.fromEntries(Object.values(record.nodes).map((n) => [n.title, n]))
+    const byTitle = titled(record)
 
     expect(byTitle['A project'].kind).toBe('project')
     expect(byTitle['A project'].next).toBe(byTitle['First task'].id)
@@ -130,10 +151,20 @@ describe('the schema-2 to schema-3 library move', () => {
     expect(byTitle['First task'].rightBranches).toEqual([byTitle.Underneath.id])
     expect(byTitle['Second task'].rightBranches).toEqual([])
 
-    // And the model still builds one tree over all five nodes.
+    // Termini: the close lands where schema 2 already meant the project's scope to
+    // end — at the top of the trunk it opened on, above "Second task" — and the
+    // pairing derived from the trunk names it as the close of "A project". The two
+    // branch trunks hold no project node, so neither gains a close.
+    const [terminus] = terminiOf(record)
+    expect(byTitle['Second task'].next).toBe(terminus.id)
+    expect(pairScopes(record, trunksOf(record)).pairs.get(byTitle['A project'].id)).toBe(terminus.id)
+    expect(byTitle.Sidelong.next).toBe(null)
+    expect(byTitle.Underneath.next).toBe(null)
+
+    // And the model still builds one tree over every node: the old five and the close.
     const model = buildModel(record)
     expect(model.trees).toHaveLength(1)
-    expect(model.nodes.size).toBe(5)
+    expect(model.nodes.size).toBe(6)
   })
 
   it('copies each note into notes/ under its new id-and-slug name', () => {
@@ -189,7 +220,8 @@ describe('the schema-2 to schema-3 library move', () => {
     expect(marker.migratedTo).toBe(newRoot())
     expect(marker.domains.HomeLab.id).toBe(d.id)
     expect(marker.domains.HomeLab.dir).toBe(d.dir)
-    expect(marker.domains.HomeLab.nodes).toBe(5)
+    // Termini: six, the migrated node count, which now includes the project's close.
+    expect(marker.domains.HomeLab.nodes).toBe(6)
     expect(typeof marker.domains.HomeLab.at).toBe('string')
   })
 
@@ -235,6 +267,15 @@ describe('the schema-2 to schema-3 library move', () => {
       expect(res.failed).toEqual([])
       expect(res.migrated.map((d) => d.title)).toEqual(['Elsewhere'])
       expect(store.listDomains().map((d) => d.name)).toEqual(['Elsewhere'])
+
+      // Termini: a lone project node migrates to the smallest legal plan — the base
+      // and its close, with nothing between them.
+      const record = JSON.parse(readFileSync(join(custom, res.migrated[0].dir, 'domain.json'), 'utf-8'))
+      expect(validateRecord(record)).toEqual({ ok: true, errors: [] })
+      const base = titled(record).P
+      const [close] = terminiOf(record)
+      expect(base.next).toBe(close.id)
+      expect(close.next).toBe(null)
       // The old directory is still there, beside the new one.
       expect(existsSync(join(dir, 'forest.json5'))).toBe(true)
     } finally {

@@ -107,6 +107,56 @@ function attachHost(id, at, pred) {
   return p.id
 }
 
+// Give every scope a close, which is the faithful half of the 2 -> 3 migration.
+//
+// A schema-2 project node's scope was everything above it on its trunk, so its close
+// belongs at that trunk's top; and where two project nodes share a trunk, the one
+// opened higher must close lower, so the closes stack above the top in reverse order
+// of opening. That asserts nothing schema 2 did not already mean.
+//
+// Termini are added per trunk, where a trunk is a maximal .next run starting at a
+// base or at a branch child. A trunk with no project node on it gets none, since
+// there is nothing there to close.
+function closeScopes(nodes, mintId, stamp) {
+  // A trunk starts wherever nothing arrives by .next: a base, or a branch's first
+  // node. Nothing else about the incoming edge matters here.
+  const nextTargets = new Set(Object.values(nodes).map((n) => n.next).filter(Boolean))
+  const starts = Object.keys(nodes).filter((id) => !nextTargets.has(id))
+
+  for (const start of starts) {
+    const trunk = []
+    let id = start
+    const seen = new Set()
+    while (id && nodes[id] && !seen.has(id)) {
+      seen.add(id)
+      trunk.push(id)
+      id = nodes[id].next
+    }
+    const opens = trunk.filter((nid) => nodes[nid].kind === 'project').length
+    if (!opens) continue
+
+    // One close per open, stacked above the trunk's top. Which terminus closes which
+    // project is not stored: it is derived by matching brackets up the trunk (see
+    // pairScopes in validate.js), so there is no second copy of the pairing to fall
+    // out of step with the trunk.
+    let top = trunk[trunk.length - 1]
+    for (let i = 0; i < opens; i++) {
+      const terminus = {
+        id: mintId(),
+        kind: 'terminus',
+        createdAt: stamp,
+        note: null,
+        next: null,
+        rightBranches: [],
+        leftBranches: [],
+      }
+      nodes[terminus.id] = terminus
+      nodes[top].next = terminus.id
+      top = terminus.id
+    }
+  }
+}
+
 function migrate2to3(record) {
   // Schema 2 called the node map `tasks`; this is the last code that reads it.
   const tasks = record.tasks || {}
@@ -158,6 +208,9 @@ function migrate2to3(record) {
       host[b.side === 'right' ? 'rightBranches' : 'leftBranches'].push(map(b.child))
     }
   }
+
+  // Last, because it needs the finished trunks: every scope gets its close.
+  closeScopes(nodes, mintNodeId, nowISO())
 
   return {
     record: {
