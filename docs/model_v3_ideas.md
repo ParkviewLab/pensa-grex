@@ -572,7 +572,10 @@ marked as amended in v3.1.0, which changed how a domain is drawn and touched nei
 - A note file is named for its node id plus a twelve-character slug of the title, sanitized and decorative,
   refreshed best-effort on a retitle.
 - A bookmark is `{name, collapsed[], nodes[]}` in the sidecar, with no zoom and no anchor chain; the client
-  frames the surviving nodes under a maximum scale and a minimum padding.
+  frames the surviving nodes under a maximum scale and a minimum padding. *Specified, and only half shipped:*
+  the record and the migration write that shape, but the renderer still writes and reads the schema-2
+  `{name, collapsed, zoom, anchor}`, so a migrated bookmark has no anchor to resolve and reports that its
+  location is gone. Newly made ones work. The defect is v3.0.0's and wants its own fix.
 - Migration fabricates one thing only: each schema-2 branch merges at the edge level with its current top,
   clamped to the highest legal edge, which preserves today's geometry and is corrected by a drag. The closes are
   faithful, and the pass writes `domains/` while leaving `forests/` untouched.
