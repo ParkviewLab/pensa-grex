@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<!-- SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai> -->
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PensaGrex &mdash; model v3: names, merges, and the invariants</title>
+<style>
+/* ----------------------------------------------------------------------
+   Palette: three inks and nothing else.
+     ink       #141412  existing structure: trunks, branch lines, stations
+     return    #1f8f8a  the new element: return lines, merge points
+     illegal   #d75f2e  a state the invariants forbid
+   Page chrome uses neutrals only (--bg, --ink, --soft); every drawing sits
+   on a white surface so the three inks mean the same thing in both themes.
+   ---------------------------------------------------------------------- */
+:root{ --ink:#1a1a17; --soft:#6b6b64; --bg:#fbfbf8; --rule:#dcdcd4; }
+@media (prefers-color-scheme:dark){ :root{ --ink:#e8e8e4; --soft:#9a9a92; --bg:#151513; --rule:#33332e; } }
+
+html,body{ margin:0; background:var(--bg); }
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  color:var(--ink); padding:2.4rem 1.25rem 5rem; line-height:1.62; font-size:15px;
+}
+*{ box-sizing:border-box; }
+
+.wrap{ max-width:880px; margin:0 auto; }
+.eyebrow{ font-size:11px; letter-spacing:.17em; text-transform:uppercase; color:var(--soft); margin:0 0 .5rem; }
+h1{ font-size:27px; font-weight:500; line-height:1.25; margin:0 0 .8rem; text-wrap:balance; }
+.status{ font-size:13.5px; color:var(--soft); margin:0 0 2.4rem; padding-bottom:1.4rem; border-bottom:1px solid var(--rule); }
+h2{ font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:var(--soft);
+    margin:3rem 0 1rem; padding-bottom:6px; border-bottom:1px solid var(--rule); font-weight:600; }
+h3{ font-size:16.5px; font-weight:500; margin:2rem 0 .5rem; }
+p{ margin:0 0 1rem; }
+p.lead{ font-size:16px; }
+a{ color:inherit; }
+
+code{ font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:.88em; }
+pre{ font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:12.5px; line-height:1.55;
+     background:rgba(107,107,100,.09); border:1px solid var(--rule); border-radius:4px;
+     padding:14px 16px; overflow-x:auto; margin:0 0 1.2rem; }
+
+blockquote{ margin:0 0 1.2rem; padding:.5rem 0 .5rem 1.1rem; border-left:2px solid var(--soft); color:var(--ink); }
+blockquote p{ margin:0 0 .55rem; }
+blockquote p:last-child{ margin:0; }
+blockquote .was{ color:var(--soft); }
+
+/* the drawing surface: white, black ink, identical in both themes */
+figure{ margin:1.6rem 0 1.9rem; }
+.frame{ background:#fff; border:1px solid rgba(0,0,0,.16); border-radius:8px; overflow-x:auto; }
+.frame svg{ display:block; width:100%; height:auto; min-width:520px; }
+figcaption{ font-size:12.5px; color:var(--soft); margin-top:.65rem; line-height:1.55; }
+
+.legend{ display:flex; flex-wrap:wrap; gap:10px 22px; font-size:12.5px; color:var(--soft); margin:0 0 2rem; }
+.legend span{ display:inline-flex; align-items:center; gap:8px; }
+.legend i{ display:inline-block; width:26px; height:0; border-top-width:2.4px; border-top-style:solid; }
+.legend i.k1{ border-color:var(--ink); }
+.legend i.k2{ border-color:#1f8f8a; }
+.legend i.k3{ border-color:#d75f2e; border-top-style:dashed; }
+
+table{ border-collapse:collapse; width:100%; font-size:14px; margin:0 0 1.4rem; }
+th,td{ text-align:left; vertical-align:top; padding:8px 12px 8px 0; border-bottom:1px solid var(--rule); }
+th{ font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--soft); font-weight:600; }
+td:first-child{ white-space:nowrap; font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:12.5px; }
+
+ol.rules{ margin:0 0 1.3rem; padding-left:1.3rem; }
+ol.rules li{ margin-bottom:.5rem; }
+ul.log{ margin:0 0 1.4rem; padding-left:1.2rem; }
+ul.log li{ margin-bottom:.45rem; }
+.tag{ font-size:9.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase;
+      border:1px solid var(--soft); color:var(--soft); border-radius:3px; padding:1px 5px; margin-right:.5rem;
+      position:relative; top:-1px; }
+
+/* shared SVG vocabulary */
+svg text{ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+svg .t{ font-size:11px; fill:#141412; }
+svg .tm{ font-size:10.5px; fill:#6b6b64; }
+svg .tt{ font-size:10px; letter-spacing:.13em; text-transform:uppercase; fill:#8a8a82; }
+svg .st{ fill:#fff; stroke:#141412; stroke-width:1.5; }
+svg .hull,svg .term,svg .jn{ fill:#141412; }
+svg .jnr{ fill:#1f8f8a; }
+svg .trunk{ stroke:#141412; stroke-width:2.2; fill:none; }
+svg .ret{ stroke:#1f8f8a; stroke-width:2.2; fill:none; }
+svg .bad{ stroke:#d75f2e; stroke-width:2.2; fill:none; stroke-dasharray:5 4; }
+svg .badr{ stroke:#d75f2e; stroke-width:2.2; fill:none; }
+svg .brk{ stroke:#6b6b64; stroke-width:1; fill:none; }
+svg .ghost{ stroke:#c9c9c1; stroke-width:1.5; fill:none; }
+svg .tr{ fill:#1f8f8a; font-size:10.5px; }
+svg .tb{ fill:#d75f2e; font-size:10.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<p class="eyebrow">Design record &middot; PensaGrex</p>
+<h1>Model v3: the names, the merge, and the invariants it brings with it</h1>
+<p class="status">A record of one design conversation, not a plan and not a decision. It states what was
+settled in discussion, what follows from it, and what is still open. Nothing here is implemented; the
+running app is schema&nbsp;2, in which forks never rejoin. Where this document and
+<code>docs/northstar.md</code> disagree, the northstar is still the authority until it is amended, and the
+amendment it would need is set out below.</p>
+
+<div class="legend">
+  <span><i class="k1"></i> trunk and branch lines, existing structure</span>
+  <span><i class="k2"></i> return lines and merge points, new in v3</span>
+  <span><i class="k3"></i> a state the invariants forbid</span>
+</div>
+
+<h2>1 &nbsp;The vocabulary</h2>
+
+<p class="lead">One word in the current code carries three jobs, and that is the friction this started from. A
+domain is a forest, its file is <code>forest.json5</code>, the parsed contents of that file are called
+<code>raw</code>, and the object <code>buildForest()</code> returns is also called a forest. Those three are now
+the file, the record, and the model, and the container they belong to is a domain rather than a forest. Renaming
+them is the smaller half of what follows; the larger half is that a branch now comes back.</p>
+
+<table>
+<tr><th>Name</th><th>What it denotes</th></tr>
+<tr><td>Domain</td><td>One directory: the set of plans kept together. Not a project, so it keeps its own word rather than joining the ProjectXXXX family.</td></tr>
+<tr><td>DomainRecord</td><td>The parsed contents of <code>domain.json</code>: the serializable shape every mutation takes and returns. Called <code>record</code> in code.</td></tr>
+<tr><td>DomainModel</td><td>What <code>buildModel()</code> derives from a record: lookups, reverse edges, roots. Called <code>model</code> in code; recomputed, never stored.</td></tr>
+<tr><td>ProjectPlan</td><td>One tree in that suite. Opens at a base ProjectNode, closes at a TerminusNode.</td></tr>
+<tr><td>trunk</td><td>A straight vertical line of nodes joined by edges. A plan has one; every branch has its own.</td></tr>
+<tr><td>edge</td><td>The gap between two consecutive nodes on a trunk. Lateral lines attach inside it, against the nodes bounding it.</td></tr>
+<tr><td>branch line</td><td>The line leaving a trunk edge to start a parallel trunk.</td></tr>
+<tr><td>return line</td><td>The line carrying a branch's trunk back into the trunk it left.</td></tr>
+<tr><td>merge</td><td>The junction where a return line rejoins. New in v3.</td></tr>
+<tr><td>scope</td><td>The span from a ProjectNode to its TerminusNode. A plan is the outermost scope.</td></tr>
+</table>
+
+<figure>
+<div class="frame">
+<svg viewBox="0 0 820 500" role="img" aria-label="Anatomy of a ProjectPlan: base project node, tasks, a nested sub-project closed by a terminus node, a branch with its return line, and the plan's root terminus node.">
+<defs><marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#1f8f8a"/></marker></defs>
+
+<!-- trunk segments -->
+<path class="trunk" d="M235,439 V409"/>
+<path class="trunk" d="M235,383 V353"/>
+<path class="trunk" d="M235,327 V297"/>
+<path class="trunk" d="M235,271 V232"/>
+<path class="trunk" d="M235,224 V185"/>
+<path class="trunk" d="M235,159 V120"/>
+
+<!-- stations -->
+<rect class="st" x="180" y="439" width="110" height="26" rx="2.5"/>
+<rect class="hull" x="180" y="459" width="110" height="6"/>
+<text class="t" x="235" y="452" text-anchor="middle">Hiring</text>
+
+<rect class="st" x="180" y="383" width="110" height="26" rx="2.5"/>
+<text class="t" x="235" y="400" text-anchor="middle">Draft JD</text>
+
+<rect class="st" x="180" y="327" width="110" height="26" rx="2.5"/>
+<rect class="hull" x="180" y="347" width="110" height="6"/>
+<text class="t" x="235" y="340" text-anchor="middle">Interviews</text>
+
+<rect class="st" x="180" y="271" width="110" height="26" rx="2.5"/>
+<text class="t" x="235" y="288" text-anchor="middle">Screen calls</text>
+
+<rect class="term" x="212" y="224" width="46" height="8" rx="4"/>
+
+<rect class="st" x="180" y="159" width="110" height="26" rx="2.5"/>
+<text class="t" x="235" y="176" text-anchor="middle">Make offer</text>
+
+<rect class="term" x="212" y="112" width="46" height="8" rx="4"/>
+
+<!-- scope bracket for the sub-project -->
+<path class="brk" d="M168,340 H162 V228 H168"/>
+
+<!-- branch -->
+<path class="trunk" d="M235,377 H396 Q425,377 425,353"/>
+<rect class="st" x="370" y="327" width="110" height="26" rx="2.5"/>
+<text class="t" x="425" y="344" text-anchor="middle">Shortlist</text>
+<path class="trunk" d="M425,327 V297"/>
+<rect class="st" x="370" y="271" width="110" height="26" rx="2.5"/>
+<text class="t" x="425" y="288" text-anchor="middle">Book rooms</text>
+<path class="trunk" d="M425,271 V241"/>
+<rect class="st" x="370" y="215" width="110" height="26" rx="2.5"/>
+<text class="t" x="425" y="232" text-anchor="middle">Debrief</text>
+<path class="ret" d="M425,215 V191 H241" marker-end="url(#a1)"/>
+
+<!-- junctions -->
+<path class="jn" d="M235,371 l6,6 l-6,6 l-6,-6 z"/>
+<path class="jnr" d="M235,185 l6,6 l-6,6 l-6,-6 z"/>
+
+<!-- labels -->
+<text class="tm" x="152" y="456" text-anchor="end">base ProjectNode</text>
+<text class="tm" x="152" y="344" text-anchor="end">ProjectNode</text>
+<text class="tm" x="152" y="232" text-anchor="end">TerminusNode</text>
+<text class="tm" x="152" y="120" text-anchor="end">root TerminusNode</text>
+<text class="tm" x="152" y="381" text-anchor="end">branch point</text>
+<text class="tr" x="152" y="195" text-anchor="end">merge point</text>
+<text class="tm" x="300" y="371">branch line</text>
+<text class="tr" x="252" y="207">return line</text>
+<text class="tm" x="300" y="400">TaskNode</text>
+<text class="tm" x="300" y="176">TaskNode</text>
+<text class="tm" x="495" y="290">the branch's own trunk</text>
+<text class="tt" x="46" y="284">scope</text>
+</svg>
+</div>
+<figcaption>A ProjectPlan. Growth is upward. The bracket marks the sub-project's scope, from its ProjectNode
+to the TerminusNode that closes it. The branch opens below that scope and rejoins above it, so its span
+contains the scope rather than straddling it; section&nbsp;7 is about why that matters.</figcaption>
+</figure>
+
+<h3>Three node kinds</h3>
+
+<p>A TaskNode carries a status and may hold the cursor. A ProjectNode opens a scope and carries neither. A
+TerminusNode closes one: no title, no status, no flag, no cursor, and not movable. It does carry a note, the
+one expressive field it keeps, and the natural thing to write there is what closing the scope required. Every
+ProjectNode has exactly one TerminusNode, so a plan with three sub-projects has four project nodes and four
+terminus nodes in total, counting its own base and close.</p>
+
+<p>Two positions are distinguished only by where they sit. A plan's base ProjectNode has nothing below it,
+and its root TerminusNode has nothing above it: no edge, so nothing can be added there. A sub-project's
+terminus does have an edge above it, and tasks can be added above it in the ordinary way.</p>
+
+<p>A note on the word, which is unresolved. A terminus that closes a sub-project is not terminal; the line
+runs straight through it and continues. In the subway idiom that the drawing borrows, a station where
+parallel tracks gather again is an interchange rather than a terminus. Either the two positions are one kind
+whose role changes with position, as this proposal has it, or the plan's close and a sub-project's close are
+different kinds with different names.</p>
+
+<h2>2 &nbsp;What the merge changes</h2>
+
+<p>In schema 2 a fork opens a parallel stack and that stack simply ends. In v3 every branch returns to the
+trunk it left. That is not a naming change; it changes the class of graph from a strict tree to a
+single-entry, single-exit block structure, and it contradicts the northstar in three places.</p>
+
+<p>The claim appears at <code>docs/northstar.md:38</code> inside intent&nbsp;1, at
+<code>docs/northstar.md:73</code> as axiom&nbsp;2, and at <code>docs/model_ideas.md:26</code> as part of the
+definition of a tree. The axiom is the one that matters, because it is what underwrites the
+single-incoming-edge rule in <code>validateForest</code>, the tree-membership walk in
+<code>buildForest</code>, and the cycle check. If it merely lost a clause, nothing would tell a later reader
+which of those survive.</p>
+
+<blockquote>
+<p class="was">Was: 2. A strict tree, bottom-up: forks split and never rejoin; the root is the base, and
+growth rises.</p>
+<p>2. Single entry, single exit, bottom-up: a plan opens at its base ProjectNode and closes at its
+TerminusNode, a sub-project likewise, and growth rises between them. One way in at the bottom, one way out
+at the top, at every level.</p>
+<p>3. Every fork returns: a branch opens a parallel trunk off an edge and rejoins the trunk it left, before
+the close of the scope in which it was opened. No branch reaches out of its scope, so any scope can be read,
+and collapsed, as a single block. Work that diverges and never reconverges is a separate plan, not a
+branch.</p>
+</blockquote>
+
+<p>Two axioms rather than one, because those are two independent claims and an axiom carrying two can be
+half-obeyed without anyone noticing. The final sentence is the only part with a user-visible cost. A
+permanent divergence is a real thing, two efforts that happened to start from one point and went their own
+ways, and under these axioms it can no longer be drawn inside one plan. The operation that resolves it
+already exists as <code>detachToTree</code>, which would acquire a second and better-defined purpose: the
+way out when work genuinely does not rejoin. So add-branch and detach become a pair of choices at the moment
+of divergence, where today add-branch alone covers both cases.</p>
+
+<p>Intent 1 changes with it, and so does axiom 6. The triad Task, Fork, Stack becomes Projects, Tasks,
+Branches, and the stack verbs go: with a terminus closing every trunk there is no free tip, so nothing is
+pushed and every addition is an insertion at an edge. Axiom 4 had already half-retired them, since completing a
+task leaves it on the map recoloured and only delete removes it, so nothing has popped for some time. Axiom 6
+names JSON5, and the file becomes plain JSON, decided in discussion; what that costs is comments and trailing
+commas, so the axiom's ownership claim survives intact, since JSON is still plain text, grep-able, diff-able,
+and readable in any editor. Section&nbsp;12 sets out the operations that replace push and pop.</p>
+
+<h2>3 &nbsp;Where a lateral line attaches</h2>
+
+<p>Edges are not objects in the file; there is nothing to point at. So both kinds of lateral attachment name
+their edge by a neighbouring node, and they must choose the same neighbour or every mutation has to remember
+which way each field reads. Branches already name the node below their edge, so <code>merge_point</code>
+does too: it holds the id of the node below the edge into which the return line joins.</p>
+
+<p>Stated once, that gives a single rule of availability: a node can host a branch, or receive a merge,
+exactly when a trunk edge rises from it. Two positions have no such edge, and both are unavailable for the
+same reason rather than by separate decree. A root TerminusNode has nothing above it. The top node of a
+branch trunk has its own return line above it, which is not a trunk edge.</p>
+
+<figure>
+<div class="frame">
+<svg viewBox="0 0 820 250" role="img" aria-label="Left: merge_point names the node below the join edge, and the node above that edge is the one that gains a second incoming edge. Right: the two positions with no trunk edge above them cannot host a branch or receive a merge.">
+<defs><marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#1f8f8a"/></marker></defs>
+
+<text class="tt" x="30" y="30">the convention</text>
+<path class="trunk" d="M150,185 V133"/>
+<rect class="st" x="95" y="185" width="110" height="26" rx="2.5"/>
+<text class="t" x="150" y="202" text-anchor="middle">X</text>
+<rect class="st" x="95" y="107" width="110" height="26" rx="2.5"/>
+<text class="t" x="150" y="124" text-anchor="middle">Y</text>
+<path class="ret" d="M330,190 V139 H156" marker-end="url(#a2)"/>
+<path class="jnr" d="M150,133 l6,6 l-6,6 l-6,-6 z"/>
+<rect class="st" x="275" y="190" width="110" height="26" rx="2.5"/>
+<text class="t" x="330" y="207" text-anchor="middle">branch tip</text>
+<text class="tr" x="215" y="157">merge_point: 'X'</text>
+<text class="tm" x="215" y="112">Y gains a second</text>
+<text class="tm" x="215" y="125">incoming edge</text>
+<text class="tm" x="88" y="202" text-anchor="end">the node that</text>
+<text class="tm" x="88" y="215" text-anchor="end">names the edge</text>
+
+<text class="tt" x="470" y="30">no trunk edge above: unavailable</text>
+<rect class="term" x="510" y="96" width="46" height="8" rx="4"/>
+<path class="trunk" d="M533,140 V104"/>
+<rect class="st" x="478" y="140" width="110" height="26" rx="2.5"/>
+<text class="t" x="533" y="157" text-anchor="middle">Make offer</text>
+<path class="bad" d="M533,96 V64"/>
+<path class="badr" d="M519,78 L547,50 M519,50 L547,78"/>
+<text class="tb" x="560" y="80">root TerminusNode</text>
+<text class="tm" x="470" y="200">its edge above does not exist</text>
+
+<path class="ret" d="M740,150 V120 H700"/>
+<rect class="st" x="685" y="150" width="110" height="26" rx="2.5"/>
+<text class="t" x="740" y="167" text-anchor="middle">branch tip</text>
+<path class="bad" d="M740,150 V116"/>
+<path class="badr" d="M726,96 L754,68 M726,68 L754,96"/>
+<text class="tb" x="672" y="200">its line above is a return</text>
+</svg>
+</div>
+<figcaption>Left: <code>merge_point</code> holds X, the node below the join edge, and it is Y, the node
+above it, that acquires one trunk predecessor plus one return predecessor for every branch merging there. Two
+branches may share a merge point, which gives an n-way join at no cost in the schema. Right: the two
+positions with nothing above them.</figcaption>
+</figure>
+
+<p>That places the typed-edge rule on the node above the join edge: exactly one trunk predecessor, zero or
+more return predecessors. It also puts the sense of "everything must arrive before this proceeds" on
+whatever sits above the join, which is the terminus only when the merge lands immediately below it.</p>
+
+<p>Where a junction is drawn is a separate convention from which node names it, and both are worth stating
+plainly so that nobody later tries to make them agree. A branch point is drawn just above the node below its
+edge, and a merge point just below the node above its edge, at every edge, whether or not it has been
+stretched. The node meant here is the dot together with its label shape, so the clearance is measured from the
+edge of the card rather than from an abstract point. A merge is therefore stored against the node below its
+edge and drawn against the node above it, which is not an inconsistency but two uniform conventions serving
+different ends: storage so that every mutation reads the trunk one way, drawing so that a fork always reads
+as leaving the node it follows and a join always reads as arriving at the node it precedes. The caveat comes
+from a settled rule in <code>docs/model_ideas.md</code>, that a junction sits in the gap between two stations
+and not at a station: the clearance has to stay visible, or the drawing will claim the branch attaches to the
+card.</p>
+
+<h2>4 &nbsp;Where a branch may rejoin</h2>
+
+<p>Three clauses, and each rules out a distinct failure.</p>
+
+<ol class="rules">
+<li><code>merge_point</code> is on the trunk the branch left. Its own trunk, or another, would not be a
+return at all.</li>
+<li>It is at or above the branch's own node. Below it is a genuine cycle: the trunk flows up from the join
+to the branch point, and the return flows back down into it. Equal is the smallest legal branch, treated in
+section&nbsp;6.</li>
+<li>It is strictly below the terminus closing the innermost scope open at the branch point. A branch cannot
+escape its scope.</li>
+</ol>
+
+<p>The third clause needs the scope found by matching brackets, not by descending to the nearest
+ProjectNode, and the difference is not academic: the naive answer can make a legal branch look
+unsatisfiable.</p>
+
+<figure>
+<div class="frame">
+<svg viewBox="0 0 820 500" role="img" aria-label="Finding the enclosing scope by bracket matching. Descending from the branch point, the nearest project node below is the sub-project's, but its terminus is below the branch point; skipping past the closed scope gives the plan's own scope as the bound.">
+<path class="trunk" d="M300,439 V409"/>
+<path class="trunk" d="M300,383 V353"/>
+<path class="trunk" d="M300,327 V297"/>
+<path class="trunk" d="M300,271 V232"/>
+<path class="trunk" d="M300,224 V185"/>
+<path class="trunk" d="M300,159 V120"/>
+
+<rect class="st" x="245" y="439" width="110" height="26" rx="2.5"/>
+<rect class="hull" x="245" y="459" width="110" height="6"/>
+<text class="t" x="300" y="452" text-anchor="middle">P</text>
+<rect class="st" x="245" y="383" width="110" height="26" rx="2.5"/>
+<text class="t" x="300" y="400" text-anchor="middle">a</text>
+<rect class="st" x="245" y="327" width="110" height="26" rx="2.5"/>
+<rect class="hull" x="245" y="347" width="110" height="6"/>
+<text class="t" x="300" y="340" text-anchor="middle">P2</text>
+<rect class="st" x="245" y="271" width="110" height="26" rx="2.5"/>
+<text class="t" x="300" y="288" text-anchor="middle">b</text>
+<rect class="term" x="277" y="224" width="46" height="8" rx="4"/>
+<text class="tm" x="335" y="232">T2</text>
+<rect class="st" x="245" y="159" width="110" height="26" rx="2.5"/>
+<text class="t" x="300" y="176" text-anchor="middle">c</text>
+<rect class="term" x="277" y="112" width="46" height="8" rx="4"/>
+<text class="tm" x="335" y="120">T</text>
+
+<!-- branch point above c -->
+<path class="jn" d="M300,147 l6,6 l-6,6 l-6,-6 z"/>
+<path class="trunk" d="M300,153 H430"/>
+<text class="tm" x="440" y="157">a branch opens here</text>
+
+<!-- wrong bracket -->
+<path class="bad" d="M212,340 H206 V228 H212"/>
+<path class="badr" d="M195,270 L215,290 M195,290 L215,270"/>
+<text class="tb" x="180" y="300" text-anchor="end">nearest ProjectNode below is P2,</text>
+<text class="tb" x="180" y="314" text-anchor="end">but T2 closed it at 228, below the</text>
+<text class="tb" x="180" y="328" text-anchor="end">branch point: no legal merge exists</text>
+
+<!-- right bracket -->
+<path class="brk" d="M232,452 H226 V116 H232"/>
+<text class="tm" x="180" y="440" text-anchor="end">skipping the closed scope gives P,</text>
+<text class="tm" x="180" y="454" text-anchor="end">bounded by T: the merge may land</text>
+<text class="tm" x="180" y="468" text-anchor="end">anywhere above the branch point</text>
+<text class="tm" x="180" y="482" text-anchor="end">and below T</text>
+</svg>
+</div>
+<figcaption>The walk descends the trunk and, at the foot of a branch trunk, hops to the parent trunk at its
+branch point, so the plan's base ProjectNode always terminates the search and every position has exactly one
+innermost enclosing scope. Each TerminusNode passed on the way down means skipping the ProjectNode it
+closes.</figcaption>
+</figure>
+
+<p>Two consequences fall out rather than needing rules. A root TerminusNode can never be a
+<code>merge_point</code>, because it is either the bound itself, which clause&nbsp;3 excludes, or above the
+bound, which clause&nbsp;3 also excludes. And naming a non-enclosing TerminusNode is perfectly legal: a
+branch opened below a sub-project may merge at the edge above that sub-project's close, which is the shape
+of parallel work running alongside a whole sub-project.</p>
+
+<h2>5 &nbsp;Spans</h2>
+
+<p>Everything from here on is about spans, so it is worth naming them plainly. A branch has a span, from
+its branch point to its merge point. A scope has one too, from its ProjectNode to its TerminusNode. Both are
+intervals on one trunk, which is what lets a single geometric idea govern both.</p>
+
+<h2>6 &nbsp;The smallest branch</h2>
+
+<p>Clause&nbsp;2 allows <code>merge_point</code> to name the branch's own node, so a branch leaves an edge
+and returns to that same edge. Without it, the topmost forkable position on every trunk would be unforkable:
+on a trunk running P, a, T there is no node strictly between a and T, so a fork off a would have nowhere
+legal to land, and the user would have to add a task purely to make room. That is the tool imposing its
+bookkeeping on the work.</p>
+
+<figure>
+<div class="frame">
+<svg viewBox="0 0 820 300" role="img" aria-label="A bubble: the branch leaves an edge and rejoins the same edge, its nodes filling the stretched gap between the two junctions.">
+<defs><marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#1f8f8a"/></marker></defs>
+<path class="trunk" d="M235,239 V113"/>
+<rect class="st" x="180" y="239" width="110" height="26" rx="2.5"/>
+<text class="t" x="235" y="256" text-anchor="middle">a</text>
+<rect class="st" x="180" y="87" width="110" height="26" rx="2.5"/>
+<text class="t" x="235" y="104" text-anchor="middle">T or the next task</text>
+
+<path class="jn" d="M235,227 l6,6 l-6,6 l-6,-6 z"/>
+<path class="trunk" d="M235,233 H396 Q425,233 425,211"/>
+<rect class="st" x="370" y="185" width="110" height="26" rx="2.5"/>
+<text class="t" x="425" y="202" text-anchor="middle">Chase invoice</text>
+<path class="trunk" d="M425,185 V155"/>
+<rect class="st" x="370" y="129" width="110" height="26" rx="2.5"/>
+<text class="t" x="425" y="146" text-anchor="middle">File receipt</text>
+<path class="ret" d="M425,129 V119 H241" marker-end="url(#a3)"/>
+<path class="jnr" d="M235,113 l6,6 l-6,6 l-6,-6 z"/>
+
+<text class="tm" x="152" y="230" text-anchor="end">branch point, against</text>
+<text class="tm" x="152" y="243" text-anchor="end">the node below</text>
+<text class="tr" x="152" y="118" text-anchor="end">merge point, against</text>
+<text class="tr" x="152" y="131" text-anchor="end">the node above</text>
+<text class="tm" x="510" y="160">merge_point names a:</text>
+<text class="tm" x="510" y="174">one edge, entered and left</text>
+</svg>
+</div>
+<figcaption>A bubble says something true and otherwise unsayable: this strand runs alongside that gap and
+nothing else. It introduces no cycle, since the branch tip and the trunk both flow into the node above the
+shared edge, which is a diamond. Only a merge strictly below the branch point makes a loop. A bubble is also
+the case in which both junctions sit on one edge, and the placement rule is what keeps them apart: the branch
+point against the node below, the merge point against the node above.</figcaption>
+</figure>
+
+<h2>7 &nbsp;Crossings, and what they cost</h2>
+
+<p>Decided in discussion, reversing an earlier decision taken in the same conversation: branch lines and
+return lines may cross trunk lines. Nesting is therefore not required between two branch spans, partial
+overlap is drawable, and lateral order stops being derivable and becomes the author's, carried in the order of
+the branch arrays.</p>
+
+<p>The reversal is the right way round, for two reasons. Nesting does not merely inconvenience the author in
+awkward cases; it forbids shapes that are plainly sayable. Three spans that pairwise overlap without nesting
+cannot be laid out even using both sides of the trunk, since two sides cannot two-colour a triangle of
+conflicts, so the tool would have to tell the author that the work they are describing has no drawing at all.
+And the northstar's tension section says that when a layout choice and the data disagree, the data wins and
+the layout accommodates it; the nesting invariant was that sentence inverted, with the model constrained to
+keep the picture planar.</p>
+
+<figure>
+<div class="frame">
+<svg viewBox="0 0 820 340" role="img" aria-label="Three span relations, all legal. Nested and disjoint spans draw without crossings; partially overlapping spans on one side cross, and the outer return line hops the inner trunk.">
+<defs><marker id="a4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#1f8f8a"/></marker></defs>
+
+<!-- panel 1: nested -->
+<text class="tt" x="20" y="28">nested</text>
+<path class="trunk" d="M80,300 V60"/>
+<circle class="jn" cx="80" cy="270" r="3.5"/><circle class="jn" cx="80" cy="230" r="3.5"/>
+<circle class="jn" cx="80" cy="190" r="3.5"/><circle class="jn" cx="80" cy="150" r="3.5"/>
+<circle class="jn" cx="80" cy="110" r="3.5"/>
+<path class="trunk" d="M80,250 H170 V130"/><path class="ret" d="M170,130 H86" marker-end="url(#a4)"/>
+<path class="trunk" d="M80,210 H130 V170"/><path class="ret" d="M130,170 H86" marker-end="url(#a4)"/>
+<text class="tm" x="185" y="196">inner sits nearer</text>
+<text class="tm" x="185" y="209">the spine</text>
+
+<!-- panel 2: disjoint -->
+<text class="tt" x="300" y="28">disjoint</text>
+<path class="trunk" d="M360,300 V60"/>
+<circle class="jn" cx="360" cy="270" r="3.5"/><circle class="jn" cx="360" cy="230" r="3.5"/>
+<circle class="jn" cx="360" cy="190" r="3.5"/><circle class="jn" cx="360" cy="150" r="3.5"/>
+<circle class="jn" cx="360" cy="110" r="3.5"/>
+<path class="trunk" d="M360,250 H430 V210"/><path class="ret" d="M430,210 H366" marker-end="url(#a4)"/>
+<path class="trunk" d="M360,170 H430 V130"/><path class="ret" d="M430,130 H366" marker-end="url(#a4)"/>
+<text class="tm" x="445" y="196">they may share</text>
+<text class="tm" x="445" y="209">one lane</text>
+
+<!-- panel 3: partial overlap, drawn with a hop -->
+<text class="tt" x="600" y="28">partial overlap</text>
+<path class="trunk" d="M660,300 V60"/>
+<circle class="jn" cx="660" cy="270" r="3.5"/><circle class="jn" cx="660" cy="230" r="3.5"/>
+<circle class="jn" cx="660" cy="190" r="3.5"/><circle class="jn" cx="660" cy="150" r="3.5"/>
+<circle class="jn" cx="660" cy="110" r="3.5"/>
+<path class="trunk" d="M660,250 H750 V170"/>
+<path class="ret" d="M750,170 H718 Q710,154 702,170 H666" marker-end="url(#a4)"/>
+<path class="trunk" d="M660,210 H710 V130"/><path class="ret" d="M710,130 H666" marker-end="url(#a4)"/>
+<text class="tm" x="600" y="322">the outer return hops the inner trunk</text>
+</svg>
+</div>
+<figcaption>Nodes are drawn as dots, since only the spans matter. All three are legal. A crossing arises only
+where a lateral line reaches past a trunk nearer the spine than its own lane, which makes the crossing relation
+a strict order and therefore acyclic: the outer line hops the inner trunk, never the reverse.</figcaption>
+</figure>
+
+<p>What the superseded rule was is worth recording, because it shows the layout engine loses less than one
+might expect. <code>assignLanes</code> has two rules. The first, ordering by attach height so that a branch
+attaching higher sits inner, was the unbounded-span special case of ordering by containment: a branch today
+never returns, so its span is unbounded above, and two unbounded spans on one side always nest. That rule is
+now replaced by the author's stored order. The second, reserving a contiguous band per branch wide enough for
+its whole subtree and packing bands first-fit against the row ranges already placed, survives untouched,
+because cards must still not overlap whatever the lines do.</p>
+
+<p>The price falls on the reader, and it is quadratic: k spans that pairwise overlap on one side produce
+crossings on the order of k squared. There is no invariant to lean on any more, only judgement, so the useful
+thing the tool can do is report what an ordering costs in crossings and let the author reorder to reduce it.
+That is a use for an order that is authorial rather than derived.</p>
+
+<p>One geometric rule replaces the structural invariant: no crossing may fall in a node's space, meaning
+between the top of a node's dot and the bottom of its label shape. Section&nbsp;9 is why that is always
+achievable, and section&nbsp;10 is how a crossing is drawn so that it cannot be read as a junction.</p>
+
+<h2>8 &nbsp;The one nesting rule that stays</h2>
+
+<p>Drawing the anatomy figure turned up a case the three clauses permit and should not. Clause&nbsp;3 stops a
+branch from leaving its scope. Nothing stops a branch from entering one.</p>
+
+<figure>
+<div class="frame">
+<svg viewBox="0 0 820 380" role="img" aria-label="Left: a branch opened below a sub-project that merges inside it straddles the scope boundary, so collapsing the scope would cut its return line. Right: the same branch merging above the sub-project's terminus contains the scope instead.">
+<defs><marker id="a6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#1f8f8a"/></marker>
+<marker id="a7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#d75f2e"/></marker></defs>
+
+<text class="tt" x="20" y="28">straddles the boundary</text>
+<path class="trunk" d="M150,330 V90"/>
+<circle class="jn" cx="150" cy="300" r="3.5"/>
+<rect class="hull" x="132" y="256" width="36" height="8" rx="4"/>
+<circle class="jn" cx="150" cy="220" r="3.5"/>
+<rect class="term" x="132" y="176" width="36" height="8" rx="4"/>
+<circle class="jn" cx="150" cy="140" r="3.5"/>
+<path class="brk" d="M112,260 H106 V180 H112"/>
+<text class="tm" x="100" y="224" text-anchor="end">scope</text>
+<path class="bad" d="M150,280 H240"/>
+<path class="badr" d="M240,280 V200 H156" marker-end="url(#a7)"/>
+<text class="tb" x="255" y="204">opened outside, merges inside:</text>
+<text class="tb" x="255" y="218">collapsing the scope would cut</text>
+<text class="tb" x="255" y="232">this return line</text>
+
+<text class="tt" x="470" y="28">contains it</text>
+<path class="trunk" d="M600,330 V90"/>
+<circle class="jn" cx="600" cy="300" r="3.5"/>
+<rect class="hull" x="582" y="256" width="36" height="8" rx="4"/>
+<circle class="jn" cx="600" cy="220" r="3.5"/>
+<rect class="term" x="582" y="176" width="36" height="8" rx="4"/>
+<circle class="jn" cx="600" cy="140" r="3.5"/>
+<path class="brk" d="M562,260 H556 V180 H562"/>
+<text class="tm" x="550" y="224" text-anchor="end">scope</text>
+<path class="trunk" d="M600,280 H700"/>
+<path class="ret" d="M700,280 V160 H606" marker-end="url(#a6)"/>
+<text class="tm" x="470" y="358">parallel work beside a whole sub-project</text>
+</svg>
+</div>
+<figcaption>The missing clause is the mirror of clause&nbsp;3: no scope may open between a branch point and
+its merge point unless it also closes before the merge point. Equivalently, a branch span and a scope span are
+always nested or disjoint, never partially overlapping; two branch spans, since section&nbsp;7, may overlap as
+freely as the author likes.</figcaption>
+</figure>
+
+<p>This rule survives the decision in section&nbsp;7 because it was never about crossings; a branch line runs
+beside a scope without touching it. It is about the promise axiom&nbsp;3 would make, that a scope can be
+collapsed as a single block, and a return line landing inside a collapsed scope has nowhere to land. The two
+nesting rules had two different justifications, and only this one turns on something a hop cannot repair. It
+also holds on both sides of the trunk, since collapsibility has nothing to do with which half-plane a branch
+occupies.</p>
+
+<p>It follows that one reshaping still has to be refused rather than drawn. Extending a branch's merge point
+past a same-side neighbour is now legal and merely costs a hop, so the question of what to do about that
+dissolves. Extending it across the close of a scope the branch was opened outside does not: it breaks collapse.
+The honest handling is the one that was going to be offered for the other case, to refuse the move and name the
+two legal alternatives in the same breath, either merging below where that scope opens or above where it
+closes.</p>
+
+<h2>9 &nbsp;What the layout engine would owe</h2>
+
+<p>Today a branch costs the trunk nothing vertically. <code>buildRowGrid</code> sets each row's pitch from
+the tallest measured card in that row plus a fixed gap, plus a fixed extra where a fork junction sits below
+it, and <code>assignRows</code> is a plain depth-first walk: a branch occupies its own rows in its own lane
+while the trunk carries on up the same grid, and no two paths ever have to be reconciled.</p>
+
+<p>A merge ends that. A branch trunk of five nodes that leaves one edge and returns two rows higher either
+needs its return line to fall three rows, or needs the trunk to acquire room between the branch point and the
+merge point. Row assignment stops being a walk and becomes a constraint: a vertical band reserved on the
+parent for each branch spanning it, sized to that branch's height. The algorithmic shape is not new, since
+<code>assignLanes</code> already reserves a contiguous band of lanes wide enough for each branch's whole
+subtree and packs bands first-fit against the row ranges already placed; it is the same idea turned through
+ninety degrees.</p>
+
+<figure>
+<div class="frame">
+<svg viewBox="0 0 820 320" role="img" aria-label="Left: today a branch occupies its own rows and the trunk pitch is unaffected. Right: with a merge, the trunk must reserve vertical room between the branch point and the merge point, and the junctions sit hard against the nodes bounding the stretched gap.">
+<defs><marker id="a8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#1f8f8a"/></marker></defs>
+
+<text class="tt" x="20" y="28">schema 2: uniform pitch</text>
+<path class="trunk" d="M110,270 V244"/><path class="trunk" d="M110,218 V192"/>
+<path class="trunk" d="M110,166 V140"/><path class="trunk" d="M110,114 V88"/>
+<rect class="st" x="70" y="270" width="80" height="26" rx="2.5"/>
+<rect class="st" x="70" y="218" width="80" height="26" rx="2.5"/>
+<rect class="st" x="70" y="166" width="80" height="26" rx="2.5"/>
+<rect class="st" x="70" y="114" width="80" height="26" rx="2.5"/>
+<rect class="st" x="70" y="62" width="80" height="26" rx="2.5"/>
+<path class="trunk" d="M110,231 H190 Q220,231 220,218"/>
+<rect class="st" x="180" y="192" width="80" height="26" rx="2.5"/>
+<path class="trunk" d="M220,192 V166"/>
+<rect class="st" x="180" y="140" width="80" height="26" rx="2.5"/>
+<path class="trunk" d="M220,140 V114"/>
+<rect class="st" x="180" y="88" width="80" height="26" rx="2.5"/>
+<text class="tm" x="275" y="160">the branch rises through</text>
+<text class="tm" x="275" y="174">rows the trunk also uses</text>
+
+<text class="tt" x="470" y="28">v3: a reserved vertical band</text>
+<path class="trunk" d="M560,270 V244"/>
+<path class="trunk" d="M560,218 V114"/>
+<path class="trunk" d="M560,88 V62"/>
+<rect class="st" x="520" y="270" width="80" height="26" rx="2.5"/>
+<rect class="st" x="520" y="218" width="80" height="26" rx="2.5"/>
+<rect class="st" x="520" y="88" width="80" height="26" rx="2.5"/>
+<rect class="st" x="520" y="36" width="80" height="26" rx="2.5"/>
+<path class="jn" d="M560,207 l5,5 l-5,5 l-5,-5 z"/>
+<path class="trunk" d="M560,212 H640 Q670,212 670,201"/>
+<rect class="st" x="630" y="175" width="80" height="26" rx="2.5"/>
+<path class="trunk" d="M670,175 V159"/>
+<rect class="st" x="630" y="133" width="80" height="26" rx="2.5"/>
+<path class="ret" d="M670,133 V120 H566" marker-end="url(#a8)"/>
+<path class="jnr" d="M560,115 l5,5 l-5,5 l-5,-5 z"/>
+<path class="brk" d="M498,216 H492 V118 H498"/>
+<text class="tm" x="486" y="160" text-anchor="end">the gap grows to</text>
+<text class="tm" x="486" y="174" text-anchor="end">hold the branch</text>
+<text class="tm" x="722" y="160">junctions sit</text>
+<text class="tm" x="722" y="174">against the nodes</text>
+</svg>
+</div>
+<figcaption>The pitch between the two trunk nodes grows to the branch's height, and the junctions sit where
+they always sit, against the nodes bounding the gap, so the required length of a stretched edge is a plain
+sum: clearance, the branch's height, clearance.</figcaption>
+</figure>
+
+<p>Two further pieces, and the shared row grid makes both cheap. Row assignment becomes a longest-path
+computation: give every node an integer row subject to the "strictly above" constraints, which are a trunk's
+own order, a branch's foot above its branch point, and the parent node above a merge point above that branch's
+tip. Because the merge clauses forbid a merge below its own branch point, that constraint graph is acyclic, so
+the computation cannot fail; and edge lengths have no upper bound, so any clearance the drawing needs can be
+created. Infeasibility is not a risk here. Height is the only cost.</p>
+
+<p>Crossing avoidance then comes almost for free, which is the answer to whether the engine can always keep a
+crossing out of a node's space. <code>buildRowGrid</code> gives one y per row for every lane, so cards are
+aligned across trunks, and between two adjacent rows there is a clearance band free on every trunk at once; a
+lateral run placed in that band crosses trunk lines and nothing else, wherever it goes. Three details keep the
+guarantee. A run must be anchored to the row's band rather than to its own card's height, since a merge hanging
+under a short card would otherwise run at a height where a taller card in the same row still sits. Two runs
+wanting the same band on the same side of a trunk would lie on top of each other, which reads worse than a
+crossing, so they need separate bands, and that means one more row. And the band must be at least as tall as a
+hop, which puts a floor under <code>rowGap</code>.</p>
+
+<h2>10 &nbsp;The hop, and the height it costs</h2>
+
+<p>A crossing must not be mistakable for a junction. A junction is marked in the gap between two stations, so
+a lateral line passing unmarked through that same band would still read as lines meeting, and the drawing would
+assert a join that does not exist. The remedy is the line hop, a small arc where the crossing line jumps the
+trunk, standard in subway and circuit drawing alike and cheap in SVG. The convention worth fixing now is which
+line hops: always the lateral one, so that a trunk runs unbroken from base to close and the eye can follow a
+spine without checking whether it has been interrupted. That is always well defined, since a lateral line
+crosses only trunks nearer the spine than its own lane; the outer line hops and the inner trunk carries on.</p>
+
+<figure>
+<div class="frame">
+<svg viewBox="0 0 820 400" role="img" aria-label="Left: branch A spans a to c and branch B is a bubble at b nested inside it. Right: B's merge point moved up to d, so the spans overlap partially and A's return line hops B's trunk.">
+<defs><marker id="a9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#1f8f8a"/></marker></defs>
+
+<text class="tt" x="20" y="28">B nests inside A</text>
+<path class="trunk" d="M120,350 V80"/>
+<rect class="hull" x="102" y="346" width="36" height="8" rx="4"/>
+<circle class="jn" cx="120" cy="300" r="3.5"/><text class="tm" x="104" y="304" text-anchor="end">a</text>
+<circle class="jn" cx="120" cy="250" r="3.5"/><text class="tm" x="104" y="254" text-anchor="end">b</text>
+<circle class="jn" cx="120" cy="200" r="3.5"/><text class="tm" x="104" y="204" text-anchor="end">c</text>
+<circle class="jn" cx="120" cy="150" r="3.5"/><text class="tm" x="104" y="154" text-anchor="end">d</text>
+<rect class="term" x="102" y="96" width="36" height="8" rx="4"/><text class="tm" x="146" y="108">T</text>
+<path class="trunk" d="M120,275 H250 V175"/><path class="ret" d="M250,175 H126" marker-end="url(#a9)"/>
+<text class="tm" x="262" y="228">A</text>
+<path class="trunk" d="M120,232 H190 V218"/><path class="ret" d="M190,218 H126" marker-end="url(#a9)"/>
+<text class="tm" x="202" y="228">B</text>
+
+<text class="tt" x="470" y="28">B extends past A: one hop</text>
+<path class="trunk" d="M560,350 V80"/>
+<rect class="hull" x="542" y="346" width="36" height="8" rx="4"/>
+<circle class="jn" cx="560" cy="300" r="3.5"/><text class="tm" x="544" y="304" text-anchor="end">a</text>
+<circle class="jn" cx="560" cy="250" r="3.5"/><text class="tm" x="544" y="254" text-anchor="end">b</text>
+<circle class="jn" cx="560" cy="200" r="3.5"/><text class="tm" x="544" y="204" text-anchor="end">c</text>
+<circle class="jn" cx="560" cy="150" r="3.5"/><text class="tm" x="544" y="154" text-anchor="end">d</text>
+<rect class="term" x="542" y="96" width="36" height="8" rx="4"/><text class="tm" x="586" y="108">T</text>
+<path class="trunk" d="M560,275 H690 V175"/>
+<path class="ret" d="M690,175 H638 Q630,159 622,175 H566" marker-end="url(#a9)"/>
+<text class="tm" x="702" y="228">A</text>
+<path class="trunk" d="M560,225 H630 V125"/><path class="ret" d="M630,125 H566" marker-end="url(#a9)"/>
+<text class="tm" x="642" y="140">B</text>
+<text class="tm" x="470" y="372">B's merge moved to d; A's return hops B's trunk</text>
+</svg>
+</div>
+<figcaption>Branch A spans a to c; branch B, opened at b, was a bubble nested inside it. Extending B's merge
+to d makes the spans overlap partially, which is now simply a shape with one crossing in it: A's return line,
+being the outer of the two, hops B's trunk.</figcaption>
+</figure>
+
+<p>The second cost of crossings is height. Corridors and merge constraints each add rows, so a plan carrying
+much parallel work is read zoomed out, where a 138-pixel card's title is illegible. That cost is real and is
+accepted; the remedy for it is deferred, and the two paragraphs below record the thinking rather than commit to
+anything.</p>
+
+<p><span class="tag">deferred</span>Magnifying a node's label shape on hover, to whatever size makes its name
+readable, divides the labour the way axiom&nbsp;5 asks: the shape carries the structure at any zoom, and a name
+is read on demand rather than shrunk past legibility. One constraint would keep it safe, and it is worth
+writing down now because it is easy to violate later: the magnification must be a paint-time transform and
+never a layout input, since a hover that changed a card's measured height would send
+<code>buildRowGrid</code> reflowing the plan under the pointer. Three limits go with it. Magnification is a
+probe rather than a survey, and a reader zoomed out usually wants to know what three parallel strands are, which
+hover answers one at a time. It is mouse-only, so selection would have to magnify identically for anyone
+driving from the keyboard. And at low zoom the magnified card is large relative to the drawing, so it occludes
+exactly the structure being scanned.</p>
+
+<p><span class="tag">deferred</span>The complementary idea, for the same future investigation: draw labels at a
+constant screen size and hide the ones that collide, in a fixed priority order, the cursor's node first, then
+flagged nodes, then project nodes and their terminuses. That is what map renderers do, it keeps a legible subset
+of names at every zoom, and it composes with magnification rather than competing with it, the subset giving the
+survey and the hover giving the probe.</p>
+
+<h2>11 &nbsp;The grammar</h2>
+
+<p>Two productions describe every legal plan.</p>
+
+<pre>Plan = ProjectNode , Body , TerminusNode ;
+Body = { TaskNode | Plan } ;        (* may be empty *)</pre>
+
+<p>That pair settles more than its size suggests. A sub-project is a Plan inside a Body, so a plan and a
+sub-project are one production and their closes are one node kind distinguished only by position, which answers
+the question left open earlier about a terminus that is not terminal. A branch's trunk is also a Body, so a
+project inside a branch needs no rule of its own; it follows. And a Body may be empty, which is what an empty
+plan is: a ProjectNode directly beneath its TerminusNode with a single edge between them.</p>
+
+<p>Branches are deliberately not productions. Since section&nbsp;7 their spans need not nest, and a structure
+that is not laminar cannot be generated by nested productions. A branch is an attachment on a node of some
+Body, carrying a side and two edge references, its branch point and its merge point, checked against the
+grammar rather than generated by it. So the grammar describes the trunk-and-scope skeleton, which is exactly
+the part that stays laminar, and section&nbsp;8's rule is what keeps branch spans consistent with it.</p>
+
+<h2>12 &nbsp;Operations, and what empty means</h2>
+
+<p>Three verbs replace push and pop. A task is inserted at an edge; a run of a body is wrapped to name it as a
+project, which is to say given a ProjectNode below it and a TerminusNode above it; and a branch is opened at an
+edge. Axiom 1 survives with its operations renamed, since the creating action still decides the structure and
+ordering still decides nothing. The default edge for a bare insertion wants deciding, and the edge above the
+cursor is the obvious candidate.</p>
+
+<p>Opening a branch is one move that creates three things at once: the attachment, a first task inside it, and
+the return line. Its merge point defaults to its own edge, the smallest legal branch, and its position in the
+authored order defaults to innermost, which costs no crossings because a single-edge span nests inside every
+span containing that edge. Both are the author's to change afterwards. Deleting a branch takes its return with
+it.</p>
+
+<p>Empty is a legal resting state for a project and not for a branch, and the asymmetry has a reason rather
+than being a convenience. A project carries a title, so an empty one still asserts something, and an empty one
+is how a project begins; deleting the last task inside a project therefore leaves the pair standing, and
+removing the project is a separate, explicit unwrap. A branch carries no title of its own, so an empty branch
+asserts nothing and is only noise on the trunk; deleting its last task removes the branch and its return line.
+That is also why opening a branch creates it with a task already inside rather than empty.</p>
+
+<h2>13 &nbsp;Migrating a schema-2 domain</h2>
+
+<p>The closes are faithful. Each tree root becomes a plan whose TerminusNode goes above the top of its trunk,
+and each mid-trunk project node closes at the top of its trunk as well, so nested scopes stack their closes in
+reverse order of opening. That asserts only what schema 2 already meant, since a project node's scope there is
+everything above it.</p>
+
+<p>The merges cannot be faithful. A schema-2 branch is precisely work that diverged and never rejoined, which
+the new axiom 3 calls a separate plan, so a migration must either split every branch out into its own plan or
+fabricate a join. The decision is to fabricate the weakest one in the most visible place: each branch merges at
+the edge level with its current top, clamped to the highest legal edge where a branch runs past its enclosing
+terminus. Today's geometry survives almost exactly, each branch gains a short return line at its top, and one
+drag corrects any claim the author disagrees with.</p>
+
+<p>The rest is mechanical, and all of it happens in one pass. <code>tasks</code> becomes <code>nodes</code>;
+every id is reminted as <code>n_</code> plus timestamp and counter, with a map from old id to new so that notes
+and bookmarks can be repointed, which is worth the churn because the pass is already rewriting every record and
+renaming every note file. Note files move into <code>notes/</code> and gain their slug. Bookmarks are rewritten
+in the device-independent shape: <code>zoom</code> is discarded, and the first surviving id of the old anchor
+chain becomes the bookmark's node set, so a migrated bookmark still lands where it did, framed to that one node
+rather than at a remembered scale. The domain directory is renamed to
+<code>pensagrex_domain_&lt;slug&gt;_&lt;id&gt;</code>, and the library root moves from <code>forests/</code> to
+<code>domains/</code>.</p>
+
+<h2>14 &nbsp;The file, as the decisions leave it</h2>
+
+<pre>&lt;library root&gt;/                                 &lt;- .../pensa-grex/domains/
+  pensagrex_domain_work_mrtwgppt01/
+    domain.json
+    bookmarks.json
+    notes/
+      n_mrtwgppt03_draft-jd.md</pre>
+
+<p>The directory's name is a label: the prefix says what it is and which app owns it, the slug keeps a library
+listing readable, and the id makes it findable. Nothing resolves a domain by its path, so a mismatch between the
+label and the record is repaired by regenerating the label. JSON5 is gone, so the listing below is strict JSON
+and its fields are described after it rather than in comments.</p>
+
+<pre>{
+  "schemaVersion": 3,
+  "id": "d_mrtwgppt01",
+  "title": "Work",
+  "planOrder": ["n_mrtwgppt02"],
+  "nodes": {
+    "n_mrtwgppt02": {
+      "id": "n_mrtwgppt02",
+      "title": "Hiring",
+      "kind": "project",
+      "createdAt": "2026-07-26T09:14:02.118Z",
+      "note": null,
+      "flagged": false,
+      "next": "n_mrtwgppt03",
+      "rightBranches": [],
+      "leftBranches": []
+    },
+    "n_mrtwgppt03": {
+      "id": "n_mrtwgppt03",
+      "title": "Draft JD",
+      "kind": "task",
+      "status": "todo",
+      "createdAt": "2026-07-26T09:14:02.118Z",
+      "completedAt": null,
+      "note": "n_mrtwgppt03_draft-jd.md",
+      "here": false,
+      "flagged": false,
+      "next": "n_mrtwgppt04",
+      "mergePoint": null,
+      "rightBranches": ["n_mrtwgppt05"],
+      "leftBranches": []
+    },
+    "n_mrtwgppt04": {
+      "id": "n_mrtwgppt04",
+      "kind": "terminus",
+      "createdAt": "2026-07-26T09:14:02.118Z",
+      "note": null,
+      "next": null,
+      "mergePoint": null,
+      "rightBranches": [],
+      "leftBranches": []
+    }
+  }
+}</pre>
+
+<p>An id is a prefix, a base36 millisecond timestamp of eight characters, and a two-character counter that
+resets each millisecond, so <code>n_mrtwgppt01</code> is twelve characters, fixed width, entirely lowercase,
+and sorts chronologically by plain string comparison; a domain's is the same body behind <code>d_</code>. All
+lowercase is what makes an id safe as a filename on a case-normalizing filesystem, and the counter rather than
+randomness is what makes a two-hundred-node paste collide-free. There is no device discriminator, because there
+is one writer per machine; ids are opaque and never parsed, so one can be added to newly minted ids on the day a
+sync server exists without touching a single old id.</p>
+
+<p><code>planOrder</code> orders the plans left to right and is advisory, since the graph decides what is a
+base. <code>status</code>, <code>completedAt</code>, and <code>here</code> belong to tasks alone;
+<code>completedAt</code> is set exactly when the status is completed. <code>note</code> holds a filename inside
+<code>notes/</code>, whose slug is the first twelve characters of the title, sanitized to lowercase
+alphanumerics and hyphens and dropped altogether when a title yields nothing; the slug is decorative and
+refreshed best-effort on a retitle, and the field is what resolves. The branch arrays are ordered innermost
+first, and that order is the author's.</p>
+
+<p>Bookmarks stay in a sidecar beside the domain file, and every field in one is now device-independent, so a
+bookmark travels with the data as axiom 8 permits a named view to do:</p>
+
+<pre>{
+  "bookmarks": [
+    { "name": "Hiring, in flight",
+      "collapsed": ["n_mrtwgppt02"],
+      "nodes": ["n_mrtwgppt03", "n_mrtwgppt05", "n_mrtwgppt04"] }
+  ]
+}</pre>
+
+<p>No pan, no scale, no anchor chain: <code>nodes</code> is every node drawn wholly inside the viewport when
+the bookmark was saved, and any client computes its own framing from where those nodes sit now, under a maximum
+scale and a minimum padding. Deleted ids are filtered out and the survivors framed, so a bookmark degrades
+rather than breaking, and only an empty set is broken.</p>
+
+<p>A TerminusNode keeps <code>next</code>, the branch arrays, and <code>merge_point</code>, because a
+sub-project's close has an edge above it and can therefore host a branch, receive a merge, and even be a branch
+trunk's own tip. It keeps <code>note</code> as well, decided in discussion: a scope's close is exactly where one
+would record what finishing it took. What it does not carry is a title, a status, a cursor, or a flag, so it
+cannot be searched for by name or swept up by a flag query; a note on a terminus is found by walking to the
+scope that owns it.</p>
+
+<h2>15 &nbsp;Where this stands</h2>
+
+<p>All of it is settled unless listed as open below, and the whole of it is scheduled as v3.0.0.</p>
+
+<h3>Structure</h3>
+<ul class="log">
+<li>Every branch returns to the trunk it left. Axiom&nbsp;2 is replaced by the two axioms in
+section&nbsp;2, and the three doc sites are amended together.</li>
+<li>Three node kinds, a TerminusNode for every ProjectNode, and a plan bounded by a base ProjectNode and its
+TerminusNode. Two productions, <code>Plan</code> and <code>Body</code>, generate the skeleton; a sub-project
+is a Plan inside a Body, a branch's trunk is a Body, and a Body may be empty.</li>
+<li>A merge may land above any node, subject to the three clauses in section&nbsp;4; the enclosing scope is
+found by matching brackets, and the root-terminus prohibition follows from containment rather than standing as
+its own rule. A branch may merge at its own edge, which keeps the top of every trunk forkable.</li>
+<li><code>mergePoint</code> names the node below the join edge, the convention the branch arrays use.</li>
+<li>Nesting between a branch span and a scope span is kept, on both sides, because collapsing a scope is what
+it protects. Nesting between two branch spans is not required.</li>
+<li>A TerminusNode may carry a note, and only a note. It has no title, status, cursor, or flag, so the paired
+ProjectNode is the scope's handle for a flag query.</li>
+<li>Empty is a resting state for a project and not for a branch: deleting a project's last task leaves the
+pair standing, deleting a branch's last task removes the branch and its return, and opening a branch creates
+it with one task inside.</li>
+</ul>
+
+<h3>Drawing</h3>
+<ul class="log">
+<li>Branch and return lines may cross trunk lines. A crossing is drawn as a line hop in which the lateral
+line hops and the trunk runs unbroken; no crossing may fall in a node's space, so lateral runs go in the
+clearance band between rows.</li>
+<li>Lateral order is the author's and is stored, innermost first, with a new branch landing innermost by
+default because a single-edge span costs no crossings there. Which side a branch hangs on stays stored.</li>
+<li>A branch point is drawn just above the node below its edge and a merge point just below the node above
+its edge, unconditionally, measured from the label shape rather than from a bare dot.</li>
+<li>Row assignment becomes a longest-path layering, which cannot fail because the merge clauses keep the
+constraint graph acyclic. The height that crossings and corridors add is accepted as a cost.</li>
+</ul>
+
+<h3>Vocabulary and file</h3>
+<ul class="log">
+<li>The container is a Domain, in code and in speech; ProjectSuite is dropped, since the
+container is not a project. <code>tasks</code> becomes <code>nodes</code>, and the triad of intent 1 becomes
+Projects, Tasks, Branches.</li>
+<li>The stored form is a DomainRecord and the derived form a DomainModel,
+called <code>record</code> and <code>model</code> in code; <code>buildModel</code>,
+<code>validateRecord</code>, and <code>migrateRecord</code> replace the forest-named trio.</li>
+<li>Plain JSON, not JSON5, with camelCase keys throughout and <code>title</code> as the label on every kind
+that has one, the domain included.</li>
+<li>Ids are <code>n_</code> or <code>d_</code> plus an eight-character base36 millisecond timestamp plus a
+two-character counter that resets each millisecond: twelve characters, lowercase, fixed width, chronologically
+sortable, with no device discriminator until a second writer exists.</li>
+<li><code>&lt;library root&gt;/pensagrex_domain_&lt;slug&gt;_&lt;id&gt;/</code> holding
+<code>domain.json</code>, <code>bookmarks.json</code>, and <code>notes/</code>. The record's id is the
+identity and the path is a label, repaired rather than trusted. The library root moves from
+<code>forests/</code> to <code>domains/</code>.</li>
+<li>A note file is named for its node id plus a twelve-character slug of the title, sanitized and decorative,
+refreshed best-effort on a retitle.</li>
+<li>A bookmark is <code>{name, collapsed[], nodes[]}</code> in the sidecar, with no zoom and no anchor chain;
+the client frames the surviving nodes under a maximum scale and a minimum padding.</li>
+<li>Migration fabricates one thing only: each schema-2 branch merges at the edge level with its current top,
+clamped to the highest legal edge, which preserves today's geometry and is corrected by a drag. The closes are
+faithful, and the pass writes <code>domains/</code> while leaving <code>forests/</code> untouched.</li>
+</ul>
+
+<h3>Open</h3>
+<ul class="log">
+<li>Reading a tall plan: hover magnification, constant-screen-size labels with collisions culled, or both.
+Deferred by decision to its own investigation; see section&nbsp;10.</li>
+<li>The default edge for a bare insertion, presumably the one above the cursor.</li>
+<li>Where the note dot is drawn on a terminus bar, which has no card to put it on.</li>
+<li>Whether the app reports how many crossings an ordering costs, now that the order is the author's to
+change.</li>
+</ul>
+
+<p class="status" style="margin-top:2.6rem;border-bottom:none;border-top:1px solid var(--rule);padding-top:1.4rem;">
+Presentation of <code>docs/model_v3_ideas.md</code>, which is the canonical source; when the two drift, the
+Markdown wins and this page is regenerated from it.</p>
+
+</div>
+</body>
+</html>
