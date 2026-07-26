@@ -215,7 +215,9 @@ function requireDomainDir(dirPath) {
 function titleOf(dir, id) {
   try {
     const rec = JSON.parse(readFileSync(join(dir, DOMAIN_FILE), 'utf-8'))
-    const t = rec && (rec.title || rec.domain)
+    // `title` is schema 3's; `domain` is what schema 2 called it, kept so a domain
+    // that has somehow not been migrated still shows a name rather than a slug.
+    const t = rec && (rec.title || rec.domain) //  is what schema 2 called it
     if (typeof t === 'string' && t) return t
   } catch {
     // fall through to the label
@@ -257,7 +259,7 @@ export function createDomain(title) {
   if (!dir) return { error: 'invalid domain title' }
   if (existsSync(dir)) return { error: 'a domain directory of that name already exists' }
   mkdirSync(join(dir, NOTES_DIR), { recursive: true })
-  const skeleton = { schema: 2, id, domain: title, rootOrder: [], tasks: {} }
+  const skeleton = { schemaVersion: 3, id, title, planOrder: [], nodes: {} }
   atomicWrite(join(dir, DOMAIN_FILE), JSON.stringify(skeleton, null, 2) + '\n')
   return { id, name: title, path: dir }
 }

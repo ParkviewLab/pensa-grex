@@ -3,7 +3,7 @@
 
 import { describe, it, expect } from 'vitest'
 import JSON5 from 'json5'
-import fixtureRaw from '../../../shared/model/fixtures/homelab.forest.json5?raw'
+import fixtureRaw from '../../../shared/model/fixtures/homelab.record.json?raw'
 import { buildModel } from '../../../shared/model/model.js'
 import { computeDomainLayout } from './layout.js'
 import { validateRecord } from '../../../shared/model/validate.js'
@@ -13,9 +13,9 @@ import * as M from '../../../shared/model/mutations.js'
 // measurement — layout.js is pure and must not need a DOM to be exercised.
 function syntheticSizes(model) {
   const sizes = new Map()
-  for (const [id, task] of model.tasks) {
-    const lines = task.here ? 3 : task.title.length > 18 ? 2 : 2
-    sizes.set(id, { cardW: 188, cardH: task.here ? 68 : 30 + lines * 12 })
+  for (const [id, node] of model.nodes) {
+    const lines = node.here ? 3 : node.title.length > 18 ? 2 : 2
+    sizes.set(id, { cardW: 188, cardH: node.here ? 68 : 30 + lines * 12 })
   }
   return { sizes }
 }
@@ -75,7 +75,9 @@ describe('computeDomainLayout — the HomeLab fixture', () => {
 
   it('draws one junction per fork, three total', () => {
     const { layout } = loadFixtureLayout()
-    expect(layout.junctions).toHaveLength(3) // k_migrate (2 branches, 1 junction), k_vlan-equivalent k_zigbee, and k_zigbee has 1
+    // Three forking nodes: k_migrate (2 branches sharing 1 junction), k_vlan (1),
+    // k_zigbee (1).
+    expect(layout.junctions).toHaveLength(3)
   })
 
   it('places each junction strictly between the two real cards it connects', () => {
@@ -94,7 +96,7 @@ describe('computeDomainLayout — the HomeLab fixture', () => {
   it('packs the three projects left to right without overlap', () => {
     const { layout } = loadFixtureLayout()
     const byId = new Map(layout.stations.map((s) => [s.id, s]))
-    // each project's root sits at a distinct x, left to right in rootOrder
+    // each project's root sits at a distinct x, left to right in planOrder
     const xs = ['p_media', 'p_net', 'p_auto'].map((id) => byId.get(id).x)
     expect(new Set(xs).size).toBe(3)
     expect(xs[0]).toBeLessThan(xs[1])
@@ -118,18 +120,22 @@ describe('computeDomainLayout — the HomeLab fixture', () => {
 
 describe('computeDomainLayout — edge cases', () => {
   it('returns finite empty-model bounds rather than NaN', () => {
-    const emptyModel = { trees: [], tasks: new Map(), getTreeIdForTask: () => null }
+    const emptyModel = { trees: [], nodes: new Map(), getTreeIdForTask: () => null }
     const layout = computeDomainLayout(emptyModel, new Map())
     expect(layout.stations).toEqual([])
     expect(Number.isFinite(layout.bounds.w)).toBe(true)
     expect(Number.isFinite(layout.bounds.h)).toBe(true)
   })
 
-  it('lays out a single-task tree (root only) without error', () => {
+  // Schema 3: a root has no incoming edge and must be a project node, so the
+  // smallest tree there is is one project root on its own. That is the same
+  // single-station, root-only case this has always covered.
+  it('lays out a single-node tree (root only) without error', () => {
     const record = {
-      schema: 1, domain: 'D',
-      trees: [{ id: 't1', name: 'Solo', rootTaskId: 'a' }],
-      tasks: { a: { id: 'a', title: 'Alone', status: 'todo', createdAt: '2026-01-01T00:00:00Z', completedAt: null, note: null, here: false, next: null, branches: [] } },
+      schemaVersion: 3, id: 'd_solo000000', title: 'D', planOrder: ['a'],
+      nodes: {
+        a: { id: 'a', title: 'Solo', kind: 'project', createdAt: '2026-01-01T00:00:00Z', note: null, flagged: false, next: null, leftBranches: [], rightBranches: [] },
+      },
     }
     const model = buildModel(record)
     const sizes = new Map([['a', { cardW: 138, cardH: 49 }]])
@@ -138,15 +144,21 @@ describe('computeDomainLayout — edge cases', () => {
     expect(Number.isFinite(layout.bounds.w)).toBe(true)
   })
 
-  // Regression: a fork "below" a bare root (no .next) once produced NaN junction
-  // and branch-track coordinates. assignRows now rises such a child to row 1.
-  it('lays out a below-branch on a bare root with finite coordinates', () => {
+  // Regression: a fork on a bare root (no .next, so the junction has no card
+  // above it) once produced NaN junction and branch-track coordinates. assignRows
+  // now rises such a child to row 1.
+  //
+  // Schema 3: this case was written as a fork "below" the root. A root has no
+  // trunk edge below it, so geometry.js already drew that fork in the gap ABOVE
+  // it — the only gap a branch array can name now — and the migration leaves such
+  // a fork on the root. The scenario (a fork whose upper node is absent) is
+  // unchanged; only its spelling is.
+  it('lays out a fork on a bare root with finite coordinates', () => {
     const record = {
-      schema: 1, domain: 'D',
-      trees: [{ id: 't1', name: 'Solo', rootTaskId: 'r' }],
-      tasks: {
-        r: { id: 'r', title: 'Root', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: null, branches: [{ child: 'b', side: 'left', at: 'below' }] },
-        b: { id: 'b', title: 'Below', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: null, branches: [] },
+      schemaVersion: 3, id: 'd_solo000000', title: 'D', planOrder: ['r'],
+      nodes: {
+        r: { id: 'r', title: 'Root', kind: 'project', createdAt: 'x', note: null, flagged: false, next: null, leftBranches: ['b'], rightBranches: [] },
+        b: { id: 'b', title: 'Branch', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, flagged: false, here: false, next: null, leftBranches: [], rightBranches: [] },
       },
     }
     const model = buildModel(record)
@@ -171,8 +183,16 @@ describe('computeDomainLayout — edge cases', () => {
 
 function mkTask(id, over = {}) {
   return {
-    id, title: id, status: 'todo', createdAt: '2026-01-01T00:00:00Z', completedAt: null,
-    note: null, here: false, next: null, branches: [], ...over,
+    id, title: id, kind: 'task', status: 'todo', createdAt: '2026-01-01T00:00:00Z', completedAt: null,
+    note: null, flagged: false, here: false, next: null, leftBranches: [], rightBranches: [], ...over,
+  }
+}
+// A tree's root: a project node, which carries no status, completedAt or here,
+// and whose title is the tree's name.
+function mkProject(id, over = {}) {
+  return {
+    id, title: id, kind: 'project', createdAt: '2026-01-01T00:00:00Z',
+    note: null, flagged: false, next: null, leftBranches: [], rightBranches: [], ...over,
   }
 }
 
@@ -218,17 +238,23 @@ function countCrossings(layout) {
 }
 
 describe('computeDomainLayout — non-crossing branches', () => {
-  // The Wide tree: trunk Alpha->Bravo->Charlie->Delta; Charlie forks below to
-  // One (left) and Two (right); Delta forks below to Apple (left) and Banana
-  // (right); Two continues up to Wonder. Adding Wonder used to push Banana into
-  // a lane whose connector crossed Two's line.
+  // The Wide tree: trunk Alpha->Bravo->Charlie->Delta; Bravo forks to One (left)
+  // and Two (right), which therefore start level with Charlie; Charlie forks to
+  // Apple (left) and Banana (right), level with Delta; Two continues up to Wonder.
+  // Adding Wonder used to push Banana into a lane whose connector crossed Two's
+  // line.
+  //
+  // Schema 3: these were Charlie's and Delta's at:'below' forks. A below-fork on X
+  // names the edge whose upper node is X, i.e. the one rising from X's main-line
+  // predecessor, so the migration moves each fork one node down the trunk. The
+  // drawing is the same one: the same junction gap, the same rows for the children.
   const wide = {
-    schema: 1, domain: 'W', trees: [{ id: 't', name: 'Wide', rootTaskId: 'alpha' }],
-    tasks: {
-      alpha: mkTask('alpha', { next: 'bravo' }),
-      bravo: mkTask('bravo', { next: 'charlie' }),
-      charlie: mkTask('charlie', { next: 'delta', branches: [{ child: 'one', side: 'left', at: 'below' }, { child: 'two', side: 'right', at: 'below' }] }),
-      delta: mkTask('delta', { branches: [{ child: 'apple', side: 'left', at: 'below' }, { child: 'banana', side: 'right', at: 'below' }] }),
+    schemaVersion: 3, id: 'd_wide000000', title: 'W', planOrder: ['alpha'],
+    nodes: {
+      alpha: mkProject('alpha', { next: 'bravo' }),
+      bravo: mkTask('bravo', { next: 'charlie', leftBranches: ['one'], rightBranches: ['two'] }),
+      charlie: mkTask('charlie', { next: 'delta', leftBranches: ['apple'], rightBranches: ['banana'] }),
+      delta: mkTask('delta'),
       one: mkTask('one'), two: mkTask('two', { next: 'wonder' }), wonder: mkTask('wonder'),
       apple: mkTask('apple'), banana: mkTask('banana'),
     },
@@ -245,12 +271,12 @@ describe('computeDomainLayout — non-crossing branches', () => {
   it('draws a deep both-sides nest with no crossing', () => {
     // a spine with nested sub-branches on both sides at overlapping rows
     const deep = {
-      schema: 1, domain: 'D', trees: [{ id: 't', name: 'Deep', rootTaskId: 'r' }],
-      tasks: {
-        r: mkTask('r', { next: 'r2', branches: [{ child: 'L', side: 'left', at: 'above' }, { child: 'R', side: 'right', at: 'above' }] }),
-        r2: mkTask('r2', { branches: [{ child: 'L2', side: 'left', at: 'above' }, { child: 'R2', side: 'right', at: 'above' }] }),
-        L: mkTask('L', { next: 'La', branches: [{ child: 'Lb', side: 'left', at: 'above' }] }), La: mkTask('La'), Lb: mkTask('Lb'),
-        R: mkTask('R', { next: 'Ra', branches: [{ child: 'Rb', side: 'right', at: 'above' }] }), Ra: mkTask('Ra'), Rb: mkTask('Rb'),
+      schemaVersion: 3, id: 'd_deep000000', title: 'D', planOrder: ['r'],
+      nodes: {
+        r: mkProject('r', { next: 'r2', leftBranches: ['L'], rightBranches: ['R'] }),
+        r2: mkTask('r2', { leftBranches: ['L2'], rightBranches: ['R2'] }),
+        L: mkTask('L', { next: 'La', leftBranches: ['Lb'] }), La: mkTask('La'), Lb: mkTask('Lb'),
+        R: mkTask('R', { next: 'Ra', rightBranches: ['Rb'] }), Ra: mkTask('Ra'), Rb: mkTask('Rb'),
         L2: mkTask('L2'), R2: mkTask('R2'),
       },
     }
@@ -293,12 +319,13 @@ describe('computeDomainLayout — after drag-and-drop moves', () => {
 
 describe('computeDomainLayout — tip-fork connector', () => {
   // The Move tree: Alpha (root) -> Beta (the tip of the main line), and Beta
-  // forks left to Gamma above it. Beta must be connected up to the fork junction.
+  // forks left to Gamma, one row above it. Beta must be connected up to the fork
+  // junction.
   const move = {
-    schema: 1, domain: 'M', trees: [{ id: 't', name: 'Move', rootTaskId: 'alpha' }],
-    tasks: {
-      alpha: mkTask('alpha', { next: 'beta' }),
-      beta: mkTask('beta', { branches: [{ child: 'gamma', side: 'left', at: 'above' }] }),
+    schemaVersion: 3, id: 'd_move000000', title: 'M', planOrder: ['alpha'],
+    nodes: {
+      alpha: mkProject('alpha', { next: 'beta' }),
+      beta: mkTask('beta', { leftBranches: ['gamma'] }),
       gamma: mkTask('gamma'),
     },
   }
@@ -326,9 +353,9 @@ describe('computeDomainLayout — angled branch connectors', () => {
   // connector's flat leg tilts up to c's lane, then a short vertical riser into c,
   // while the junction diamond stays put at [a.x, junctionY].
   const tilt = {
-    schema: 1, domain: 'T', trees: [{ id: 't', name: 'Tilt', rootTaskId: 'a' }],
-    tasks: {
-      a: mkTask('a', { next: 'b', branches: [{ child: 'c', side: 'right', at: 'above' }] }),
+    schemaVersion: 3, id: 'd_tilt000000', title: 'T', planOrder: ['a'],
+    nodes: {
+      a: mkProject('a', { next: 'b', rightBranches: ['c'] }),
       b: mkTask('b'),
       c: mkTask('c'),
     },
@@ -350,7 +377,7 @@ describe('computeDomainLayout — angled branch connectors', () => {
     // the elbow is at c's lane, lifted off junctionY toward the (higher) anchor,
     // but not past it — so a vertical riser remains
     expect(Math.abs(p1[0] - c.x)).toBeLessThan(0.5)
-    expect(p2[1]).toBeLessThan(p0[1]) // above-branch: anchor is higher (smaller y)
+    expect(p2[1]).toBeLessThan(p0[1]) // a fork always rises: the anchor is higher (smaller y)
     expect(p1[1]).toBeLessThan(p0[1]) // elbow lifted up from the junction
     expect(p1[1]).toBeGreaterThan(p2[1]) // but short of the anchor (riser preserved)
     // the flat leg is tilted and no steeper than 12 deg
@@ -370,13 +397,9 @@ describe('computeDomainLayout — angled branch connectors', () => {
     // their legs must all leave it at the same angle (a single ray), not flatten
     // as the lane gets further out.
     const fan = {
-      schema: 1, domain: 'F', trees: [{ id: 't', name: 'Fan', rootTaskId: 'a' }],
-      tasks: {
-        a: mkTask('a', { next: 'b', branches: [
-          { child: 'c', side: 'right', at: 'above' },
-          { child: 'd', side: 'right', at: 'above' },
-          { child: 'e', side: 'right', at: 'above' },
-        ] }),
+      schemaVersion: 3, id: 'd_fan0000000', title: 'F', planOrder: ['a'],
+      nodes: {
+        a: mkProject('a', { next: 'b', rightBranches: ['c', 'd', 'e'] }),
         b: mkTask('b'), c: mkTask('c'), d: mkTask('d'), e: mkTask('e'),
       },
     }

@@ -13,6 +13,7 @@ import { initTheme } from './theme/theme.js'
 import { createViewport } from './interaction/viewport.js'
 import { mountLayout } from './render/scene.js'
 import { buildModel } from '../../shared/model/model.js'
+import { branchChildrenOf } from '../../shared/model/validate.js'
 import { measureDomain } from './layout/measure.js'
 import { computeDomainLayout } from './layout/layout.js'
 import { createApi } from './bridge/api.js'
@@ -23,8 +24,8 @@ import { openContextMenu, closeContextMenu } from './interaction/contextMenu.js'
 import { promptText, chooseAction } from './ui/dialog.js'
 import { createNoteEditor } from './notes/noteEditor.js'
 import { serializeProject } from '../../shared/export/markdown.js'
-import homelabFixtureRaw from '../../shared/model/fixtures/homelab.forest.json5?raw'
-import workFixtureRaw from '../../shared/model/fixtures/work.forest.json5?raw'
+import homelabFixtureRaw from '../../shared/model/fixtures/homelab.record.json?raw'
+import workFixtureRaw from '../../shared/model/fixtures/work.record.json?raw'
 
 initTheme(document.getElementById('mode'))
 
@@ -60,7 +61,7 @@ const noteEditor = createNoteEditor({
   writeNote: (dir, file, text) => api.writeNote(dir, file, text),
   openExternal: (url) => api.openExternal(url),
   onFirstWrite: (taskId, file) => {
-    const t = currentRecord && currentRecord.tasks[taskId]
+    const t = currentRecord && currentRecord.nodes[taskId]
     if (t && !t.note) applyOp('setNote', taskId, file)
   },
   // Surfaced when an external writer changes or removes the note being edited.
@@ -68,7 +69,7 @@ const noteEditor = createNoteEditor({
 })
 
 function openNote(taskId) {
-  const t = currentRecord && currentRecord.tasks[taskId]
+  const t = currentRecord && currentRecord.nodes[taskId]
   if (t) noteEditor.open(t, currentDomainPath)
 }
 
@@ -294,9 +295,9 @@ async function persistBookmarks() {
 // A node is a root iff nothing points at it (no .next, no branch child). Roots
 // are project nodes; nothing may be added below them and their kind is fixed.
 function isRootId(record, id) {
-  for (const t of Object.values(record.tasks)) {
+  for (const t of Object.values(record.nodes)) {
     if (t.next === id) return false
-    if ((t.branches || []).some((b) => b.child === id)) return false
+    if (branchChildrenOf(t).some((b) => b.child === id)) return false
   }
   return true
 }
@@ -307,7 +308,7 @@ function isRootId(record, id) {
 // so this is a meaningful insertion index.
 function rootDropIndex(sourceId, clientX) {
   let index = 0
-  for (const id of Object.keys(currentRecord.tasks)) {
+  for (const id of Object.keys(currentRecord.nodes)) {
     if (id === sourceId || !isRootId(currentRecord, id)) continue
     const el = contentEl.querySelector('[data-task-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]')
     if (!el) continue
@@ -335,7 +336,7 @@ function clientToWorld(clientX, clientY) {
 // or {kind:'none'}. A card takes precedence over a gap; a gap over empty canvas.
 function resolveDropIntent(sourceId, clientX, clientY) {
   if (!currentRecord || !currentLayout) return { kind: 'none' }
-  const src = currentRecord.tasks[sourceId]
+  const src = currentRecord.nodes[sourceId]
   if (!src) return { kind: 'none' }
   const { wx, wy } = clientToWorld(clientX, clientY)
   const sub = subtreeIdsOf(currentRecord, sourceId)
@@ -354,7 +355,7 @@ function resolveDropIntent(sourceId, clientX, clientY) {
   // upward, so Q's bottom edge is above P's top edge.
   const CARET_HALF = 78 // a touch wider than the card, for a comfortable target
   const TIP_GAP = 44
-  for (const [pid, p] of Object.entries(currentRecord.tasks)) {
+  for (const [pid, p] of Object.entries(currentRecord.nodes)) {
     const ps = byId.get(pid)
     if (!ps || Math.abs(wx - ps.x) > CARET_HALF) continue
     const q = p.next ? byId.get(p.next) : null
@@ -407,7 +408,7 @@ function renderDropHint(intent) {
 // corrupting the record.
 function applyDropIntent(sourceId, intent) {
   if (!currentRecord || !intent) return
-  const node = currentRecord.tasks[sourceId]
+  const node = currentRecord.nodes[sourceId]
   if (!node) return
   if (intent.kind === 'fork') {
     applyOp(node.kind === 'project' ? 'moveSubtree' : 'moveTaskNode', sourceId, intent.targetId)
@@ -428,10 +429,10 @@ function subtreeIdsOf(record, startId) {
     const id = stack.pop()
     if (ids.has(id)) continue
     ids.add(id)
-    const t = record.tasks[id]
+    const t = record.nodes[id]
     if (!t) continue
     if (t.next) stack.push(t.next)
-    for (const b of t.branches || []) stack.push(b.child)
+    for (const b of branchChildrenOf(t)) stack.push(b.child)
   }
   return ids
 }
@@ -441,18 +442,19 @@ function subtreeIdsOf(record, startId) {
 // Collapse is client-local (docs/northstar.md axiom 9), so this never touches
 // currentRecord or the saved record; a collapsed id that is now a task is ignored.
 function pruneCollapsed(record, collapsed) {
-  const ids = [...collapsed].filter((id) => record.tasks[id] && record.tasks[id].kind === 'project')
+  const ids = [...collapsed].filter((id) => record.nodes[id] && record.nodes[id].kind === 'project')
   if (!ids.length) return record
   const remove = new Set()
   for (const id of ids) for (const d of subtreeIdsOf(record, id)) if (d !== id) remove.add(d)
   const next = structuredClone(record)
   for (const id of ids) {
     if (remove.has(id)) continue // this collapsed node is itself hidden inside another
-    next.tasks[id].collapsed = true
-    next.tasks[id].next = null
-    next.tasks[id].branches = []
+    next.nodes[id].collapsed = true
+    next.nodes[id].next = null
+    next.nodes[id].leftBranches = []
+    next.nodes[id].rightBranches = []
   }
-  for (const d of remove) delete next.tasks[d]
+  for (const d of remove) delete next.nodes[d]
   return next
 }
 
@@ -470,7 +472,7 @@ function toggleCollapse(taskId) {
 async function collectSubtreeNotes(taskId) {
   const notes = {}
   for (const id of subtreeIdsOf(currentRecord, taskId)) {
-    const rec = currentRecord.tasks[id]
+    const rec = currentRecord.nodes[id]
     if (rec.note) {
       const r = await api.readNote(currentDomainPath, rec.note)
       notes[id] = (r && r.content) || ''
@@ -483,9 +485,9 @@ async function collectSubtreeNotes(taskId) {
 // clipboard. Taken by value at copy time, so it is unaffected by later edits or a
 // domain switch; note text is read now rather than referenced by file.
 async function copyProject(taskId) {
-  const tasks = {}
-  for (const id of subtreeIdsOf(currentRecord, taskId)) tasks[id] = structuredClone(currentRecord.tasks[id])
-  clipboard = { rootId: taskId, tasks, notes: await collectSubtreeNotes(taskId) }
+  const nodes = {}
+  for (const id of subtreeIdsOf(currentRecord, taskId)) nodes[id] = structuredClone(currentRecord.nodes[id])
+  clipboard = { rootId: taskId, nodes, notes: await collectSubtreeNotes(taskId) }
 }
 
 // Paste the clipboard into the open domain as a new tree: fresh ids, kept
@@ -501,7 +503,7 @@ async function pasteTreeFlow() {
 async function exportProjectFlow(taskId) {
   const notes = await collectSubtreeNotes(taskId)
   const md = serializeProject(currentRecord, taskId, notes)
-  const base = (currentRecord.tasks[taskId].title || 'project').trim() || 'project'
+  const base = (currentRecord.nodes[taskId].title || 'project').trim() || 'project'
   const res = await api.exportMarkdown(base + '.md', md)
   if (res && res.error) {
     await chooseAction({ title: 'Export failed', message: res.error, actions: [{ label: 'OK', value: null }] })
@@ -537,7 +539,7 @@ async function addBookmarkFlow() {
 // fit the domain and say so. Collapse is resolved lazily here, not on delete.
 async function jumpToBookmark(bm) {
   if (!currentRecord) return
-  collapsedSet = new Set((bm.collapsed || []).filter((id) => currentRecord.tasks[id] && currentRecord.tasks[id].kind === 'project'))
+  collapsedSet = new Set((bm.collapsed || []).filter((id) => currentRecord.nodes[id] && currentRecord.nodes[id].kind === 'project'))
   if (currentDomainName) api.setViewState(currentDomainName, { collapsed: [...collapsedSet] })
   await render(currentRecord, { fit: false })
   if (!currentLayout) return
@@ -571,7 +573,7 @@ async function deleteBookmarkFlow(index) {
 // ---- editing flows (each dialog runs after the menu has closed) ----
 
 async function renameTask(taskId) {
-  const title = await promptText({ title: 'Rename task', label: 'Title', value: currentRecord.tasks[taskId].title })
+  const title = await promptText({ title: 'Rename task', label: 'Title', value: currentRecord.nodes[taskId].title })
   if (title === null) return
   applyOp('setTitle', taskId, title)
 }
@@ -589,9 +591,9 @@ async function addBranchFlow(dir, taskId) {
 }
 
 async function deleteTaskFlow(taskId) {
-  const task = currentRecord.tasks[taskId]
+  const task = currentRecord.nodes[taskId]
   const isRoot = isRootId(currentRecord, taskId)
-  const hasDescendants = !!task.next || (task.branches && task.branches.length > 0)
+  const hasDescendants = !!task.next || branchChildrenOf(task).length > 0
   let mode = 'subtree'
   if (isRoot && hasDescendants) {
     // Deleting a project's root deletes the whole project — a root has no splice.
@@ -626,7 +628,7 @@ async function addTreeFlow() {
 }
 
 function openTaskMenu(x, y, taskId) {
-  const task = currentRecord.tasks[taskId]
+  const task = currentRecord.nodes[taskId]
   const isProject = task.kind === 'project'
   const isRoot = isRootId(currentRecord, taskId)
   const items = []
@@ -667,7 +669,7 @@ function openTaskMenu(x, y, taskId) {
   // successor cannot take the base); "move down" needs a non-root main-line
   // predecessor to swap below.
   const succId = task.next
-  const predId = Object.keys(currentRecord.tasks).find((pid) => currentRecord.tasks[pid].next === taskId)
+  const predId = Object.keys(currentRecord.nodes).find((pid) => currentRecord.nodes[pid].next === taskId)
   if (succId && !isRoot) items.push({ label: 'Move up', onClick: () => applyOp('moveUp', taskId) })
   if (predId && !isRootId(currentRecord, predId)) items.push({ label: 'Move down', onClick: () => applyOp('moveDown', taskId) })
   items.push({ label: 'Rename…', onClick: () => renameTask(taskId) })
@@ -703,7 +705,7 @@ viewportEl.addEventListener('contextmenu', (e) => {
   if (!currentRecord) return
   if (flaggedOnly) return // read-only view; card gestures are already disabled via CSS
   const taskId = taskIdFromEvent(e)
-  if (taskId && currentRecord.tasks[taskId]) openTaskMenu(e.clientX, e.clientY, taskId)
+  if (taskId && currentRecord.nodes[taskId]) openTaskMenu(e.clientX, e.clientY, taskId)
   else openCanvasMenu(e.clientX, e.clientY)
 })
 
@@ -712,7 +714,7 @@ viewportEl.addEventListener('click', (e) => {
   if (!currentRecord) return
   if (!e.target.closest('.noteicon')) return
   const taskId = taskIdFromEvent(e)
-  if (taskId && currentRecord.tasks[taskId]) openNote(taskId)
+  if (taskId && currentRecord.nodes[taskId]) openNote(taskId)
 })
 
 // Double-clicking a card's body toggles its flag (drawn as atomic orbits). The
@@ -722,7 +724,7 @@ viewportEl.addEventListener('dblclick', (e) => {
   if (!currentRecord) return
   if (e.target.closest('.gl') || e.target.closest('.noteicon')) return
   const taskId = taskIdFromEvent(e)
-  if (taskId && currentRecord.tasks[taskId]) applyOp('toggleFlag', taskId)
+  if (taskId && currentRecord.nodes[taskId]) applyOp('toggleFlag', taskId)
 })
 
 // Single-clicking a task's status glyph cycles its status
@@ -733,7 +735,7 @@ viewportEl.addEventListener('click', (e) => {
   const gl = e.target.closest('.gl')
   if (!gl || gl.classList.contains('project')) return
   const taskId = taskIdFromEvent(e)
-  if (taskId && currentRecord.tasks[taskId]) applyOp('cycleStatus', taskId)
+  if (taskId && currentRecord.nodes[taskId]) applyOp('cycleStatus', taskId)
 })
 
 const NEW_DOMAIN = '__new__'

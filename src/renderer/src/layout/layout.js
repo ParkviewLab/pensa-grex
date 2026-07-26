@@ -37,7 +37,7 @@ export function computeDomainLayout(model, sizes, opts = {}) {
   const anchorYForRow = (r) => cardTopY.get(r) - o.anchorGap
 
   const rawX = new Map()
-  for (const id of model.tasks.keys()) rawX.set(id, lane.get(lineOfTask.get(id)) * o.laneStep)
+  for (const id of model.nodes.keys()) rawX.set(id, lane.get(lineOfTask.get(id)) * o.laneStep)
 
   // ---- per-branch upward offset ----
   // Angling a branch up should carry the branch, and everything growing along
@@ -50,14 +50,14 @@ export function computeDomainLayout(model, sizes, opts = {}) {
   // grid; shared by the offset pass below and the connector emission later, so
   // the elbow's rise and the branch's lift are always the same number.
   function forkGeom(id, task, b) {
+    // Every fork leaves the edge rising from the node that holds it, so its gap is
+    // always (parentRow, parentRow + 1) and its upper node is that node's own
+    // successor. Schema 2's at:'below' forks, which sat one gap lower and had a
+    // special case for a root, are moved onto the node beneath by the migration.
     const parentRow = row.get(id)
-    let lowerRow, upperRow, upperId
-    if (b.at === 'below') {
-      if (task.predecessorId == null) { lowerRow = parentRow; upperRow = parentRow + 1; upperId = task.next }
-      else { lowerRow = parentRow - 1; upperRow = parentRow; upperId = id }
-    } else {
-      lowerRow = parentRow; upperRow = parentRow + 1; upperId = task.next
-    }
+    const lowerRow = parentRow
+    const upperRow = parentRow + 1
+    const upperId = task.next
     const lowerTop = cardTopY.get(lowerRow)
     const upperBottom = upperId ? baseBottom(upperId) : anchorYForRow(upperRow)
     const junctionY = (lowerTop + upperBottom) / 2
@@ -74,7 +74,7 @@ export function computeDomainLayout(model, sizes, opts = {}) {
   // parent line and leg rise; a line's total offset is its parent's plus its own
   // leg rise, with trunk lines at zero.
   const forkOfLine = new Map()
-  for (const [id, task] of model.tasks) {
+  for (const [id, task] of model.nodes) {
     for (const b of task.branches) {
       forkOfLine.set(b.child, { parent: lineOfTask.get(id), rise: forkGeom(id, task, b).rise })
     }
@@ -99,7 +99,7 @@ export function computeDomainLayout(model, sizes, opts = {}) {
 
   // ---- per-tree bounding box (pre-packing space) ----
   const tasksByTree = new Map(model.trees.map((t) => [t.id, []]))
-  for (const id of model.tasks.keys()) tasksByTree.get(model.getTreeIdForTask(id)).push(id)
+  for (const id of model.nodes.keys()) tasksByTree.get(model.getTreeIdForTask(id)).push(id)
 
   const treeBBox = new Map()
   for (const tree of model.trees) {
@@ -127,7 +127,7 @@ export function computeDomainLayout(model, sizes, opts = {}) {
   // ---- stations, dots, cursors ----
   const stations = []
   let minY = Infinity, maxY = -Infinity
-  for (const [id, task] of model.tasks) {
+  for (const [id, task] of model.nodes) {
     const box = cardBox(id)
     const x = finalX(id)
     const anchorY = anchorYOf(id)
@@ -143,7 +143,7 @@ export function computeDomainLayout(model, sizes, opts = {}) {
 
   // ---- tracks: one straight riser per line, anchor to anchor ----
   const linesByStart = new Map()
-  for (const id of model.tasks.keys()) {
+  for (const id of model.nodes.keys()) {
     const start = lineOfTask.get(id)
     if (!linesByStart.has(start)) linesByStart.set(start, [])
     linesByStart.get(start).push(id)
@@ -163,10 +163,10 @@ export function computeDomainLayout(model, sizes, opts = {}) {
   // actual cards involved, not a row-generic estimate, so it is always in
   // the genuinely empty space buildRowGrid guaranteed exists between them.
   // Two (or more) branches forking from the same attachment point (e.g. a
-  // task with several .branches at the same .at) share ONE diamond, keyed
+  // task with several forks) share ONE diamond, keyed
   // by that point, not one per branch.
   const junctionByKey = new Map()
-  for (const [id, task] of model.tasks) {
+  for (const [id, task] of model.nodes) {
     for (const b of task.branches) {
       const g = forkGeom(id, task, b)
       const offParent = offOf(id)

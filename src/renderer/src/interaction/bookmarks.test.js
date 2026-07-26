@@ -6,12 +6,12 @@ import { centeredStationId, anchorChain, resolveAnchor } from './bookmarks.js'
 
 // r(project) -> a -> b ; a forks to f
 const record = {
-  schema: 2, domain: 'T', rootOrder: ['r'],
-  tasks: {
-    r: { id: 'r', title: 'r', kind: 'project', createdAt: 'x', note: null, next: 'a', branches: [] },
-    a: { id: 'a', title: 'a', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: 'b', branches: [{ child: 'f', side: 'left', at: 'above' }] },
-    b: { id: 'b', title: 'b', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: null, branches: [] },
-    f: { id: 'f', title: 'f', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: null, branches: [] },
+  schemaVersion: 3, id: 'd_test0000', title: 'T', planOrder: ['r'],
+  nodes: {
+    r: { id: 'r', title: 'r', kind: 'project', createdAt: 'x', note: null, flagged: false, next: 'a', leftBranches: [], rightBranches: [] },
+    a: { id: 'a', title: 'a', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, flagged: false, here: false, next: 'b', leftBranches: ['f'], rightBranches: [] },
+    b: { id: 'b', title: 'b', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, flagged: false, here: false, next: null, leftBranches: [], rightBranches: [] },
+    f: { id: 'f', title: 'f', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, flagged: false, here: false, next: null, leftBranches: [], rightBranches: [] },
   },
 }
 

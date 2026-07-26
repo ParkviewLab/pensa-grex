@@ -42,7 +42,7 @@ export function mountLayout(contentEl, layout, model) {
 
   for (const d of layout.dots) contentEl.appendChild(buildDot(d.x, d.y))
   for (const s of layout.stations) {
-    const task = model.getTask(s.id)
+    const task = model.getNode(s.id)
     contentEl.appendChild(buildStationBox(task, s.x, s.cardTop, { isCursor: s.cursor }))
   }
 

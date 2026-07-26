@@ -14,6 +14,7 @@
 import { z } from 'zod'
 import { serializeProject } from '../../shared/export/markdown.js'
 import { noteFileName } from '../../shared/model/notes.js'
+import { branchChildrenOf } from '../../shared/model/validate.js'
 
 const STATUSES = ['todo', 'in-progress', 'completed', 'cancelled']
 
@@ -60,20 +61,20 @@ function readRecordOrThrow(taskService, dir) {
 
 function incomingSet(record) {
   const inc = new Set()
-  for (const t of Object.values(record.tasks)) {
+  for (const t of Object.values(record.nodes)) {
     if (t.next) inc.add(t.next)
-    for (const b of t.branches || []) inc.add(b.child)
+    for (const b of branchChildrenOf(t)) inc.add(b.child)
   }
   return inc
 }
 function rootIds(record) {
   const inc = incomingSet(record)
-  return Object.keys(record.tasks).filter((id) => !inc.has(id))
+  return Object.keys(record.nodes).filter((id) => !inc.has(id))
 }
 function predecessorOf(record, id) {
-  for (const [pid, t] of Object.entries(record.tasks)) {
+  for (const [pid, t] of Object.entries(record.nodes)) {
     if (t.next === id) return pid
-    for (const b of t.branches || []) if (b.child === id) return pid
+    for (const b of branchChildrenOf(t)) if (b.child === id) return pid
   }
   return null
 }
@@ -93,19 +94,19 @@ function subtreeIds(record, start) {
     const id = stack.pop()
     if (ids.has(id)) continue
     ids.add(id)
-    const t = record.tasks[id]
+    const t = record.nodes[id]
     if (!t) continue
     if (t.next) stack.push(t.next)
-    for (const b of t.branches || []) stack.push(b.child)
+    for (const b of branchChildrenOf(t)) stack.push(b.child)
   }
   return ids
 }
 function structuredNode(record, id) {
-  const t = record.tasks[id]
+  const t = record.nodes[id]
   const base = {
     id, title: t.title, kind: t.kind, flagged: !!t.flagged,
     hasNote: !!t.note, next: t.next || null,
-    branches: (t.branches || []).map((b) => ({ child: b.child, side: b.side, at: b.at })),
+    branches: branchChildrenOf(t),
   }
   if (t.kind === 'task') { base.status = t.status; base.here = !!t.here }
   return base
@@ -125,17 +126,17 @@ function domainOutline(record) {
 function runWrite(taskService, dir, op, args, primaryId) {
   const before = taskService.readRecord(dir)
   if (before.error) return fail(before.error)
-  const beforeKeys = new Set(Object.keys(before.record.tasks))
+  const beforeKeys = new Set(Object.keys(before.record.nodes))
   const res = taskService.runOp(dir, op, args)
   if (res.error) return fail(res.error)
   const after = res.record
-  const newIds = Object.keys(after.tasks).filter((id) => !beforeKeys.has(id))
+  const newIds = Object.keys(after.nodes).filter((id) => !beforeKeys.has(id))
   let affected = primaryId ?? null
   if (newIds.length) {
     const inc = incomingSet(after)
     affected = newIds.find((id) => !inc.has(id)) ?? newIds[0]
   }
-  const outline = affected && after.tasks[affected] ? projectOutline(after, rootOf(after, affected)) : domainOutline(after)
+  const outline = affected && after.nodes[affected] ? projectOutline(after, rootOf(after, affected)) : domainOutline(after)
   return json({ id: affected, outline })
 }
 
@@ -184,7 +185,7 @@ export function registerTools(server, deps, scope) {
     inputSchema: { domain: z.string().optional() },
   }, guard(async (a) => {
     const dir = dirOf(a); const r = record(dir); const inc = incomingSet(r)
-    const projects = Object.values(r.tasks).filter((t) => t.kind === 'project')
+    const projects = Object.values(r.nodes).filter((t) => t.kind === 'project')
       .map((t) => ({ id: t.id, title: t.title, kind: t.kind, root: !inc.has(t.id) }))
     return json({ domain: dir, projects })
   }))
@@ -194,7 +195,7 @@ export function registerTools(server, deps, scope) {
     inputSchema: { domain: z.string().optional() },
   }, guard(async (a) => {
     const dir = dirOf(a); const r = record(dir)
-    const flagged = Object.values(r.tasks).filter((t) => t.flagged).map((t) => structuredNode(r, t.id))
+    const flagged = Object.values(r.nodes).filter((t) => t.flagged).map((t) => structuredNode(r, t.id))
     return json({ domain: dir, flagged })
   }))
 
@@ -207,13 +208,13 @@ export function registerTools(server, deps, scope) {
     },
   }, guard(async (a) => {
     const dir = dirOf(a); const r = record(dir)
-    const roots = a.project_id ? [a.project_id] : rootIds(r).filter((id) => r.tasks[id].kind === 'project')
-    for (const id of roots) if (!r.tasks[id]) throw new Error(`no node "${id}" in this domain`)
-    const ids = a.project_id ? [...subtreeIds(r, a.project_id)] : Object.keys(r.tasks)
+    const roots = a.project_id ? [a.project_id] : rootIds(r).filter((id) => r.nodes[id].kind === 'project')
+    for (const id of roots) if (!r.nodes[id]) throw new Error(`no node "${id}" in this domain`)
+    const ids = a.project_id ? [...subtreeIds(r, a.project_id)] : Object.keys(r.nodes)
     const notes = {}
     if (a.include_notes) {
       for (const id of ids) {
-        const n = r.tasks[id] && r.tasks[id].note
+        const n = r.nodes[id] && r.nodes[id].note
         if (n) { const rn = store.readNote(dir, n); notes[id] = (rn && rn.content) || '' }
       }
     }
@@ -230,7 +231,7 @@ export function registerTools(server, deps, scope) {
     description: "Read a node's markdown note. Empty if the node has no note.",
     inputSchema: { node_id: z.string(), domain: z.string().optional() },
   }, guard(async (a) => {
-    const dir = dirOf(a); const r = record(dir); const t = r.tasks[a.node_id]
+    const dir = dirOf(a); const r = record(dir); const t = r.nodes[a.node_id]
     if (!t) throw new Error(`no node "${a.node_id}" in this domain`)
     const content = t.note ? ((store.readNote(dir, t.note) || {}).content || '') : ''
     return json({ id: a.node_id, note: t.note || null, content })
@@ -241,15 +242,16 @@ export function registerTools(server, deps, scope) {
     inputSchema: { node_id: z.string(), domain: z.string().optional() },
   }, guard(async (a) => {
     const dir = dirOf(a); const r = record(dir)
-    if (!r.tasks[a.node_id]) throw new Error(`no node "${a.node_id}" in this domain`)
+    if (!r.nodes[a.node_id]) throw new Error(`no node "${a.node_id}" in this domain`)
     const ids = subtreeIds(r, a.node_id)
-    const tasks = {}; const notes = {}
+    // The clip mirrors the record, so its node map is `nodes` too.
+    const nodes = {}; const notes = {}
     for (const id of ids) {
-      tasks[id] = structuredClone(r.tasks[id])
-      const note = r.tasks[id].note
+      nodes[id] = structuredClone(r.nodes[id])
+      const note = r.nodes[id].note
       if (note) { const rn = store.readNote(dir, note); notes[id] = (rn && rn.content) || '' }
     }
-    return json({ rootId: a.node_id, tasks, notes })
+    return json({ rootId: a.node_id, nodes, notes })
   }))
 
   if (level < SCOPES['read-write']) return
@@ -315,7 +317,7 @@ export function registerTools(server, deps, scope) {
     description: "Set a node's markdown note contents (writes the note file and records it on the node).",
     inputSchema: { node_id: z.string(), content: z.string(), domain: z.string().optional() },
   }, guard(async (a) => {
-    const dir = dirOf(a); const r = record(dir); const t = r.tasks[a.node_id]
+    const dir = dirOf(a); const r = record(dir); const t = r.nodes[a.node_id]
     if (!t) throw new Error(`no node "${a.node_id}" in this domain`)
     const file = t.note || noteFileName(a.node_id, t.title)
     const w = store.writeNote(dir, file, a.content)
@@ -331,7 +333,7 @@ export function registerTools(server, deps, scope) {
     description: "Delete a node's note file and clear it from the node.",
     inputSchema: { node_id: z.string(), domain: z.string().optional() },
   }, guard(async (a) => {
-    const dir = dirOf(a); const r = record(dir); const t = r.tasks[a.node_id]
+    const dir = dirOf(a); const r = record(dir); const t = r.nodes[a.node_id]
     if (!t) throw new Error(`no node "${a.node_id}" in this domain`)
     if (t.note) store.deleteNote(dir, t.note)
     return runWrite(taskService, dir, 'setNote', [a.node_id, null], a.node_id)
@@ -340,7 +342,7 @@ export function registerTools(server, deps, scope) {
   server.registerTool('paste_as_tree', {
     description: 'Paste a clip (from copy_project) into a domain as a fresh independent tree.',
     inputSchema: {
-      clip: z.object({ rootId: z.string(), tasks: z.record(z.string(), z.any()), notes: z.record(z.string(), z.string()).optional() }),
+      clip: z.object({ rootId: z.string(), nodes: z.record(z.string(), z.any()), notes: z.record(z.string(), z.string()).optional() }),
       domain: z.string().optional(),
     },
   }, guard(async (a) => runWrite(taskService, dirOf(a), 'pasteAsTree', [a.clip], null)))

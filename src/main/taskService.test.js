@@ -42,16 +42,16 @@ function domainWithTree(name = 'HomeLab', treeName = 'Overview') {
   const { path } = store.createDomain(name)
   const res = taskService.runOp(path, 'addTree', [treeName])
   expect(res.error).toBeUndefined()
-  return [path, Object.keys(res.record.tasks)[0]]
+  return [path, Object.keys(res.record.nodes)[0]]
 }
 
 describe('readRecord', () => {
-  it('reads a fresh domain as an empty schema-2 record', () => {
+  it('reads a fresh domain as an empty schema-3 record', () => {
     const { path } = store.createDomain('HomeLab')
     const res = taskService.readRecord(path)
     expect(res.error).toBeUndefined()
-    expect(res.record.schema).toBe(2)
-    expect(res.record.tasks).toEqual({})
+    expect(res.record.schemaVersion).toBe(3)
+    expect(res.record.nodes).toEqual({})
   })
 
   it('persists every write as plain JSON, parseable without the tolerant reader', () => {
@@ -62,7 +62,7 @@ describe('readRecord', () => {
     const text = store.loadDomainFile(dir).text
     expect(() => JSON.parse(text)).not.toThrow()
     expect(text.endsWith('\n')).toBe(true)
-    expect(Object.values(JSON.parse(text).tasks).some((t) => t.title === 'First')).toBe(true)
+    expect(Object.values(JSON.parse(text).nodes).some((t) => t.title === 'First')).toBe(true)
   })
 
   it('migrates a schema-1 record and persists the upgrade once', () => {
@@ -78,15 +78,23 @@ describe('readRecord', () => {
 
     const res = taskService.readRecord(path)
     expect(res.error).toBeUndefined()
-    expect(res.record.schema).toBe(2)
+    expect(res.record.schemaVersion).toBe(3)
 
-    // The upgrade was written back to disk, so it is a schema-2 record now, and a
+    // The upgrade was written back to disk, so it is a schema-3 record now, and a
     // second read finds nothing left to migrate (changed=false, no re-write).
     const disk = onDisk(path)
-    expect(disk.schema).toBe(2)
+    expect(disk.schemaVersion).toBe(3)
     expect(disk.trees).toBeUndefined()
-    expect(disk.rootOrder).toHaveLength(1)
-    expect(disk.tasks.a.kind).toBe('task')
+    expect(disk.planOrder).toHaveLength(1)
+    // Schema 3: the 2 -> 3 pass remints every node id, so the migrated task is
+    // found by its title rather than by its schema-1 id 'a'.
+    const migrated = Object.values(disk.nodes).find((n) => n.title === 'A')
+    expect(migrated.kind).toBe('task')
+    // "Once": the second read writes nothing, so the file (reminted ids included)
+    // is byte-for-byte what the first read left.
+    const text = store.loadDomainFile(path).text
+    expect(taskService.readRecord(path).error).toBeUndefined()
+    expect(store.loadDomainFile(path).text).toBe(text)
   })
 
   it('reports a JSON5 parse error rather than throwing', () => {
@@ -110,30 +118,30 @@ describe('runOp', () => {
     const res = taskService.runOp(path, 'addTree', ['Overview'])
     expect(res.error).toBeUndefined()
 
-    const ids = Object.keys(res.record.tasks)
+    const ids = Object.keys(res.record.nodes)
     expect(ids).toHaveLength(1)
-    const root = res.record.tasks[ids[0]]
+    const root = res.record.nodes[ids[0]]
     expect(root.kind).toBe('project')
     expect(root.title).toBe('Overview')
 
     // Persisted to disk, not just returned in memory.
     const disk = onDisk(path)
-    expect(disk.tasks[ids[0]].title).toBe('Overview')
-    expect(disk.rootOrder).toContain(ids[0])
+    expect(disk.nodes[ids[0]].title).toBe('Overview')
+    expect(disk.planOrder).toContain(ids[0])
   })
 
   it('chains ops: add a task above the root, then complete it', () => {
     const [dir, rootId] = domainWithTree()
     const added = taskService.runOp(dir, 'addTaskAbove', [rootId, 'First'])
     expect(added.error).toBeUndefined()
-    const taskId = Object.keys(added.record.tasks).find((id) => added.record.tasks[id].kind === 'task')
+    const taskId = Object.keys(added.record.nodes).find((id) => added.record.nodes[id].kind === 'task')
     expect(taskId).toBeTruthy()
 
     const done = taskService.runOp(dir, 'setStatus', [taskId, 'completed'])
     expect(done.error).toBeUndefined()
-    expect(done.record.tasks[taskId].status).toBe('completed')
-    expect(done.record.tasks[taskId].completedAt).toBeTruthy()
-    expect(onDisk(dir).tasks[taskId].status).toBe('completed')
+    expect(done.record.nodes[taskId].status).toBe('completed')
+    expect(done.record.nodes[taskId].completedAt).toBeTruthy()
+    expect(onDisk(dir).nodes[taskId].status).toBe('completed')
   })
 
   it('refuses an op that breaks an invariant and writes nothing', () => {
@@ -163,14 +171,14 @@ describe('runOp', () => {
     const record = taskService.readRecord(dir).record
     const clip = {
       rootId,
-      tasks: { [rootId]: structuredClone(record.tasks[rootId]) },
+      nodes: { [rootId]: structuredClone(record.nodes[rootId]) },
       notes: { [rootId]: '# source note\n' },
     }
     const res = taskService.runOp(dir, 'pasteAsTree', [clip])
     expect(res.error).toBeUndefined()
 
     // Two trees now: the original plus the paste.
-    const roots = Object.values(res.record.tasks).filter((t) => t.kind === 'project')
+    const roots = Object.values(res.record.nodes).filter((t) => t.kind === 'project')
     expect(roots).toHaveLength(2)
 
     // The pasted node got a fresh note file (named for its new id), and that file

@@ -19,6 +19,8 @@
 //   - The full subtree is emitted regardless of collapse (the caller passes the
 //     unpruned record).
 
+import { branchChildrenOf } from '../model/validate.js'
+
 const INDENT = '  ' // two spaces per nesting level
 
 function bulletFor(node) {
@@ -38,7 +40,7 @@ export function serializeProject(record, rootId, notes = {}) {
   // main-line successor stays at `depth` (a flat run); a project's successor and
   // every fork nest at `depth + 1`.
   function emit(id, depth) {
-    const node = record.tasks[id]
+    const node = record.nodes[id]
     if (!node || seen.has(id)) return
     seen.add(id)
     out.push(INDENT.repeat(depth) + bulletFor(node))
@@ -54,10 +56,10 @@ export function serializeProject(record, rootId, notes = {}) {
 
     // Forks are emitted before the main-line successor: a nested sub-list placed
     // after a shallower successor line would attach to the wrong parent.
-    for (const b of node.branches || []) emit(b.child, depth + 1)
+    for (const b of branchChildrenOf(node)) emit(b.child, depth + 1)
     if (node.next) emit(node.next, node.kind === 'project' ? depth + 1 : depth)
   }
 
-  if (record.tasks[rootId]) emit(rootId, 0)
+  if (record.nodes[rootId]) emit(rootId, 0)
   return out.join('\n') + '\n'
 }

@@ -66,7 +66,7 @@ describe('MCP end to end (real SDK client over loopback HTTP)', () => {
     // the write went through the authority to disk
     const dir = store.listDomains()[0].path
     const record = taskService.readRecord(dir).record
-    expect(Object.values(record.tasks).some((t) => t.title === 'Overview' && t.kind === 'project')).toBe(true)
+    expect(Object.values(record.nodes).some((t) => t.title === 'Overview' && t.kind === 'project')).toBe(true)
   })
 
   it('honours the read-only scope (no write tools are exposed)', async () => {

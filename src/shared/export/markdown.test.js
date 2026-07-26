@@ -10,20 +10,21 @@ import { serializeProject } from './markdown.js'
 // subtree, the three checkbox renderings, a struck cancelled task, and a note
 // inlined as indented body text.
 //   Proj -> Task one(todo, note) -> Task two(done) -> Sub(project) -> Sub task(cancelled)
-//   Task one forks to Branch one(todo)
+//   Task one forks left to Branch one(todo)
 function record() {
   const t = (id, title, over = {}) => ({
     id, title, kind: 'task', status: 'todo', createdAt: 'x', completedAt: null,
-    note: null, here: false, next: null, branches: [], ...over,
+    note: null, here: false, next: null, leftBranches: [], rightBranches: [], ...over,
   })
   const p = (id, title, over = {}) => ({
-    id, title, kind: 'project', createdAt: 'x', note: null, next: null, branches: [], ...over,
+    id, title, kind: 'project', createdAt: 'x', note: null, next: null,
+    leftBranches: [], rightBranches: [], ...over,
   })
   return {
-    schema: 2, domain: 'T', rootOrder: ['P'],
-    tasks: {
+    schemaVersion: 3, id: 'd_test000000', title: 'T', planOrder: ['P'],
+    nodes: {
       P:  p('P', 'Proj', { next: 'M1' }),
-      M1: t('M1', 'Task one', { note: 'M1.md', next: 'M2', branches: [{ child: 'B1', side: 'left', at: 'above' }] }),
+      M1: t('M1', 'Task one', { note: 'M1.md', next: 'M2', leftBranches: ['B1'] }),
       M2: t('M2', 'Task two', { status: 'completed', completedAt: 'x', next: 'SP' }),
       SP: p('SP', 'Sub', { next: 'S1' }),
       S1: t('S1', 'Sub task', { status: 'cancelled' }),
@@ -54,12 +55,12 @@ describe('serializeProject', () => {
 
   it('keeps a plain main-line run of tasks flat under the project root', () => {
     const record = {
-      schema: 2, domain: 'T', rootOrder: ['P'],
-      tasks: {
-        P: { id: 'P', title: 'P', kind: 'project', createdAt: 'x', note: null, next: 'a', branches: [] },
-        a: { id: 'a', title: 'a', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: 'b', branches: [] },
-        b: { id: 'b', title: 'b', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: 'c', branches: [] },
-        c: { id: 'c', title: 'c', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: null, branches: [] },
+      schemaVersion: 3, id: 'd_test000000', title: 'T', planOrder: ['P'],
+      nodes: {
+        P: { id: 'P', title: 'P', kind: 'project', createdAt: 'x', note: null, next: 'a', leftBranches: [], rightBranches: [] },
+        a: { id: 'a', title: 'a', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: 'b', leftBranches: [], rightBranches: [] },
+        b: { id: 'b', title: 'b', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: 'c', leftBranches: [], rightBranches: [] },
+        c: { id: 'c', title: 'c', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: null, leftBranches: [], rightBranches: [] },
       },
     }
     // a, b, c are siblings at one indent under the project, not a staircase.
