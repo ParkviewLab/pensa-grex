@@ -96,10 +96,12 @@ svg .tb{ fill:#d75f2e; font-size:10.5px; }
 <p class="eyebrow">Design record &middot; PensaGrex</p>
 <h1>Model v3: the names, the merge, and the invariants it brings with it</h1>
 <p class="status">A record of one design conversation, not a plan and not a decision. It states what was
-settled in discussion, what follows from it, and what is still open. Nothing here is implemented; the
-running app is schema&nbsp;2, in which forks never rejoin. Where this document and
-<code>docs/northstar.md</code> disagree, the northstar is still the authority until it is amended, and the
-amendment it would need is set out below.</p>
+settled in discussion, what follows from it, and what is still open. Nothing here is implemented in code; the
+running app is schema&nbsp;2, in which forks never rejoin. The amendment it asks of
+<code>docs/northstar.md</code> is set out below and landed on 2026-07-26, so axiom numbers on this page are
+the amended ones: single entry and single exit is axiom&nbsp;2, every fork returns is axiom&nbsp;3, and what
+were axioms 3 through 8 are now 4 through 9. Section&nbsp;2 keeps the pre-amendment numbers where it quotes
+what changed.</p>
 
 <div class="legend">
   <span><i class="k1"></i> trunk and branch lines, existing structure</span>
@@ -225,11 +227,10 @@ different kinds with different names.</p>
 
 <p>In schema 2 a fork opens a parallel stack and that stack simply ends. In v3 every branch returns to the
 trunk it left. That is not a naming change; it changes the class of graph from a strict tree to a
-single-entry, single-exit block structure, and it contradicts the northstar in three places.</p>
+single-entry, single-exit block structure, and it contradicted the northstar in three places.</p>
 
-<p>The claim appears at <code>docs/northstar.md:38</code> inside intent&nbsp;1, at
-<code>docs/northstar.md:73</code> as axiom&nbsp;2, and at <code>docs/model_ideas.md:26</code> as part of the
-definition of a tree. The axiom is the one that matters, because it is what underwrites the
+<p>The claim appeared inside intent&nbsp;1, as axiom&nbsp;2, and in <code>docs/model_ideas.md</code> as part
+of the definition of a tree. The axiom is the one that matters, because it is what underwrites the
 single-incoming-edge rule in <code>validateForest</code>, the tree-membership walk in
 <code>buildForest</code>, and the cycle check. If it merely lost a clause, nothing would tell a later reader
 which of those survive.</p>
@@ -254,11 +255,12 @@ already exists as <code>detachToTree</code>, which would acquire a second and be
 way out when work genuinely does not rejoin. So add-branch and detach become a pair of choices at the moment
 of divergence, where today add-branch alone covers both cases.</p>
 
-<p>Intent 1 changes with it, and so does axiom 6. The triad Task, Fork, Stack becomes Projects, Tasks,
-Branches, and the stack verbs go: with a terminus closing every trunk there is no free tip, so nothing is
-pushed and every addition is an insertion at an edge. Axiom 4 had already half-retired them, since completing a
-task leaves it on the map recoloured and only delete removes it, so nothing has popped for some time. Axiom 6
-names JSON5, and the file becomes plain JSON, decided in discussion; what that costs is comments and trailing
+<p>Intent 1 changes with it, and so does the file axiom, numbered 6 then and 7 now. The triad Task, Fork, Stack
+becomes Projects, Tasks, Branches, and the stack verbs go: with a terminus closing every trunk there is no free
+tip, so nothing is pushed and every addition is an insertion at an edge. The status axiom had already
+half-retired them, since completing a task leaves it on the map recoloured and only delete removes it, so
+nothing has popped for some time. The file axiom names JSON5, and the file becomes plain JSON, decided in
+discussion; what that costs is comments and trailing
 commas, so the axiom's ownership claim survives intact, since JSON is still plain text, grep-able, diff-able,
 and readable in any editor. Section&nbsp;12 sets out the operations that replace push and pop.</p>
 
@@ -584,7 +586,7 @@ freely as the author likes.</figcaption>
 </figure>
 
 <p>This rule survives the decision in section&nbsp;7 because it was never about crossings; a branch line runs
-beside a scope without touching it. It is about the promise axiom&nbsp;3 would make, that a scope can be
+beside a scope without touching it. It is about the promise axiom&nbsp;3 makes, that a scope can be
 collapsed as a single block, and a return line landing inside a collapsed scope has nowhere to land. The two
 nesting rules had two different justifications, and only this one turns on something a hop cannot repair. It
 also holds on both sides of the trunk, since collapsibility has nothing to do with which half-plane a branch
@@ -733,7 +735,7 @@ accepted; the remedy for it is deferred, and the two paragraphs below record the
 anything.</p>
 
 <p><span class="tag">deferred</span>Magnifying a node's label shape on hover, to whatever size makes its name
-readable, divides the labour the way axiom&nbsp;5 asks: the shape carries the structure at any zoom, and a name
+readable, divides the labour the way axiom&nbsp;6 asks: the shape carries the structure at any zoom, and a name
 is read on demand rather than shrunk past legibility. One constraint would keep it safe, and it is worth
 writing down now because it is easy to violate later: the magnification must be a paint-time transform and
 never a layout input, since a hover that changed a card's measured height would send
@@ -889,7 +891,7 @@ refreshed best-effort on a retitle, and the field is what resolves. The branch a
 first, and that order is the author's.</p>
 
 <p>Bookmarks stay in a sidecar beside the domain file, and every field in one is now device-independent, so a
-bookmark travels with the data as axiom 8 permits a named view to do:</p>
+bookmark travels with the data as axiom 9 permits a named view to do:</p>
 
 <pre>{
   "bookmarks": [
@@ -917,8 +919,8 @@ scope that owns it.</p>
 
 <h3>Structure</h3>
 <ul class="log">
-<li>Every branch returns to the trunk it left. Axiom&nbsp;2 is replaced by the two axioms in
-section&nbsp;2, and the three doc sites are amended together.</li>
+<li>Every branch returns to the trunk it left. Axiom&nbsp;2 was replaced by the two axioms in
+section&nbsp;2 on 2026-07-26, and the three doc sites were amended with it.</li>
 <li>Three node kinds, a TerminusNode for every ProjectNode, and a plan bounded by a base ProjectNode and its
 TerminusNode. Two productions, <code>Plan</code> and <code>Body</code>, generate the skeleton; a sub-project
 is a Plan inside a Body, a branch's trunk is a Body, and a Body may be empty.</li>

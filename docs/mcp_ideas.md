@@ -143,7 +143,7 @@ Rules:
 
 - The user always controls the camera. A live update never moves the camera and
   never changes pan or zoom; new nodes appear in place. Collapse state is
-  preserved likewise; both are client view state, per northstar axiom 8.
+  preserved likewise; both are client view state, per northstar axiom 9.
 - No changed-node highlight; the update is silent.
 - A burst of agent edits coalesces into one render per frame, so the map stays
   smooth without losing the live feel.

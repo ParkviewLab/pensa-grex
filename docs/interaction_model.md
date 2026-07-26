@@ -9,11 +9,16 @@ This documents two interaction algorithms whose rules are worth stating outside
 the code: how a drag-and-drop rearranges the forest, and how a bookmark restores a
 camera without storing a coordinate. It follows the standing convention of writing
 up an adopted rule so the reasoning is not buried. The implementations are the pure
-moves in [`src/renderer/src/model/mutations.js`](../src/renderer/src/model/mutations.js),
+moves in [`src/shared/model/mutations.js`](../src/shared/model/mutations.js),
 the gesture in [`src/renderer/src/interaction/drag.js`](../src/renderer/src/interaction/drag.js),
 and the bookmark helpers in
 [`src/renderer/src/interaction/bookmarks.js`](../src/renderer/src/interaction/bookmarks.js);
 each points back here.
+
+Both algorithms are described as they run today, on schema 2. Model v3 changes the
+second of them outright and the first only in its vocabulary; the record of that
+design is [`model_v3_ideas.md`](model_v3_ideas.md), and what it replaces is marked
+where it stands rather than rewritten ahead of the code.
 
 ## Drag-and-drop: two drop rules, and reordering
 
@@ -61,6 +66,14 @@ move that merges two lines has its cursors repaired by `normalizeHeres` (the
 tip-most "here" on a merged line survives). "here" flags travel with the nodes they
 sit on.
 
+*Model v3 adds a constraint and a purpose here.* A branch will carry a merge point,
+so a move that changes where a branch sits has to keep that merge legal, and one
+reshaping has to be refused outright rather than drawn: extending a merge across
+the close of a scope the branch was opened outside, which would leave a return line
+landing inside a collapsed block. `detachToTree` acquires the second purpose that
+the new axiom 3 gives it, as the way to say that work diverged and will not rejoin,
+which a branch may no longer say.
+
 The gesture layer adds only mechanics: a left-button press on a card that then
 moves past a small threshold begins a drag (a press that does not is left to
 click / double-click), with a floating label. Hit-testing is geometric against the
@@ -85,7 +98,7 @@ distinct sub-region so the gestures never collide:
 
 The flag is persisted in the forest file — a shared annotation, not client view
 state (contrast the collapse set and camera, which stay in the client's own
-sidecar; northstar axiom 8) — so a selection made by flagging survives a reload and
+sidecar; northstar axiom 9) — so a selection made by flagging survives a reload and
 can be read by another tool. See `docs/node-visual-system.md` for how the orbits
 render.
 
@@ -117,8 +130,17 @@ collapse), at the saved zoom. So:
 Deleting a node never eagerly rewrites bookmarks; the fallback is computed only
 when a bookmark is used.
 
-This split is the concrete form of northstar axiom 8. A bookmark is a *saved*
+This split is the concrete form of northstar axiom 9. A bookmark is a *saved*
 view, shared with the domain data in a `bookmarks.json` sibling of the forest
 file. A client's *live* view — what it currently has collapsed, where its camera
 rests — is its own state, kept in a per-client userData sidecar and never written
 into the forest.
+
+*Superseded by model v3.* The camera stops being anchored to anything. A bookmark
+stores the id of every node drawn wholly inside the viewport when it was saved, and
+each client computes its own framing from where those nodes sit now, under a
+maximum scale and a minimum padding. The zoom and the ancestor chain both go, which
+is what makes every field in a bookmark device-independent and so fit to travel
+with the data. Degradation stays graceful for the same reason it did before:
+deleted ids are filtered out and the survivors framed, and only an empty set is a
+broken bookmark. See `model_v3_ideas.md`, section 14.

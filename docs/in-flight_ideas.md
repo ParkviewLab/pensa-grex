@@ -125,10 +125,11 @@ brief:
   under AGPL; rejected inside the app. The Rust core stays the single authority.
 - Any hybrid turns on re-homing the model (`src/shared/`, ~1,100 lines; the
   correctness of the port to be preserved against the existing test suite); the
-  JSON5 write path must preserve comments/formatting to honour axiom 6.
+  write path must honour axiom 7, which model v3 narrows from JSON5 to plain JSON,
+  so what has to survive a round trip is the file's shape rather than comments.
 - Other options recorded (Dioxus, Dioxus Native/Blitz, Flutter+Rust, a PWA, trim
   Electron, Freya, and gpui/slint noted as excluded on licensing). The data is
-  untouched throughout (axiom 6).
+  untouched throughout (axiom 7).
 - A Joplin-style sync server is captured as a separate, optional, off-by-default
   capability (reuse WebDAV/S3/git/Syncthing; conflict-copy, not CRDT-in-the-file),
   which may graduate to its own `sync_ideas.md` if it firms up.
