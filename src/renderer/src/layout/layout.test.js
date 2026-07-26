@@ -929,3 +929,157 @@ describe('computeDomainLayout — properties of any drawing', () => {
     expect(after.bounds.h).toBeGreaterThan(before.bounds.h)
   })
 })
+
+// The pixel engine, which places every card by the solve rather than by a shared row grid and
+// draws every lateral line at twelve degrees. Asserted as invariants rather than as coordinates:
+// none of these tests names a position, so they will still mean what they say after the row grid
+// goes and this becomes the only engine.
+describe('computeDomainLayout — the pixel engine', () => {
+  const pixels = (raw) => {
+    const record = JSON5.parse(raw)
+    expect(validateRecord(record)).toEqual({ ok: true, errors: [] })
+    const model = buildModel(record)
+    return { model, layout: computeDomainLayout(model, syntheticSizes(model).sizes, { engine: 'pixels' }) }
+  }
+  const FIXTURES = [['HomeLab', fixtureRaw], ['Work', workRaw]]
+
+  it('draws every lateral line flat or at exactly twelve degrees', () => {
+    for (const [name, raw] of FIXTURES) {
+      const { layout } = pixels(raw)
+      const segs = lateralSegments(layout)
+      expect(segs.length).toBeGreaterThan(0)
+      for (const s of segs) {
+        const slope = Math.abs((s.y2 - s.y1) / (s.x2 - s.x1))
+        const twelve = Math.abs(slope - layout.metrics.tan12) < 1e-9
+        expect(slope < 1e-9 || twelve).toBe(true) // name the domain if this ever fails
+        if (!twelve && slope >= 1e-9) throw new Error(name + ': a lateral at slope ' + slope)
+      }
+    }
+  })
+
+  it('leaves each junction the fixed clearance from the node it belongs to', () => {
+    const { model, layout } = pixels(fixtureRaw)
+    const { departClear, arriveClear } = layout.metrics
+    const byId = new Map(layout.stations.map((s) => [s.id, s]))
+    let forks = 0
+    let returns = 0
+    for (const b of branchesIn(JSON5.parse(fixtureRaw))) {
+      const host = byId.get(b.hostId)
+      const foot = byId.get(b.footId)
+      // A branch line departs the fixed distance above its host's circle and arrives the fixed
+      // distance below its own first card, and the climb between the two is the rise.
+      const fork = layout.tracks.find((t) => t.kind === 'branch'
+        && Math.abs(t.points[0][0] - host.x) < 0.5 && Math.abs(t.points[0][1] - (host.anchorY - departClear)) < 1e-9)
+      expect(fork).toBeTruthy()
+      const arrival = fork.points[fork.points.length - 1]
+      expect(arrival[1]).toBeCloseTo(foot.cardTop + foot.cardH + arriveClear, 9)
+      expect(fork.points[0][1] - arrival[1]).toBeCloseTo(layout.metrics.rise, 9)
+      forks++
+
+      const merge = model.getNode(b.mergePoint)
+      const above = byId.get(merge.next)
+      const ret = layout.tracks.find((t) => t.kind === 'return'
+        && Math.abs(t.points[t.points.length - 1][0] - above.x) < 0.5)
+      expect(ret).toBeTruthy()
+      // A return departs at least the fixed distance above the tip's circle, the slack being its
+      // tail, and arrives the fixed distance below the card above its merge point.
+      const tip = byId.get(b.tipId)
+      expect(tip.anchorY - ret.points[0][1]).toBeGreaterThanOrEqual(departClear - 1e-9)
+      expect(ret.points[ret.points.length - 1][1]).toBeCloseTo(above.cardTop + above.cardH + arriveClear, 9)
+      expect(ret.points[0][1] - ret.points[ret.points.length - 1][1]).toBeCloseTo(layout.metrics.rise, 9)
+      returns++
+    }
+    expect(forks).toBeGreaterThan(0)
+    expect(returns).toBe(forks) // every branch rejoins
+  })
+
+  it('holds the minimum air on every trunk edge, and gives no more where none is needed', () => {
+    const { model, layout } = pixels(fixtureRaw)
+    const { minAir, dotRadius } = layout.metrics
+    const byId = new Map(layout.stations.map((s) => [s.id, s]))
+    for (const [id, node] of model.nodes) {
+      if (!node.next || !byId.has(node.next)) continue
+      const lower = byId.get(id)
+      const upper = byId.get(node.next)
+      const air = lower.anchorY - (upper.cardTop + upper.cardH)
+      expect(air).toBeGreaterThanOrEqual(minAir - 1e-9)
+      expect(air - dotRadius).toBeGreaterThan(0) // and clear of the dot itself
+    }
+
+    // On a plan with nothing spanning it, the minimum is what every edge gets: "never given up"
+    // needs the tight half or a solver that inflated everything would pass.
+    const chain = {
+      schemaVersion: 3, id: 'd_x', title: 'T', planOrder: ['p'],
+      nodes: {
+        p: mkProject('p', { next: 'a' }), a: mkTask('a', { next: 'b' }),
+        b: mkTask('b', { next: 't' }), t: mkTerminus('t'),
+      },
+    }
+    expect(validateRecord(chain)).toEqual({ ok: true, errors: [] })
+    const flat = computeDomainLayout(buildModel(chain), syntheticSizes(buildModel(chain)).sizes, { engine: 'pixels' })
+    const seq = ['p', 'a', 'b', 't'].map((id) => flat.stations.find((s) => s.id === id))
+    for (let i = 0; i + 1 < seq.length; i++) {
+      expect(seq[i].anchorY - (seq[i + 1].cardTop + seq[i + 1].cardH)).toBeCloseTo(minAir, 9)
+    }
+  })
+
+  it('keeps every card clear of every other, and every lateral line out of a node\'s space', () => {
+    const offenders = []
+    for (const [name, raw] of FIXTURES) {
+      const { layout } = pixels(raw)
+      offenders.push(...linesInNodeSpace(layout, name))
+      for (let i = 0; i < layout.stations.length; i++) {
+        for (let j = i + 1; j < layout.stations.length; j++) {
+          if (overlaps(rectOf(layout.stations[i]), rectOf(layout.stations[j]))) {
+            offenders.push(name + ': ' + layout.stations[i].id + ' overlaps ' + layout.stations[j].id)
+          }
+        }
+      }
+      expect(layout.conflicts).toEqual([]) // the repair pass left nothing behind
+    }
+    expect(offenders).toEqual([])
+  })
+
+  it('breaks a lateral where it passes behind a trunk, and only there', () => {
+    // A branch whose return has to reach across a lane its sibling occupies: the crossing is real,
+    // so the return breaks at it, and the trunk it crosses runs unbroken through the gap.
+    const record = {
+      schemaVersion: 3, id: 'd_x', title: 'T', planOrder: ['p'],
+      nodes: {
+        p: mkProject('p', { next: 'a' }),
+        a: mkTask('a', { next: 'b', leftBranches: ['f1', 'g1'] }),
+        b: mkTask('b', { next: 'c' }), c: mkTask('c', { next: 't' }), t: mkTerminus('t'),
+        f1: mkTask('f1', { next: 'f2' }), f2: mkTask('f2', { mergePoint: 'b' }),
+        g1: mkTask('g1', { mergePoint: 'a' }),
+      },
+    }
+    expect(validateRecord(record)).toEqual({ ok: true, errors: [] })
+    const model = buildModel(record)
+    const layout = computeDomainLayout(model, syntheticSizes(model).sizes, { engine: 'pixels' })
+    const broken = layout.tracks.filter((t) => t.breaks && t.breaks.length)
+    const spineXs = new Set(layout.tracks.filter((t) => t.kind === 'riser').map((t) => t.points[0][0]))
+    for (const t of broken) {
+      for (const [x] of t.breaks) expect(spineXs.has(x)).toBe(true) // a break is always on a spine
+    }
+    // And no lateral is broken where it crosses nothing: the count of breaks matches the count of
+    // genuine crossings, computed independently here.
+    let crossings = 0
+    for (const t of layout.tracks) {
+      if (t.kind === 'riser') continue
+      for (let i = 1; i < t.points.length; i++) {
+        const [x1, y1] = t.points[i - 1]
+        const [x2, y2] = t.points[i]
+        if (x1 === x2) continue
+        for (const s of layout.tracks.filter((r) => r.kind === 'riser')) {
+          const sx = s.points[0][0]
+          if ((sx - x1) * (sx - x2) >= 0) continue
+          const y = y1 + ((sx - x1) * (y2 - y1)) / (x2 - x1)
+          const lo = Math.min(s.points[0][1], s.points[1][1])
+          const hi = Math.max(s.points[0][1], s.points[1][1])
+          if (y > lo && y < hi) crossings++
+        }
+      }
+    }
+    expect(broken.reduce((n, t) => n + t.breaks.length, 0)).toBe(crossings)
+  })
+})

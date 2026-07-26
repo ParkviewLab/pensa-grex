@@ -448,7 +448,7 @@ describe('assignLanes — lane order and band reservation', () => {
 // they are what the twelve degrees means.
 const TAN12 = Math.tan((12 * Math.PI) / 180)
 const METRICS = {
-  baseY: 0, anchorGap: 10, minAir: 20, departClear: 10, arriveClear: 10,
+  baseY: 0, anchorGap: 10, minAir: 20, departClear: 10, arriveClear: 10, dotRadius: 6,
   tan12: TAN12, rampRun: 100, rise: 200 * TAN12, junctionMargin: 4, diamondGap: 12,
 }
 const sizesOf = (map) => new Map(Object.entries(map).map(([id, [cardW, cardH]]) => [id, { cardW, cardH }]))
@@ -487,21 +487,24 @@ describe('solveHeights', () => {
     expect(departure - arrival).toBeCloseTo(METRICS.rise, 9)
   })
 
-  it('gives an edge that hosts a fork more air than a plain one, so the line clears the card above', () => {
-    const plain = fakeModel([{ id: 't', rootTaskId: 'a' }], { a: { next: 'b' }, b: {} })
+  it('gives an edge that carries a junction more air than a plain one, so the line clears the card', () => {
+    const plain = fakeModel([{ id: 't', rootTaskId: 'a' }], { a: { next: 'b' }, b: { next: 'c' }, c: {} })
+    // The branch leaves a and merges at b, so the edge from a to b hosts a fork and nothing else,
+    // and the edge from b to c receives that fork's return and nothing else. One edge for each case.
     const forked = fakeModel(
       [{ id: 't', rootTaskId: 'a' }],
-      { a: { next: 'b', branches: [{ child: 'f', side: 'left' }] }, b: {}, f: { mergePoint: 'a' } },
+      { a: { next: 'b', branches: [{ child: 'f', side: 'left' }] }, b: { next: 'c' }, c: {}, f: { mergePoint: 'b' } },
     )
-    const sizes = sizesOf({ a: [188, 50], b: [188, 50], f: [188, 50] })
-    const airOf = (model) => {
-      const { airBelow } = solveHeights(model, sizes, METRICS)
-      return airBelow.get('b')
-    }
-    // The line climbs (cardW / 2) * tan12 while it crosses b's own half-width, so b's card has to
-    // be that much further up or the line would pass behind it and re-emerge past its corner.
-    expect(airOf(plain)).toBeCloseTo(METRICS.minAir, 9)
-    expect(airOf(forked)).toBeCloseTo(METRICS.departClear + 94 * TAN12 + METRICS.junctionMargin, 9)
+    const sizes = sizesOf({ a: [188, 50], b: [188, 50], c: [188, 50], f: [188, 50] })
+    const airOf = (model, id) => solveHeights(model, sizes, METRICS).airBelow.get(id)
+
+    expect(airOf(plain, 'b')).toBeCloseTo(METRICS.minAir, 9)
+    // A fork's line climbs (cardW / 2) * tan12 while it crosses b's own half-width, so b's card has
+    // to be that much further up or the line would pass behind it and re-emerge past its corner.
+    expect(airOf(forked, 'b')).toBeCloseTo(METRICS.departClear + 94 * TAN12 + METRICS.junctionMargin, 9)
+    // A return's line descends by the same amount as it leaves, and what it meets down there is
+    // the rim of b's circle rather than a card edge, so that clearance carries the dot's radius too.
+    expect(airOf(forked, 'c')).toBeCloseTo(METRICS.arriveClear + 94 * TAN12 + METRICS.dotRadius + METRICS.junctionMargin, 9)
   })
 
   it('stretches the join edge when the branch is the taller side, and leaves no tail', () => {

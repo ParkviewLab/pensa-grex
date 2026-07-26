@@ -85,13 +85,78 @@ export function trackPath(pts, hops = [], r = 6) {
   return d
 }
 
-// A track path. `kind` is 'riser' (the vertical spine between stacked nodes on a line),
+// How an underpass is drawn, and the successor to the hop above. The lateral line stops this far
+// short of the trunk it passes behind, measured along its own direction, which leaves a few pixels
+// of clear air either side of a trunk's own 3-pixel stroke; and each severed end is capped with a
+// stroke four times the lateral's own width long (2.3, so 9.2), standing parallel to the trunk,
+// which is always vertical. The cap's own width is thinner, and comes from CSS.
+const BREAK_HALF = 6.5
+const CAP_LENGTH = 9.2
+
+function onSegment(a, b, p) {
+  return (p[0] - a[0]) * (p[0] - b[0]) < 0 && (p[1] - a[1]) * (p[1] - b[1]) <= 0
+}
+function along(a, b, from, distance) {
+  const len = Math.hypot(b[0] - a[0], b[1] - a[1])
+  if (!len) return from
+  return [from[0] + ((b[0] - a[0]) / len) * distance, from[1] + ((b[1] - a[1]) / len) * distance]
+}
+
+// The same polyline, but yielding where it passes behind a trunk: it stops short on one side and
+// resumes past the other, so the trunk runs unbroken through the gap and the crossing reads as an
+// underpass rather than as a junction (docs/model_v3_ideas.md, section 10). `breaks` holds points
+// rather than x positions, because a lateral line at twelve degrees is not level with itself.
+export function underpassPath(pts, breaks = [], half = BREAK_HALF) {
+  let d = 'M' + pts[0][0] + ',' + pts[0][1]
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1]
+    const b = pts[i]
+    const here = breaks
+      .filter((p) => onSegment(a, b, p))
+      .sort((p, q) => Math.hypot(p[0] - a[0], p[1] - a[1]) - Math.hypot(q[0] - a[0], q[1] - a[1]))
+    for (const p of here) {
+      const before = along(a, b, p, -half)
+      const after = along(a, b, p, half)
+      d += ' L' + before[0] + ',' + before[1] + ' M' + after[0] + ',' + after[1]
+    }
+    d += ' L' + b[0] + ',' + b[1]
+  }
+  return d
+}
+
+// The two caps that mark one underpass, so the gap reads as a line passing behind rather than as a
+// line that simply stops.
+export function underpassCaps(pts, breaks = [], half = BREAK_HALF) {
+  const caps = []
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1]
+    const b = pts[i]
+    for (const p of breaks) {
+      if (!onSegment(a, b, p)) continue
+      for (const side of [-1, 1]) {
+        const [x, y] = along(a, b, p, half * side)
+        caps.push(el('line', { class: 'underpass-cap', x1: x, y1: y - CAP_LENGTH / 2, x2: x, y2: y + CAP_LENGTH / 2 }))
+      }
+    }
+  }
+  return caps
+}
+
+// A track. `kind` is 'riser' (the vertical spine between stacked nodes on a line),
 // 'branch' (a fork connector) or 'return' (a branch rejoining its trunk); the lateral
 // kinds are weighted the same in CSS and the spine slightly heavier, so the main line
-// reads first.
-export function buildTrack(pts, kind, hops) {
+// reads first. A lateral that passes behind a trunk comes back as a group, the broken path
+// with a cap at each severed end.
+export function buildTrack(track) {
+  const { points, kind, hops, breaks } = track
   const cls = kind === 'branch' || kind === 'return' ? kind : 'riser'
-  return el('path', { class: 'track ' + cls, d: trackPath(pts, hops) })
+  if (breaks && breaks.length) {
+    const group = el('g', { class: 'track-underpass' })
+    group.appendChild(el('path', { class: 'track ' + cls, d: underpassPath(points, breaks) }))
+    for (const cap of underpassCaps(points, breaks)) group.appendChild(cap)
+    return group
+  }
+  return el('path', { class: 'track ' + cls, d: trackPath(points, hops) })
 }
 
 // The small diamond marking a fork junction, centered at (cx,cy).

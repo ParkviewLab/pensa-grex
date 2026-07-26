@@ -163,9 +163,10 @@ function airOnEdge(m, { hostsFork, receivesMerge, upperW, lowerW }) {
   // A fork's line leaves at the lower node's x and climbs, so the card it could hide behind is
   // the upper one, directly above the junction it left.
   if (hostsFork) air = Math.max(air, m.departClear + (upperW / 2) * m.tan12 + m.junctionMargin)
-  // A return arrives below the upper node's card and descends as it goes outward, so the card it
-  // could hide behind is the lower one.
-  if (receivesMerge) air = Math.max(air, m.arriveClear + (lowerW / 2) * m.tan12 + m.junctionMargin)
+  // A return arrives below the upper node's card and descends as it goes outward, so what it could
+  // run into is the lower node, and what it meets first there is the rim of its dot rather than
+  // its card: a node's space starts at the top of its circle.
+  if (receivesMerge) air = Math.max(air, m.arriveClear + (lowerW / 2) * m.tan12 + m.dotRadius + m.junctionMargin)
   if (hostsFork && receivesMerge) air = Math.max(air, m.departClear + m.diamondGap + m.arriveClear)
   return air
 }
@@ -197,8 +198,12 @@ function airOnEdge(m, { hostsFork, receivesMerge, upperW, lowerW }) {
  * Returns cardTopY (screen y, growth upward so values fall as a plan rises, the base at
  * metrics.baseY), tails keyed by a branch's foot, and the air each trunk edge was given.
  */
-export function solveHeights(model, sizes, metrics) {
+export function solveHeights(model, sizes, metrics, slack) {
   const m = metrics
+  // Extra pixels a repair pass has asked for on a node's incoming edges, to lift it clear of a
+  // lateral line crossing its lane. Only ever positive, and only ever added, so a repair can
+  // move a node up and never down.
+  const extra = (id) => (slack && slack.has(id) ? slack.get(id) : 0)
   const cardH = (id) => (sizes.get(id) ? sizes.get(id).cardH : 0)
   const cardW = (id) => (sizes.get(id) ? sizes.get(id).cardW : 0)
   const branches = branchesOfModel(model)
@@ -213,9 +218,9 @@ export function solveHeights(model, sizes, metrics) {
     above.set(id, [])
     indegree.set(id, 0)
   }
-  const constrain = (lowerId, upperId, weight) => {
+  const constrain = (lowerId, upperId, weight, branch) => {
     if (!above.has(lowerId) || !indegree.has(upperId)) return
-    above.get(lowerId).push({ to: upperId, weight })
+    above.get(lowerId).push({ to: upperId, weight, branch })
     indegree.set(upperId, indegree.get(upperId) + 1)
   }
 
@@ -228,19 +233,20 @@ export function solveHeights(model, sizes, metrics) {
         lowerW: cardW(id),
       })
       airBelow.set(node.next, air)
-      constrain(id, node.next, m.anchorGap + air + cardH(node.next))
+      constrain(id, node.next, m.anchorGap + air + cardH(node.next) + extra(node.next))
     }
   }
   const lateral = m.anchorGap + m.departClear + m.rise + m.arriveClear
   for (const b of branches) {
-    constrain(b.hostId, b.footId, lateral + cardH(b.footId))
+    constrain(b.hostId, b.footId, lateral + cardH(b.footId) + extra(b.footId), b)
     if (!b.tipId || !b.mergePoint) continue
     const merge = model.getNode(b.mergePoint)
     if (!merge || !merge.next || !model.getNode(merge.next)) continue
-    constrain(b.tipId, merge.next, lateral + cardH(merge.next))
+    constrain(b.tipId, merge.next, lateral + cardH(merge.next) + extra(merge.next), b)
   }
 
   const u = new Map()
+  const pinnedBy = new Map() // id -> the branch whose lateral line fixed this node's height
   const queue = []
   for (const id of model.nodes.keys()) {
     if (indegree.get(id) === 0) {
@@ -251,7 +257,15 @@ export function solveHeights(model, sizes, metrics) {
   for (let head = 0; head < queue.length; head++) {
     const id = queue[head]
     for (const edge of above.get(id)) {
-      u.set(edge.to, Math.max(u.has(edge.to) ? u.get(edge.to) : 0, u.get(id) + edge.weight))
+      const want = u.get(id) + edge.weight
+      if (!u.has(edge.to) || want > u.get(edge.to)) {
+        u.set(edge.to, want)
+        // Which constraint won matters to a repair pass: a node whose height came from a lateral
+        // line cannot be lifted on its own without bending that line off twelve degrees, so the
+        // thing to lift is the branch's own host, which carries the whole lens with it.
+        if (edge.branch) pinnedBy.set(edge.to, edge.branch)
+        else pinnedBy.delete(edge.to)
+      }
       indegree.set(edge.to, indegree.get(edge.to) - 1)
       if (indegree.get(edge.to) === 0) queue.push(edge.to)
     }
@@ -273,7 +287,7 @@ export function solveHeights(model, sizes, metrics) {
 
   const cardTopY = new Map()
   for (const [id, height] of u) cardTopY.set(id, m.baseY - height)
-  return { cardTopY, tails, airBelow, branches }
+  return { cardTopY, tails, airBelow, branches, pinnedBy }
 }
 
 function rangesOverlap(a, b) {
