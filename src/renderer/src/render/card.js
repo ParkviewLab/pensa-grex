@@ -4,7 +4,7 @@
 // Builds a station's DOM: the .card content (used both for off-screen
 // measurement in layout/measure.js and for the final positioned render in
 // scene.js) and the positioned .stbox wrapper, from a real node record (see
-// model/forest.js). A task node shows a status glyph and tag and can be the
+// model/model.js). A task node shows a status glyph and tag and can be the
 // "here" cursor; a project node ("sub-project") shows neither — it wears the
 // reserved project colour (see render/shapes.js) and carries the project's name.
 

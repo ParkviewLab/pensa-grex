@@ -165,7 +165,7 @@ scope tiers. Full functionality: every mutation in `mutations.js` is exposed. A
 node is addressed by its id and a domain by name or path, defaulting to the open
 domain; every write returns the affected id and the re-rendered outline, and a
 write that would violate an invariant returns the mutation's descriptive error,
-since each write is mutation, then `validateForest`, then atomic write.
+since each write is mutation, then `validateRecord`, then atomic write.
 
 Read-only tier:
 

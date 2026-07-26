@@ -3,7 +3,7 @@
 
 // Pure geometry helpers for the layout engine: row assignment, the vertical
 // row grid, and horizontal lane packing. No DOM; every input is plain data
-// (a forest model — see model/forest.js — plus measured sizes).
+// (a domain model — see model/model.js — plus measured sizes).
 //
 // Horizontal placement (assignLanes) is a subtree-aware tidy-tree contour
 // packer that guarantees branch connectors never cross. Card width is fixed
@@ -24,8 +24,8 @@
 // layout.js. Without this the child would be pinned at the root's own row while
 // the connector aimed a row higher, producing a dangling track or, when the
 // root has no successor, NaN coordinates.
-function rootSet(forest) {
-  return new Set(forest.trees.map((t) => t.rootTaskId))
+function rootSet(model) {
+  return new Set(model.trees.map((t) => t.rootTaskId))
 }
 
 function childRow(id, r, b, roots) {
@@ -33,16 +33,16 @@ function childRow(id, r, b, roots) {
   return roots.has(id) ? r + 1 : r // below-on-root rises; below elsewhere is level with the parent
 }
 
-export function assignRows(forest) {
-  const roots = rootSet(forest)
+export function assignRows(model) {
+  const roots = rootSet(model)
   const row = new Map()
-  for (const tree of forest.trees) {
+  for (const tree of model.trees) {
     const stack = [[tree.rootTaskId, 0]]
     while (stack.length) {
       const [id, r] = stack.pop()
       if (row.has(id)) continue
       row.set(id, r)
-      const task = forest.getTask(id)
+      const task = model.getTask(id)
       if (!task) continue
       if (task.next) stack.push([task.next, r + 1])
       for (const b of task.branches) {
@@ -56,10 +56,10 @@ export function assignRows(forest) {
 // The lower row index of every gap (r, r+1) that carries at least one fork
 // junction — used to widen that gap's pitch so the diamond has room. A
 // below-on-root fork uses the gap above the root (r), like an above fork.
-export function junctionGaps(forest, row) {
-  const roots = rootSet(forest)
+export function junctionGaps(model, row) {
+  const roots = rootSet(model)
   const gaps = new Set()
-  for (const [id, task] of forest.tasks) {
+  for (const [id, task] of model.tasks) {
     for (const b of task.branches) {
       const r = row.get(id)
       const below = b.at === 'below' && !roots.has(id)
@@ -73,14 +73,14 @@ export function junctionGaps(forest, row) {
 // tall the tallest card at row r+1 actually is (measured), plus a fixed gap,
 // plus extra clearance where a junction sits. Growth is upward, so y
 // decreases as r increases; row 0 sits at baseY.
-export function buildRowGrid(forest, row, sizes, { rowGap, junctionExtra, baseY }) {
+export function buildRowGrid(model, row, sizes, { rowGap, junctionExtra, baseY }) {
   const tasksByRow = new Map()
   for (const [id, r] of row) {
     if (!tasksByRow.has(r)) tasksByRow.set(r, [])
     tasksByRow.get(r).push(id)
   }
   const maxRow = tasksByRow.size ? Math.max(...tasksByRow.keys()) : 0
-  const gapsWithJunction = junctionGaps(forest, row)
+  const gapsWithJunction = junctionGaps(model, row)
 
   const cardTopY = new Map([[0, baseY]])
   for (let r = 1; r <= maxRow; r++) {
@@ -110,14 +110,14 @@ function rangesOverlap(a, b) {
 // by first-fit against the row-ranges already placed on that side, so two
 // subtrees whose rows never overlap still share lanes (tight packing) but bands
 // that would collide grow outward.
-export function assignLanes(forest, row) {
+export function assignLanes(model, row) {
   const lineOfTask = new Map() // taskId -> the line's own start-task id
   const lineRows = new Map() // lineId -> {min,max} of the line's own rows
   const treeOfLine = new Map() // lineId -> the tree root's task id
   const lane = new Map() // lineId -> absolute integer lane
   const childrenOf = new Map() // lineId -> [{ child, side, attach }]
   const relLane = new Map() // lineId -> lane relative to its parent spine
-  const maxLanes = forest.tasks.size + 2 // a generous, always-sufficient bound
+  const maxLanes = model.tasks.size + 2 // a generous, always-sufficient bound
 
   function walkLine(startId) {
     const ids = []
@@ -125,7 +125,7 @@ export function assignLanes(forest, row) {
     while (id) {
       ids.push(id)
       lineOfTask.set(id, startId)
-      const task = forest.getTask(id)
+      const task = model.getTask(id)
       id = task ? task.next : null
     }
     const rows = ids.map((i) => row.get(i))
@@ -140,7 +140,7 @@ export function assignLanes(forest, row) {
     const ids = walkLine(startId)
     const kids = []
     for (const id of ids) {
-      forest.getTask(id).branches.forEach((b, idx) => {
+      model.getTask(id).branches.forEach((b, idx) => {
         const side = b.side === 'left' || b.side === 'right' ? b.side : (idx % 2 === 0 ? 'left' : 'right')
         kids.push({ child: b.child, side, attach: row.get(b.child) })
         collectChildren(b.child)
@@ -208,7 +208,7 @@ export function assignLanes(forest, row) {
     }
   }
 
-  for (const tree of forest.trees) {
+  for (const tree of model.trees) {
     collectChildren(tree.rootTaskId)
     layout(tree.rootTaskId)
     assignAbsolute(tree.rootTaskId, 0, tree.rootTaskId)

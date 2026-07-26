@@ -16,15 +16,15 @@ contextBridge.exposeInMainWorld('pensagrex', {
   deleteForest:      (dir)               => ipcRenderer.invoke('pensagrex:delete-forest', dir),
   loadForest:        (dir)               => ipcRenderer.invoke('pensagrex:load-forest', dir),
   saveForest:        (dir, text)         => ipcRenderer.invoke('pensagrex:save-forest', dir, text),
-  // The task-authority surface: read a forest through the shared model, and apply
+  // The task-authority surface: read a record through the shared model, and apply
   // one named task operation. These replace load/save for editing; the coarse
   // load/save above stay for seeding and one-time migration writes.
-  readForest:        (dir)               => ipcRenderer.invoke('pensagrex:read-forest', dir),
-  taskOp:            (dir, op, ...args)  => ipcRenderer.invoke('pensagrex:task-op', dir, op, ...args),
+  readRecord:        (dir)               => ipcRenderer.invoke('pensagrex:read-forest', dir),
+  runOp:             (dir, op, ...args)  => ipcRenderer.invoke('pensagrex:task-op', dir, op, ...args),
   // The in-app MCP server: read its status (enabled/running/url) and turn it on/off.
   mcpStatus:         ()                  => ipcRenderer.invoke('pensagrex:mcp-status'),
   mcpSetEnabled:     (enabled)           => ipcRenderer.invoke('pensagrex:mcp-set-enabled', enabled),
-  // Live updates: another writer (the MCP server) changed a domain's forest/notes,
+  // Live updates: another writer (the MCP server) changed a domain's record or notes,
   // or the domain list. Each returns an unsubscribe function.
   onDomainChanged:   (cb) => {
     const handler = (_e, data) => cb(data && data.dir)

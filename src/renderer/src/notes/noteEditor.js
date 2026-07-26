@@ -165,10 +165,11 @@ export function createNoteEditor({ readNote, writeNote, openExternal, onFirstWri
   // Reconcile the open note with an external change (an MCP write to this domain).
   // Never discards the user's in-progress edits silently: if the editor is clean
   // it adopts the new content; if it has unsaved edits it warns and keeps them; if
-  // the task was removed, it closes with a notice. `raw` here is the forest.
-  async function reconcile(dir, forest) {
+  // the task was removed, it closes with a notice. The second argument is the domain
+  // record; `raw` in this module is the editor's own text.
+  async function reconcile(dir, record) {
     if (!isOpen() || domainPath !== dir || file === null) return
-    const taskExists = !!(forest && forest.tasks[taskId])
+    const taskExists = !!(record && record.tasks[taskId])
     if (!taskExists) {
       close()
       if (notify) notify('The task whose note you were editing was removed by another writer, so the note was closed.')

@@ -5,11 +5,11 @@
 // one job beyond forwarding is an in-memory fallback so the built renderer still
 // runs without the Electron main process — for instance served over a plain HTTP
 // server during visual checks. The fallback runs the SAME task authority the
-// main process does (the shared runTaskOp/readForest over its own Map), so an
+// main process does (the shared runOp/readRecord over its own Map), so an
 // edit behaves identically with or without Electron; it is just not persistent
 // (nothing reaches disk). api.persistent tells the caller which it got.
 
-import { runTaskOp, readForest as readForestCore } from '../../../shared/taskOps.js'
+import { runOp as runOpCore, readRecord as readRecordCore } from '../../../shared/domainOps.js'
 import homelabRaw from '../../../shared/model/fixtures/homelab.forest.json5?raw'
 import workRaw from '../../../shared/model/fixtures/work.forest.json5?raw'
 
@@ -25,8 +25,8 @@ function wrapRealBridge(bridge) {
     deleteForest:      (dir) => bridge.deleteForest(dir),
     loadForest:        (dir) => bridge.loadForest(dir),
     saveForest:        (dir, text) => bridge.saveForest(dir, text),
-    readForest:        (dir) => bridge.readForest(dir),
-    taskOp:            (dir, op, ...args) => bridge.taskOp(dir, op, ...args),
+    readRecord:        (dir) => bridge.readRecord(dir),
+    runOp:             (dir, op, ...args) => bridge.runOp(dir, op, ...args),
     mcpStatus:         () => bridge.mcpStatus(),
     mcpSetEnabled:     (enabled) => bridge.mcpSetEnabled(enabled),
     onDomainChanged:   (cb) => bridge.onDomainChanged(cb),
@@ -44,7 +44,7 @@ function wrapRealBridge(bridge) {
 }
 
 function makeFallback() {
-  const forests = new Map([
+  const files = new Map([
     ['/virtual/HomeLab', homelabRaw],
     ['/virtual/Work', workRaw],
   ])
@@ -53,13 +53,13 @@ function makeFallback() {
   const bookmarks = new Map()
   let lastDomain = null
   const domains = () =>
-    [...forests.keys()].map((path) => ({ name: path.split('/').pop(), path })).sort((a, b) => a.name.localeCompare(b.name))
+    [...files.keys()].map((path) => ({ name: path.split('/').pop(), path })).sort((a, b) => a.name.localeCompare(b.name))
   // The same task authority the main process runs, over the in-memory Maps, so a
   // no-Electron edit behaves exactly like the real one (mutate, validate, then
   // persist to the Map). Text-based, matching the store's opaque-text contract.
   const storage = {
-    loadText: (dir) => (forests.has(dir) ? { text: forests.get(dir) } : { error: 'not found' }),
-    saveText: (dir, text) => { forests.set(dir, text); return { ok: true } },
+    loadText: (dir) => (files.has(dir) ? { text: files.get(dir) } : { error: 'not found' }),
+    saveText: (dir, text) => { files.set(dir, text); return { ok: true } },
     writeNote: (dir, file, content) => { notes.set(dir + '/' + file, content); return { ok: true } },
   }
   return {
@@ -71,19 +71,19 @@ function makeFallback() {
     listDomains:       async () => domains(),
     createForest:      async (name) => {
       const path = '/virtual/' + name
-      if (forests.has(path)) return { error: 'exists' }
-      forests.set(path, `{ schema: 2, domain: ${JSON.stringify(name)}, rootOrder: [], tasks: {} }\n`)
+      if (files.has(path)) return { error: 'exists' }
+      files.set(path, `{ schema: 2, domain: ${JSON.stringify(name)}, rootOrder: [], tasks: {} }\n`)
       return { name, path }
     },
     deleteForest:      async (dir) => {
-      forests.delete(dir)
+      files.delete(dir)
       for (const key of [...notes.keys()]) if (key.startsWith(dir + '/')) notes.delete(key)
       return { ok: true }
     },
-    loadForest:        async (dir) => (forests.has(dir) ? { text: forests.get(dir) } : { error: 'not found' }),
-    saveForest:        async (dir, text) => { forests.set(dir, text); return { ok: true } },
-    readForest:        async (dir) => readForestCore(storage, dir),
-    taskOp:            async (dir, op, ...args) => runTaskOp(storage, dir, op, args),
+    loadForest:        async (dir) => (files.has(dir) ? { text: files.get(dir) } : { error: 'not found' }),
+    saveForest:        async (dir, text) => { files.set(dir, text); return { ok: true } },
+    readRecord:        async (dir) => readRecordCore(storage, dir),
+    runOp:             async (dir, op, ...args) => runOpCore(storage, dir, op, args),
     // The MCP server lives in the Electron main process; the no-Electron fallback
     // reports it as unavailable rather than pretending to host it.
     mcpStatus:         async () => ({ enabled: false, running: false, url: null, port: null, scope: null, error: 'the MCP server runs only in the desktop app' }),
@@ -116,9 +116,9 @@ function makeFallback() {
 }
 
 export function createApi() {
-  const raw = window.pensagrex
-  // No debounced forest save any more: every edit is a task op that main writes
+  const record = window.pensagrex
+  // No debounced record save any more: every edit is a task op that main writes
   // synchronously and atomically (or the fallback writes to its Map), so there is
   // nothing to batch, flush, or cancel. Notes keep their own autosave elsewhere.
-  return raw && Object.keys(raw).length ? wrapRealBridge(raw) : makeFallback()
+  return record && Object.keys(record).length ? wrapRealBridge(record) : makeFallback()
 }

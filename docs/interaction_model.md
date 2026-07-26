@@ -61,7 +61,7 @@ branches (a clean positional swap, distinct from `moveIntoLine`'s splice). "Move
 up" needs a successor and a non-root node; "move down" needs a non-root main-line
 predecessor to swap below.
 
-Every move returns a new raw forest and is re-validated before it is applied; a
+Every move returns a new record and is re-validated before it is applied; a
 move that merges two lines has its cursors repaired by `normalizeHeres` (the
 tip-most "here" on a merged line survives). "here" flags travel with the nodes they
 sit on.

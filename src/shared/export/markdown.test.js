@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 
 import { describe, it, expect } from 'vitest'
-import { validateForest } from '../model/validate.js'
+import { validateRecord } from '../model/validate.js'
 import { serializeProject } from './markdown.js'
 
 // A project exercising every shape rule: project-root nesting, a flat main-line
@@ -11,7 +11,7 @@ import { serializeProject } from './markdown.js'
 // inlined as indented body text.
 //   Proj -> Task one(todo, note) -> Task two(done) -> Sub(project) -> Sub task(cancelled)
 //   Task one forks to Branch one(todo)
-function forest() {
+function record() {
   const t = (id, title, over = {}) => ({
     id, title, kind: 'task', status: 'todo', createdAt: 'x', completedAt: null,
     note: null, here: false, next: null, branches: [], ...over,
@@ -33,12 +33,12 @@ function forest() {
 }
 
 describe('serializeProject', () => {
-  it('is a valid forest to begin with', () => {
-    expect(validateForest(forest())).toEqual({ ok: true, errors: [] })
+  it('is a valid record to begin with', () => {
+    expect(validateRecord(record())).toEqual({ ok: true, errors: [] })
   })
 
   it('renders the agreed nested outline', () => {
-    const md = serializeProject(forest(), 'P', { M1: 'hello\nworld' })
+    const md = serializeProject(record(), 'P', { M1: 'hello\nworld' })
     expect(md).toBe(
       '- Proj\n' +
       '  - [ ] Task one\n' +
@@ -53,7 +53,7 @@ describe('serializeProject', () => {
   })
 
   it('keeps a plain main-line run of tasks flat under the project root', () => {
-    const raw = {
+    const record = {
       schema: 2, domain: 'T', rootOrder: ['P'],
       tasks: {
         P: { id: 'P', title: 'P', kind: 'project', createdAt: 'x', note: null, next: 'a', branches: [] },
@@ -63,16 +63,16 @@ describe('serializeProject', () => {
       },
     }
     // a, b, c are siblings at one indent under the project, not a staircase.
-    expect(serializeProject(raw, 'P')).toBe('- P\n  - [ ] a\n  - [ ] b\n  - [ ] c\n')
+    expect(serializeProject(record, 'P')).toBe('- P\n  - [ ] a\n  - [ ] b\n  - [ ] c\n')
   })
 
   it('omits the note block for an empty or whitespace-only note', () => {
-    const md = serializeProject(forest(), 'P', { M1: '   \n  ' })
+    const md = serializeProject(record(), 'P', { M1: '   \n  ' })
     expect(md).not.toContain('\n\n') // no blank-line-led note paragraph
   })
 
   it('exports only the chosen sub-project when invoked on an interior project node', () => {
-    const md = serializeProject(forest(), 'SP')
+    const md = serializeProject(record(), 'SP')
     expect(md).toBe('- Sub\n  - [ ] ~~Sub task~~\n')
   })
 })

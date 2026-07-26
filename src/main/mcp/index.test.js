@@ -17,7 +17,7 @@ function stubStore(cfg) {
     getSettings: () => ({ lastDomain: null }),
   }
 }
-const taskServiceStub = { readForest: () => ({ error: 'n/a' }), taskOp: () => ({ error: 'n/a' }) }
+const taskServiceStub = { readRecord: () => ({ error: 'n/a' }), runOp: () => ({ error: 'n/a' }) }
 
 let svc
 afterEach(async () => { if (svc) await svc.stop(); svc = null })

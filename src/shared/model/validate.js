@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 
-// Load-time invariants for a parsed forest object (see docs/model_ideas.md for
-// the schema this enforces). Pure and side-effect free: it only reads raw and
-// returns { ok, errors }, so a caller decides whether to refuse a bad file or
-// surface the errors to the user. A forest older than the current schema must be
+// Load-time invariants for a parsed record object (see docs/model_ideas.md for
+// the schema this enforces). Pure and side-effect free: it only reads the record
+// and returns { ok, errors }, so a caller decides whether to refuse a bad file or
+// surface the errors to the user. A record older than the current schema must be
 // brought up to date with migrate.js first.
 //
 // Schema 2 (Sub-Projects): every node has a kind ('task' | 'project'); a task
@@ -17,9 +17,9 @@ const VALID_STATUSES = ['todo', 'in-progress', 'completed', 'cancelled']
 // Every node belongs to exactly one "line": the maximal run reached by following
 // .next from a line start. A line starts at a root or at any branch's child (a
 // fork begins a new stack). Returns an array of arrays of node ids, one per line.
-function collectLines(raw, rootIds) {
+function collectLines(record, rootIds) {
   const starts = [...rootIds]
-  for (const task of Object.values(raw.tasks || {})) {
+  for (const task of Object.values(record.tasks || {})) {
     for (const b of task.branches || []) starts.push(b.child)
   }
   const lines = []
@@ -30,7 +30,7 @@ function collectLines(raw, rootIds) {
     while (id && !seen.has(id)) {
       seen.add(id)
       line.push(id)
-      const task = raw.tasks[id]
+      const task = record.tasks[id]
       id = task ? task.next : null
     }
     lines.push(line)
@@ -42,7 +42,7 @@ function collectLines(raw, rootIds) {
 // (a node revisited while still on the current path) and collecting every
 // reachable node id, so unreachable nodes (including detached cycles) can be
 // reported too.
-function walkReachable(raw, rootIds, errors) {
+function walkReachable(record, rootIds, errors) {
   const visiting = new Set()
   const visited = new Set()
 
@@ -52,7 +52,7 @@ function walkReachable(raw, rootIds, errors) {
       return
     }
     if (visited.has(taskId)) return
-    const task = raw.tasks[taskId]
+    const task = record.tasks[taskId]
     if (!task) {
       errors.push('missing task "' + taskId + '" referenced from ' + (path[path.length - 1] || '(a root)'))
       return
@@ -68,16 +68,16 @@ function walkReachable(raw, rootIds, errors) {
   return visited
 }
 
-export function validateForest(raw) {
+export function validateRecord(record) {
   const errors = []
 
-  if (!raw || typeof raw !== 'object') return { ok: false, errors: ['forest is not an object'] }
-  if (raw.schema !== 2) errors.push('unsupported schema version: ' + raw.schema)
-  if (!raw.tasks || typeof raw.tasks !== 'object') errors.push('forest.tasks is missing or not an object')
-  if (raw.rootOrder != null && !Array.isArray(raw.rootOrder)) errors.push('forest.rootOrder is not an array')
+  if (!record || typeof record !== 'object') return { ok: false, errors: ['record is not an object'] }
+  if (record.schema !== 2) errors.push('unsupported schema version: ' + record.schema)
+  if (!record.tasks || typeof record.tasks !== 'object') errors.push('record.tasks is missing or not an object')
+  if (record.rootOrder != null && !Array.isArray(record.rootOrder)) errors.push('record.rootOrder is not an array')
   if (errors.length) return { ok: false, errors }
 
-  const tasks = raw.tasks
+  const tasks = record.tasks
   const taskIds = Object.keys(tasks)
 
   // Incoming edges: someone's .next XOR someone's branch.child. A node with none
@@ -123,14 +123,14 @@ export function validateForest(raw) {
     }
   }
 
-  const reachable = walkReachable(raw, rootIds, errors)
+  const reachable = walkReachable(record, rootIds, errors)
   for (const id of taskIds) {
     if (!reachable.has(id) && !errors.some((e) => e.includes('"' + id + '"'))) {
       errors.push('task "' + id + '" is not reachable from any root')
     }
   }
 
-  for (const line of collectLines(raw, rootIds)) {
+  for (const line of collectLines(record, rootIds)) {
     const hereCount = line.filter((id) => tasks[id] && tasks[id].here).length
     if (hereCount > 1) errors.push('branch starting at "' + line[0] + '" has ' + hereCount + ' "here" cursors; at most one is allowed')
   }

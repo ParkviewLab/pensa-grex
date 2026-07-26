@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 
-// The runtime forest model: takes a parsed (and, by convention, already
-// validated — see validate.js) forest object and builds task/tree lookups
+// The runtime domain model: takes a parsed (and, by convention, already
+// validated — see validate.js) record and builds task/tree lookups
 // plus the predecessor pointers the schema deliberately doesn't store (see
 // docs/model_ideas.md: "the predecessor is not stored — it is derived at
 // load, so the two can never disagree").
@@ -12,11 +12,11 @@
 // rootOrder (a list of root ids) only orders the trees left to right and is
 // advisory — the graph, not the list, decides what is a root.
 
-// Build the runtime model. Does not mutate raw; task/tree records are
+// Build the runtime model. Does not mutate record; task/tree records are
 // shallow-copied so callers can attach the derived fields below without
 // touching the parsed source.
-export function buildForest(raw) {
-  const tasks = new Map(Object.entries(raw.tasks).map(([id, t]) => [id, { ...t, branches: (t.branches || []).map((b) => ({ ...b })) }]))
+export function buildModel(record) {
+  const tasks = new Map(Object.entries(record.tasks).map(([id, t]) => [id, { ...t, branches: (t.branches || []).map((b) => ({ ...b })) }]))
 
   for (const task of tasks.values()) {
     task.predecessorId = null
@@ -45,7 +45,7 @@ export function buildForest(raw) {
   // ordering is honoured without the graph depending on it.
   const rootIds = []
   for (const [id, task] of tasks) if (task.predecessorId === null) rootIds.push(id)
-  const order = Array.isArray(raw.rootOrder) ? raw.rootOrder : []
+  const order = Array.isArray(record.rootOrder) ? record.rootOrder : []
   const rank = new Map(order.map((id, i) => [id, i]))
   rootIds.sort((a, b) => {
     const ra = rank.has(a) ? rank.get(a) : Infinity
@@ -119,8 +119,8 @@ export function buildForest(raw) {
   }
 
   return {
-    domain: raw.domain,
-    schema: raw.schema,
+    domain: record.domain,
+    schema: record.schema,
     trees,
     tasks,
     getTask,

@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 
-// Renderer entry: boots the theme and the pan/zoom viewport, opens a forest
+// Renderer entry: boots the theme and the pan/zoom viewport, opens a domain
 // through the main-process task authority (bridge/api.js → preload →
 // main/taskService.js), and edits it through a right-click menu. Each edit is a
 // named task operation the main process runs over the shared model — mutate,
-// re-validate, persist atomically — returning the new forest, which the renderer
+// re-validate, persist atomically — returning the new record, which the renderer
 // adopts and re-renders in place. On first run it seeds the two bundled sample
 // domains; the header switcher reopens the last-used domain across restarts.
 
 import { initTheme } from './theme/theme.js'
 import { createViewport } from './interaction/viewport.js'
 import { mountLayout } from './render/scene.js'
-import { buildForest } from '../../shared/model/forest.js'
-import { measureForest } from './layout/measure.js'
-import { computeForestLayout } from './layout/layout.js'
+import { buildModel } from '../../shared/model/model.js'
+import { measureDomain } from './layout/measure.js'
+import { computeDomainLayout } from './layout/layout.js'
 import { createApi } from './bridge/api.js'
 import { taskIdFromEvent } from './interaction/hittest.js'
 import { createDragController } from './interaction/drag.js'
@@ -38,29 +38,29 @@ const delDomainBtn = document.getElementById('deldomain')
 
 const api = createApi()
 let currentLayout = null
-let currentRaw = null
+let currentRecord = null
 let currentDomainPath = null
 let currentDomainName = null
 // Ids of collapsed project nodes: client-local view state, kept apart from the
-// forest data (see docs/northstar.md axiom 9) and loaded per domain.
+// record (see docs/northstar.md axiom 9) and loaded per domain.
 let collapsedSet = new Set()
 // The in-session clipboard: a snapshot of a copied project (its subtree records
 // and note contents), taken at copy time so it is independent of later edits and
 // survives a domain switch. Renderer-local and non-persistent — it does not
-// outlive the app, and never touches the forest data.
+// outlive the app, and never touches the record.
 let clipboard = null
 // The domain's saved bookmarks (a named view: collapse set, zoom, node-anchored
 // camera). Shared with the domain data (northstar axiom 9), loaded per domain.
 let bookmarks = []
 
 // The note editor records a task's note filename on its first non-empty save, so
-// the note dot appears and the name is persisted in the forest.
+// the note dot appears and the name is persisted in the record.
 const noteEditor = createNoteEditor({
   readNote: (dir, file) => api.readNote(dir, file),
   writeNote: (dir, file, text) => api.writeNote(dir, file, text),
   openExternal: (url) => api.openExternal(url),
   onFirstWrite: (taskId, file) => {
-    const t = currentRaw && currentRaw.tasks[taskId]
+    const t = currentRecord && currentRecord.tasks[taskId]
     if (t && !t.note) applyOp('setNote', taskId, file)
   },
   // Surfaced when an external writer changes or removes the note being edited.
@@ -68,7 +68,7 @@ const noteEditor = createNoteEditor({
 })
 
 function openNote(taskId) {
-  const t = currentRaw && currentRaw.tasks[taskId]
+  const t = currentRecord && currentRecord.tasks[taskId]
   if (t) noteEditor.open(t, currentDomainPath)
 }
 
@@ -87,7 +87,7 @@ async function reportEditError(msg) {
   editErrorOpen = false
 }
 
-// Forest edits persist synchronously through the task authority, so only the
+// Record edits persist synchronously through the task authority, so only the
 // open note — still autosaved on a debounce — needs a flush before the window
 // closes, lest an edit made within its debounce window be lost on quit.
 window.addEventListener('beforeunload', () => {
@@ -126,7 +126,7 @@ document.getElementById('zout').addEventListener('click', () => {
 })
 
 // "Show only flagged" read-only view: a client-local toggle (never written to the
-// forest, per northstar axiom 9). The class on the content element hides everything
+// record, per northstar axiom 9). The class on the content element hides everything
 // but flagged cards and makes cards non-interactive (which also disables drag, since
 // drag.js resolves its source from the pointer's DOM target); the context menu is
 // gated separately so no canvas-level edit (e.g. Paste as new tree) is reachable.
@@ -208,13 +208,13 @@ function showEmpty(message) {
 // collides (a domain already there) is skipped, not fatal.
 async function seedSamples() {
   const samples = [
-    { name: 'HomeLab', raw: homelabFixtureRaw },
-    { name: 'Work', raw: workFixtureRaw },
+    { name: 'HomeLab', record: homelabFixtureRaw },
+    { name: 'Work', record: workFixtureRaw },
   ]
-  for (const { name, raw } of samples) {
+  for (const { name, record } of samples) {
     const created = await api.createForest(name)
     if (created.error) continue
-    await api.saveForest(created.path, raw)
+    await api.saveForest(created.path, record)
     if (name === 'HomeLab') {
       await api.writeNote(created.path, 'k_plex.md',
         '# Fix Plex transcoding\n\nHardware transcoding is not kicking in on 4K HEVC.\n\n- [ ] Confirm the GPU is passed through to the container\n- [ ] Check the Plex transcoder logs\n')
@@ -222,34 +222,34 @@ async function seedSamples() {
   }
 }
 
-// Draw a runtime forest. On edits, fit is false so the map does not jump under
-// the user's pan/zoom; on opening a domain it frames the whole forest.
-async function render(raw, { fit = true } = {}) {
-  const forest = buildForest(pruneCollapsed(raw, collapsedSet))
-  if (!forest.trees.length) {
+// Draw a runtime model. On edits, fit is false so the map does not jump under
+// the user's pan/zoom; on opening a domain it frames the whole of it.
+async function render(record, { fit = true } = {}) {
+  const model = buildModel(pruneCollapsed(record, collapsedSet))
+  if (!model.trees.length) {
     showEmpty('This domain has no tasks yet. Right-click the canvas to start a tree.')
     return
   }
-  const { sizes } = await measureForest(forest)
-  currentLayout = computeForestLayout(forest, sizes)
-  mountLayout(contentEl, currentLayout, forest)
+  const { sizes } = await measureDomain(model)
+  currentLayout = computeDomainLayout(model, sizes)
+  mountLayout(contentEl, currentLayout, model)
   if (emptyEl) emptyEl.style.display = 'none'
   if (fit) viewport.fit()
 }
 
 // Apply one task operation through the main-process authority: it runs the pure
-// mutation over the on-disk forest, re-validates, and persists atomically, then
-// returns the new forest, which we adopt and re-render in place. A refused edit
+// mutation over the on-disk record, re-validates, and persists atomically, then
+// returns the new record, which we adopt and re-render in place. A refused edit
 // (a broken invariant) or a failed write comes back as an error we surface.
 async function applyOp(op, ...args) {
-  const res = await api.taskOp(currentDomainPath, op, ...args)
+  const res = await api.runOp(currentDomainPath, op, ...args)
   if (res.error) {
     console.error(`edit rejected (${op}):`, res.error)
     reportEditError(res.error)
     return
   }
-  currentRaw = res.raw
-  await render(currentRaw, { fit: false })
+  currentRecord = res.record
+  await render(currentRecord, { fit: false })
 }
 
 async function openDomain(path, name) {
@@ -257,13 +257,13 @@ async function openDomain(path, name) {
   closeContextMenu()
   noteEditor.close()
   // Main parses, migrates (persisting the upgrade once), and validates; the
-  // renderer receives the authoritative forest and renders it.
-  const res = await api.readForest(path)
+  // renderer receives the authoritative record and renders it.
+  const res = await api.readRecord(path)
   if (res.error) {
     showEmpty('Could not open “' + (name || path) + '”: ' + res.error)
     return
   }
-  currentRaw = res.raw
+  currentRecord = res.record
   currentDomainPath = path
   currentDomainName = name
   const vs = await api.getViewState(name)
@@ -272,7 +272,7 @@ async function openDomain(path, name) {
   bookmarks = parseBookmarks(bm && bm.text)
   await api.setLastDomain(name)
   updateDeleteButton()
-  await render(currentRaw, { fit: true })
+  await render(currentRecord, { fit: true })
 }
 
 // Bookmarks cross the bridge as text (the renderer owns the JSON shape); a missing
@@ -293,8 +293,8 @@ async function persistBookmarks() {
 
 // A node is a root iff nothing points at it (no .next, no branch child). Roots
 // are project nodes; nothing may be added below them and their kind is fixed.
-function isRootId(raw, id) {
-  for (const t of Object.values(raw.tasks)) {
+function isRootId(record, id) {
+  for (const t of Object.values(record.tasks)) {
     if (t.next === id) return false
     if ((t.branches || []).some((b) => b.child === id)) return false
   }
@@ -307,8 +307,8 @@ function isRootId(raw, id) {
 // so this is a meaningful insertion index.
 function rootDropIndex(sourceId, clientX) {
   let index = 0
-  for (const id of Object.keys(currentRaw.tasks)) {
-    if (id === sourceId || !isRootId(currentRaw, id)) continue
+  for (const id of Object.keys(currentRecord.tasks)) {
+    if (id === sourceId || !isRootId(currentRecord, id)) continue
     const el = contentEl.querySelector('[data-task-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]')
     if (!el) continue
     const r = el.getBoundingClientRect()
@@ -334,11 +334,11 @@ function clientToWorld(clientX, clientY) {
 // {kind:'insert', belowId, caret:{x,y}}, {kind:'reorder', index}, {kind:'detach'},
 // or {kind:'none'}. A card takes precedence over a gap; a gap over empty canvas.
 function resolveDropIntent(sourceId, clientX, clientY) {
-  if (!currentRaw || !currentLayout) return { kind: 'none' }
-  const src = currentRaw.tasks[sourceId]
+  if (!currentRecord || !currentLayout) return { kind: 'none' }
+  const src = currentRecord.tasks[sourceId]
   if (!src) return { kind: 'none' }
   const { wx, wy } = clientToWorld(clientX, clientY)
-  const sub = subtreeIdsOf(currentRaw, sourceId)
+  const sub = subtreeIdsOf(currentRecord, sourceId)
   const byId = new Map(currentLayout.stations.map((s) => [s.id, s]))
 
   // 1. Over a card -> fork (never the source itself or a node inside its subtree).
@@ -354,7 +354,7 @@ function resolveDropIntent(sourceId, clientX, clientY) {
   // upward, so Q's bottom edge is above P's top edge.
   const CARET_HALF = 78 // a touch wider than the card, for a comfortable target
   const TIP_GAP = 44
-  for (const [pid, p] of Object.entries(currentRaw.tasks)) {
+  for (const [pid, p] of Object.entries(currentRecord.tasks)) {
     const ps = byId.get(pid)
     if (!ps || Math.abs(wx - ps.x) > CARET_HALF) continue
     const q = p.next ? byId.get(p.next) : null
@@ -369,7 +369,7 @@ function resolveDropIntent(sourceId, clientX, clientY) {
 
   // 3. Empty canvas: a sub-project detaches, a root reorders, a task is refused.
   if (src.kind !== 'project') return { kind: 'none' }
-  if (isRootId(currentRaw, sourceId)) return { kind: 'reorder', index: rootDropIndex(sourceId, clientX) }
+  if (isRootId(currentRecord, sourceId)) return { kind: 'reorder', index: rootDropIndex(sourceId, clientX) }
   return { kind: 'detach' }
 }
 
@@ -404,10 +404,10 @@ function renderDropHint(intent) {
 
 // Apply a resolved drop intent as a task op. The authority re-validates every
 // op, so a stale or degenerate drop is rejected there and surfaced, rather than
-// corrupting the forest.
+// corrupting the record.
 function applyDropIntent(sourceId, intent) {
-  if (!currentRaw || !intent) return
-  const node = currentRaw.tasks[sourceId]
+  if (!currentRecord || !intent) return
+  const node = currentRecord.tasks[sourceId]
   if (!node) return
   if (intent.kind === 'fork') {
     applyOp(node.kind === 'project' ? 'moveSubtree' : 'moveTaskNode', sourceId, intent.targetId)
@@ -420,15 +420,15 @@ function applyDropIntent(sourceId, intent) {
   }
 }
 
-// Every id reachable from startId in raw (inclusive), following .next and branches.
-function subtreeIdsOf(raw, startId) {
+// Every id reachable from startId in the record (inclusive), following .next and branches.
+function subtreeIdsOf(record, startId) {
   const ids = new Set()
   const stack = [startId]
   while (stack.length) {
     const id = stack.pop()
     if (ids.has(id)) continue
     ids.add(id)
-    const t = raw.tasks[id]
+    const t = record.tasks[id]
     if (!t) continue
     if (t.next) stack.push(t.next)
     for (const b of t.branches || []) stack.push(b.child)
@@ -436,16 +436,16 @@ function subtreeIdsOf(raw, startId) {
   return ids
 }
 
-// A view-only copy of raw with each collapsed project node kept as a leaf: its
+// A view-only copy of the record with each collapsed project node kept as a leaf: its
 // subtree removed and the node marked so the render draws it folded (its shadow).
 // Collapse is client-local (docs/northstar.md axiom 9), so this never touches
-// currentRaw or the saved forest; a collapsed id that is now a task is ignored.
-function pruneCollapsed(raw, collapsed) {
-  const ids = [...collapsed].filter((id) => raw.tasks[id] && raw.tasks[id].kind === 'project')
-  if (!ids.length) return raw
+// currentRecord or the saved record; a collapsed id that is now a task is ignored.
+function pruneCollapsed(record, collapsed) {
+  const ids = [...collapsed].filter((id) => record.tasks[id] && record.tasks[id].kind === 'project')
+  if (!ids.length) return record
   const remove = new Set()
-  for (const id of ids) for (const d of subtreeIdsOf(raw, id)) if (d !== id) remove.add(d)
-  const next = structuredClone(raw)
+  for (const id of ids) for (const d of subtreeIdsOf(record, id)) if (d !== id) remove.add(d)
+  const next = structuredClone(record)
   for (const id of ids) {
     if (remove.has(id)) continue // this collapsed node is itself hidden inside another
     next.tasks[id].collapsed = true
@@ -462,15 +462,15 @@ function toggleCollapse(taskId) {
   if (collapsedSet.has(taskId)) collapsedSet.delete(taskId)
   else collapsedSet.add(taskId)
   if (currentDomainName) api.setViewState(currentDomainName, { collapsed: [...collapsedSet] })
-  render(currentRaw, { fit: false })
+  render(currentRecord, { fit: false })
 }
 
 // Read the note contents of a subtree into an { id: content } map, taken by value
 // so it is a snapshot independent of later edits. Shared by copy and export.
 async function collectSubtreeNotes(taskId) {
   const notes = {}
-  for (const id of subtreeIdsOf(currentRaw, taskId)) {
-    const rec = currentRaw.tasks[id]
+  for (const id of subtreeIdsOf(currentRecord, taskId)) {
+    const rec = currentRecord.tasks[id]
     if (rec.note) {
       const r = await api.readNote(currentDomainPath, rec.note)
       notes[id] = (r && r.content) || ''
@@ -484,24 +484,24 @@ async function collectSubtreeNotes(taskId) {
 // domain switch; note text is read now rather than referenced by file.
 async function copyProject(taskId) {
   const tasks = {}
-  for (const id of subtreeIdsOf(currentRaw, taskId)) tasks[id] = structuredClone(currentRaw.tasks[id])
+  for (const id of subtreeIdsOf(currentRecord, taskId)) tasks[id] = structuredClone(currentRecord.tasks[id])
   clipboard = { rootId: taskId, tasks, notes: await collectSubtreeNotes(taskId) }
 }
 
 // Paste the clipboard into the open domain as a new tree: fresh ids, kept
 // statuses, cleared here cursors, fresh note files. The paste op writes the note
-// files and the forest together in the main process.
+// note files and the record together in the main process.
 async function pasteTreeFlow() {
-  if (!clipboard || !currentRaw) return
+  if (!clipboard || !currentRecord) return
   await applyOp('pasteAsTree', clipboard)
 }
 
 // Export a project's subtree to a markdown outline the user saves where they
-// choose. One-way: the file is a rendered copy, with no path back into the forest.
+// choose. One-way: the file is a rendered copy, with no path back into the record.
 async function exportProjectFlow(taskId) {
   const notes = await collectSubtreeNotes(taskId)
-  const md = serializeProject(currentRaw, taskId, notes)
-  const base = (currentRaw.tasks[taskId].title || 'project').trim() || 'project'
+  const md = serializeProject(currentRecord, taskId, notes)
+  const base = (currentRecord.tasks[taskId].title || 'project').trim() || 'project'
   const res = await api.exportMarkdown(base + '.md', md)
   if (res && res.error) {
     await chooseAction({ title: 'Export failed', message: res.error, actions: [{ label: 'OK', value: null }] })
@@ -515,7 +515,7 @@ async function exportProjectFlow(taskId) {
 // (a node-anchored camera, so the bookmark survives layout changes and degrades
 // to the nearest surviving ancestor rather than a stale coordinate).
 async function addBookmarkFlow() {
-  if (!currentLayout || !currentRaw) return
+  if (!currentLayout || !currentRecord) return
   const name = await promptText({ title: 'Add bookmark', label: 'Name', value: '' })
   if (name === null || !name.trim()) return
   const { scale, tx, ty } = viewport.getTransform()
@@ -526,7 +526,7 @@ async function addBookmarkFlow() {
     name: name.trim(),
     collapsed: [...collapsedSet],
     zoom: scale,
-    anchor: anchorId ? anchorChain(currentRaw, anchorId) : [],
+    anchor: anchorId ? anchorChain(currentRecord, anchorId) : [],
   })
   await persistBookmarks()
 }
@@ -536,10 +536,10 @@ async function addBookmarkFlow() {
 // chain that runs dry (the whole anchored tree was deleted) is a broken bookmark:
 // fit the domain and say so. Collapse is resolved lazily here, not on delete.
 async function jumpToBookmark(bm) {
-  if (!currentRaw) return
-  collapsedSet = new Set((bm.collapsed || []).filter((id) => currentRaw.tasks[id] && currentRaw.tasks[id].kind === 'project'))
+  if (!currentRecord) return
+  collapsedSet = new Set((bm.collapsed || []).filter((id) => currentRecord.tasks[id] && currentRecord.tasks[id].kind === 'project'))
   if (currentDomainName) api.setViewState(currentDomainName, { collapsed: [...collapsedSet] })
-  await render(currentRaw, { fit: false })
+  await render(currentRecord, { fit: false })
   if (!currentLayout) return
   const hit = resolveAnchor(bm.anchor || [], new Set(currentLayout.stations.map((s) => s.id)))
   if (hit) {
@@ -571,7 +571,7 @@ async function deleteBookmarkFlow(index) {
 // ---- editing flows (each dialog runs after the menu has closed) ----
 
 async function renameTask(taskId) {
-  const title = await promptText({ title: 'Rename task', label: 'Title', value: currentRaw.tasks[taskId].title })
+  const title = await promptText({ title: 'Rename task', label: 'Title', value: currentRecord.tasks[taskId].title })
   if (title === null) return
   applyOp('setTitle', taskId, title)
 }
@@ -589,8 +589,8 @@ async function addBranchFlow(dir, taskId) {
 }
 
 async function deleteTaskFlow(taskId) {
-  const task = currentRaw.tasks[taskId]
-  const isRoot = isRootId(currentRaw, taskId)
+  const task = currentRecord.tasks[taskId]
+  const isRoot = isRootId(currentRecord, taskId)
   const hasDescendants = !!task.next || (task.branches && task.branches.length > 0)
   let mode = 'subtree'
   if (isRoot && hasDescendants) {
@@ -626,9 +626,9 @@ async function addTreeFlow() {
 }
 
 function openTaskMenu(x, y, taskId) {
-  const task = currentRaw.tasks[taskId]
+  const task = currentRecord.tasks[taskId]
   const isProject = task.kind === 'project'
-  const isRoot = isRootId(currentRaw, taskId)
+  const isRoot = isRootId(currentRecord, taskId)
   const items = []
 
   if (!isProject) {
@@ -667,9 +667,9 @@ function openTaskMenu(x, y, taskId) {
   // successor cannot take the base); "move down" needs a non-root main-line
   // predecessor to swap below.
   const succId = task.next
-  const predId = Object.keys(currentRaw.tasks).find((pid) => currentRaw.tasks[pid].next === taskId)
+  const predId = Object.keys(currentRecord.tasks).find((pid) => currentRecord.tasks[pid].next === taskId)
   if (succId && !isRoot) items.push({ label: 'Move up', onClick: () => applyOp('moveUp', taskId) })
-  if (predId && !isRootId(currentRaw, predId)) items.push({ label: 'Move down', onClick: () => applyOp('moveDown', taskId) })
+  if (predId && !isRootId(currentRecord, predId)) items.push({ label: 'Move down', onClick: () => applyOp('moveDown', taskId) })
   items.push({ label: 'Rename…', onClick: () => renameTask(taskId) })
   items.push({ separator: true })
   items.push({ label: 'Add task above', onClick: () => addTaskFlow('above', taskId) })
@@ -700,40 +700,40 @@ function openCanvasMenu(x, y) {
 
 viewportEl.addEventListener('contextmenu', (e) => {
   e.preventDefault()
-  if (!currentRaw) return
+  if (!currentRecord) return
   if (flaggedOnly) return // read-only view; card gestures are already disabled via CSS
   const taskId = taskIdFromEvent(e)
-  if (taskId && currentRaw.tasks[taskId]) openTaskMenu(e.clientX, e.clientY, taskId)
+  if (taskId && currentRecord.tasks[taskId]) openTaskMenu(e.clientX, e.clientY, taskId)
   else openCanvasMenu(e.clientX, e.clientY)
 })
 
 // Clicking a card's notepad icon opens its note.
 viewportEl.addEventListener('click', (e) => {
-  if (!currentRaw) return
+  if (!currentRecord) return
   if (!e.target.closest('.noteicon')) return
   const taskId = taskIdFromEvent(e)
-  if (taskId && currentRaw.tasks[taskId]) openNote(taskId)
+  if (taskId && currentRecord.tasks[taskId]) openNote(taskId)
 })
 
 // Double-clicking a card's body toggles its flag (drawn as atomic orbits). The
 // status glyph and note icon own their own single-click actions, so a double-click
 // on either is left to them and does not toggle the flag.
 viewportEl.addEventListener('dblclick', (e) => {
-  if (!currentRaw) return
+  if (!currentRecord) return
   if (e.target.closest('.gl') || e.target.closest('.noteicon')) return
   const taskId = taskIdFromEvent(e)
-  if (taskId && currentRaw.tasks[taskId]) applyOp('toggleFlag', taskId)
+  if (taskId && currentRecord.tasks[taskId]) applyOp('toggleFlag', taskId)
 })
 
 // Single-clicking a task's status glyph cycles its status
 // (todo -> in-progress -> completed -> cancelled -> todo). A project glyph, which
 // carries no status, is ignored.
 viewportEl.addEventListener('click', (e) => {
-  if (!currentRaw) return
+  if (!currentRecord) return
   const gl = e.target.closest('.gl')
   if (!gl || gl.classList.contains('project')) return
   const taskId = taskIdFromEvent(e)
-  if (taskId && currentRaw.tasks[taskId]) applyOp('cycleStatus', taskId)
+  if (taskId && currentRecord.tasks[taskId]) applyOp('cycleStatus', taskId)
 })
 
 const NEW_DOMAIN = '__new__'
@@ -792,8 +792,8 @@ async function deleteDomainFlow() {
 
   noteEditor.close()
   closeContextMenu()
-  // No queued forest save to cancel: task ops write synchronously through main,
-  // so nothing can re-create the trashed forest after this point.
+  // No queued record save to cancel: task ops write synchronously through main,
+  // so nothing can re-create the trashed domain after this point.
   const res = await api.deleteForest(path)
   if (res.error) {
     await chooseAction({ title: 'Could not delete domain', message: res.error, actions: [{ label: 'OK', value: null }] })
@@ -803,7 +803,7 @@ async function deleteDomainFlow() {
   const domains = await api.listDomains()
   if (!domains.length) {
     currentDomainPath = null
-    currentRaw = null
+    currentRecord = null
     await api.setLastDomain(null)
     populateSwitcher([], null)
     updateDeleteButton()
@@ -848,11 +848,11 @@ function scheduleLiveRefresh(dir) {
     const d = liveRefreshDir
     liveRefreshDir = null
     if (!d || d !== currentDomainPath) return
-    const res = await api.readForest(d)
+    const res = await api.readRecord(d)
     if (res.error) return
-    currentRaw = res.raw
-    await render(currentRaw, { fit: false })
-    noteEditor.reconcile(d, currentRaw)
+    currentRecord = res.record
+    await render(currentRecord, { fit: false })
+    noteEditor.reconcile(d, currentRecord)
   })
 }
 
@@ -865,7 +865,7 @@ async function refreshDomainList() {
     closeContextMenu()
     if (!domains.length) {
       currentDomainPath = null
-      currentRaw = null
+      currentRecord = null
       await api.setLastDomain(null)
       populateSwitcher([], null)
       updateDeleteButton()

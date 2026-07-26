@@ -310,8 +310,8 @@ app.whenReady().then(() => {
   // calls these in place of the coarse load/save; the in-app MCP server (later)
   // will call the same taskService in this same process. Every op re-validates
   // before it persists, so a bad edit is rejected, not written.
-  ipcMain.handle('pensagrex:read-forest', (_e, dir) => taskService.readForest(dir))
-  ipcMain.handle('pensagrex:task-op', (_e, dir, op, ...args) => taskService.taskOp(dir, op, args))
+  ipcMain.handle('pensagrex:read-forest', (_e, dir) => taskService.readRecord(dir))
+  ipcMain.handle('pensagrex:task-op', (_e, dir, op, ...args) => taskService.runOp(dir, op, args))
 
   // The in-app MCP server: start it now (enabled by default) so a local agent can
   // reach the live app on loopback. The renderer's status indicator reads and

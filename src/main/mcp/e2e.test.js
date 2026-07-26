@@ -49,7 +49,7 @@ async function connect(scope = 'destructive', notify) {
 }
 
 describe('MCP end to end (real SDK client over loopback HTTP)', () => {
-  it('initializes, lists tools, and a tool call edits the forest on disk', async () => {
+  it('initializes, lists tools, and a tool call edits the record on disk', async () => {
     store.createForest('HomeLab')
     store.setLastDomain('HomeLab')
     await connect('destructive')
@@ -65,8 +65,8 @@ describe('MCP end to end (real SDK client over loopback HTTP)', () => {
 
     // the write went through the authority to disk
     const dir = store.listDomains()[0].path
-    const raw = taskService.readForest(dir).raw
-    expect(Object.values(raw.tasks).some((t) => t.title === 'Overview' && t.kind === 'project')).toBe(true)
+    const record = taskService.readRecord(dir).record
+    expect(Object.values(record.tasks).some((t) => t.title === 'Overview' && t.kind === 'project')).toBe(true)
   })
 
   it('honours the read-only scope (no write tools are exposed)', async () => {

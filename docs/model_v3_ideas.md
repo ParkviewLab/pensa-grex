@@ -53,8 +53,8 @@ In schema 2 a fork opens a parallel stack and that stack simply ends. In v3 ever
 it left. That is not a naming change; it changes the class of graph from a strict tree to a single-entry,
 single-exit block structure, and it contradicted the northstar in three places: inside intent 1, as axiom 2,
 and in `model_ideas.md`'s definition of a tree. The axiom is the one that
-matters, because it underwrites the single-incoming-edge rule in `validateForest`, the tree-membership walk in
-`buildForest`, and the cycle check; if it merely lost a clause, nothing would tell a later reader which of
+matters, because it underwrites the single-incoming-edge rule in `validateRecord`, the tree-membership walk in
+`buildModel`, and the cycle check; if it merely lost a clause, nothing would tell a later reader which of
 those survive.
 
 Was: *2. A strict tree, bottom-up: forks split and never rejoin; the root is the base, and growth rises.*

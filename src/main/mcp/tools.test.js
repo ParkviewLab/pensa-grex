@@ -136,8 +136,8 @@ describe('tools drive the task authority', () => {
   })
 })
 
-describe('tools notify on non-forest changes', () => {
-  // A fresh registerTools with a notify spy (the real taskService, so taskOp does
+describe('tools notify on changes the op path does not cover', () => {
+  // A fresh registerTools with a notify spy (the real taskService, so runOp does
   // not notify here; that wrapper is tested end to end in e2e.test.js).
   function serverWithNotify() {
     const events = []
@@ -153,7 +153,7 @@ describe('tools notify on non-forest changes', () => {
 
     store.setLastDomain('Work')
     const cp = JSON.parse((await s.call('create_project', { name: 'P' })).content[0].text)
-    await s.call('set_note', { node_id: cp.id, content: 'first' }) // records the note (forest change)
+    await s.call('set_note', { node_id: cp.id, content: 'first' }) // records the note (a record change)
     s.events.length = 0
     await s.call('set_note', { node_id: cp.id, content: 'second' }) // note-only change
     expect(s.events).toContain('pensagrex:domain-changed')

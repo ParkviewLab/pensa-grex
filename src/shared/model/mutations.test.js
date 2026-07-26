@@ -2,14 +2,14 @@
 // SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 
 import { describe, it, expect } from 'vitest'
-import { validateForest } from './validate.js'
+import { validateRecord } from './validate.js'
 import {
   setTitle, uniqueTitle, setNote, toggleFlag, setStatus, cycleStatus, makeHere, clearHere, addTree, convertKind,
   addTaskAbove, addTaskBelow, addBranchAbove, addBranchBelow, deleteTask, pasteAsTree,
   moveTaskNode, moveSubtree, detachToTree, reorderRoot, moveIntoLine, moveUp, moveDown,
 } from './mutations.js'
 
-// A small valid forest: project root r -> m1(here) -> m2, with a fork b1 -> b2 off m1.
+// A small valid record: project root r -> m1(here) -> m2, with a fork b1 -> b2 off m1.
 function base() {
   const t = (id, over = {}) => ({
     id, title: id, kind: 'task', status: 'todo', createdAt: '2026-01-01T00:00:00Z', completedAt: null,
@@ -32,8 +32,8 @@ function base() {
   }
 }
 
-const valid = (raw) => expect(validateForest(raw)).toEqual({ ok: true, errors: [] })
-const ids = (raw) => Object.keys(raw.tasks).sort()
+const valid = (record) => expect(validateRecord(record)).toEqual({ ok: true, errors: [] })
+const ids = (record) => Object.keys(record.tasks).sort()
 const newId = (before, after) => ids(after).find((id) => !before.tasks[id])
 
 describe('setTitle / setStatus', () => {
@@ -75,14 +75,14 @@ describe('setTitle / setStatus', () => {
 
 describe('cycleStatus', () => {
   it('advances one step and wraps cancelled -> todo', () => {
-    let raw = base() // m2 is a todo task
-    raw = cycleStatus(raw, 'm2'); expect(raw.tasks.m2.status).toBe('in-progress')
-    raw = cycleStatus(raw, 'm2'); expect(raw.tasks.m2.status).toBe('completed')
-    expect(raw.tasks.m2.completedAt).not.toBeNull() // completion stamps
-    raw = cycleStatus(raw, 'm2'); expect(raw.tasks.m2.status).toBe('cancelled')
-    expect(raw.tasks.m2.completedAt).toBeNull() // leaving completed clears
-    raw = cycleStatus(raw, 'm2'); expect(raw.tasks.m2.status).toBe('todo') // wraps
-    valid(raw)
+    let record = base() // m2 is a todo task
+    record = cycleStatus(record, 'm2'); expect(record.tasks.m2.status).toBe('in-progress')
+    record = cycleStatus(record, 'm2'); expect(record.tasks.m2.status).toBe('completed')
+    expect(record.tasks.m2.completedAt).not.toBeNull() // completion stamps
+    record = cycleStatus(record, 'm2'); expect(record.tasks.m2.status).toBe('cancelled')
+    expect(record.tasks.m2.completedAt).toBeNull() // leaving completed clears
+    record = cycleStatus(record, 'm2'); expect(record.tasks.m2.status).toBe('todo') // wraps
+    valid(record)
   })
 
   it('refuses to cycle a project node', () => {
@@ -191,7 +191,7 @@ describe('makeHere / clearHere', () => {
 })
 
 describe('addTree', () => {
-  it('starts a new project with its own project-node root, and works from an empty forest', () => {
+  it('starts a new project with its own project-node root, and works from an empty record', () => {
     const empty = { schema: 2, domain: 'T', rootOrder: [], tasks: {} }
     const out = addTree(empty, 'Fresh')
     expect(out.rootOrder).toHaveLength(1)
@@ -364,7 +364,7 @@ describe('deleteTask — splice', () => {
   it('keeps only the tip-most cursor when a splice merges two cursored lines', () => {
     // p(project) -> r(here) -> t ; t forks to b0(here). Splice t: b0 is promoted onto
     // r's line, which would carry two cursors — the tip-most (b0) survives.
-    const raw = {
+    const record = {
       schema: 2, domain: 'T', rootOrder: ['p'],
       tasks: {
         p: { id: 'p', title: 'p', kind: 'project', createdAt: 'x', note: null, next: 'r', branches: [] },
@@ -373,8 +373,8 @@ describe('deleteTask — splice', () => {
         b0: { id: 'b0', title: 'b0', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: true, next: null, branches: [] },
       },
     }
-    valid(raw)
-    const out = deleteTask(raw, 't', 'splice')
+    valid(record)
+    const out = deleteTask(record, 't', 'splice')
     expect(out.tasks.r.next).toBe('b0')
     expect(out.tasks.r.here).toBe(false) // cleared
     expect(out.tasks.b0.here).toBe(true) // kept (tip-most)
@@ -398,7 +398,7 @@ describe('pasteAsTree', () => {
     notes: { b2: '# b2 note\n' },
   })
   const empty = () => ({ schema: 2, domain: 'T', rootOrder: [], tasks: {} })
-  const byTitle = (raw) => Object.fromEntries(Object.values(raw.tasks).map((t) => [t.title, t]))
+  const byTitle = (record) => Object.fromEntries(Object.values(record.tasks).map((t) => [t.title, t]))
 
   it('pastes a copied project as a fresh, valid tree with regenerated ids', () => {
     const { next } = pasteAsTree(empty(), clip())
@@ -448,7 +448,7 @@ describe('pasteAsTree', () => {
   })
 
   it('suffixes pasted titles that collide with names already in the domain', () => {
-    // Paste the clip into a forest that already holds its titles (base(): r, m1,
+    // Paste the clip into a record that already holds its titles (base(): r, m1,
     // m2, b1, b2), with the root renamed to 'Proj' so the clip root collides too.
     const dest = setTitle(base(), 'r', 'Proj')
     const { next } = pasteAsTree(dest, clip())
@@ -492,7 +492,7 @@ describe('moveTaskNode', () => {
   })
 })
 
-// A forest with an interior sub-project: r -> a -> SP(project) -> s1 ; a forks to f1.
+// A record with an interior sub-project: r -> a -> SP(project) -> s1 ; a forks to f1.
 function withSub() {
   const t = (id, over = {}) => ({
     id, title: id, kind: 'task', status: 'todo', createdAt: '2026-01-01T00:00:00Z', completedAt: null,
@@ -572,9 +572,9 @@ describe('reorderRoot', () => {
   })
 
   it('canonicalises an incomplete rootOrder to the full root set first', () => {
-    const raw = threeRoots()
-    raw.rootOrder = ['B'] // A and C are roots too, but unlisted (ordered by createdAt: A before C)
-    expect(reorderRoot(raw, 'C', 0).rootOrder).toEqual(['C', 'B', 'A'])
+    const record = threeRoots()
+    record.rootOrder = ['B'] // A and C are roots too, but unlisted (ordered by createdAt: A before C)
+    expect(reorderRoot(record, 'C', 0).rootOrder).toEqual(['C', 'B', 'A'])
   })
 
   it('refuses a non-root node', () => {
@@ -596,7 +596,7 @@ function line4() {
     },
   }
 }
-const chain = (raw) => { const out = []; let id = raw.tasks.r.next; while (id) { out.push(id); id = raw.tasks[id].next }; return out }
+const chain = (record) => { const out = []; let id = record.tasks.r.next; while (id) { out.push(id); id = record.tasks[id].next }; return out }
 
 describe('moveIntoLine', () => {
   it('reorders a task into a gap higher on its line', () => {

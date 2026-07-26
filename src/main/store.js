@@ -158,7 +158,7 @@ function viewStatePath() {
 // Client-local view state (which project nodes are collapsed), keyed by domain
 // name. Disposable: a corrupt or missing file falls back to {} (unlike
 // settings.json, which we refuse to clobber). See docs/northstar.md axiom 9:
-// the view is the client's, kept out of the shared forest data.
+// the view is the client's, kept out of the shared record.
 function readViewStateFile() {
   try {
     return JSON.parse(readFileSync(viewStatePath(), 'utf-8'))

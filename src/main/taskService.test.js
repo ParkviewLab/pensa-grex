@@ -38,21 +38,21 @@ function onDisk(dir) {
 // A domain with one project tree; returns [dir, rootId].
 function domainWithTree(name = 'HomeLab', treeName = 'Overview') {
   const { path } = store.createForest(name)
-  const res = taskService.taskOp(path, 'addTree', [treeName])
+  const res = taskService.runOp(path, 'addTree', [treeName])
   expect(res.error).toBeUndefined()
-  return [path, Object.keys(res.raw.tasks)[0]]
+  return [path, Object.keys(res.record.tasks)[0]]
 }
 
-describe('readForest', () => {
-  it('reads a fresh domain as an empty schema-2 forest', () => {
+describe('readRecord', () => {
+  it('reads a fresh domain as an empty schema-2 record', () => {
     const { path } = store.createForest('HomeLab')
-    const res = taskService.readForest(path)
+    const res = taskService.readRecord(path)
     expect(res.error).toBeUndefined()
-    expect(res.raw.schema).toBe(2)
-    expect(res.raw.tasks).toEqual({})
+    expect(res.record.schema).toBe(2)
+    expect(res.record.tasks).toEqual({})
   })
 
-  it('migrates a schema-1 forest and persists the upgrade once', () => {
+  it('migrates a schema-1 record and persists the upgrade once', () => {
     const { path } = store.createForest('HomeLab')
     const v1 = {
       schema: 1, domain: 'HomeLab',
@@ -63,11 +63,11 @@ describe('readForest', () => {
     }
     store.saveForest(path, JSON5.stringify(v1))
 
-    const res = taskService.readForest(path)
+    const res = taskService.readRecord(path)
     expect(res.error).toBeUndefined()
-    expect(res.raw.schema).toBe(2)
+    expect(res.record.schema).toBe(2)
 
-    // The upgrade was written back to disk, so it is a schema-2 forest now, and a
+    // The upgrade was written back to disk, so it is a schema-2 record now, and a
     // second read finds nothing left to migrate (changed=false, no re-write).
     const disk = onDisk(path)
     expect(disk.schema).toBe(2)
@@ -79,27 +79,27 @@ describe('readForest', () => {
   it('reports a JSON5 parse error rather than throwing', () => {
     const { path } = store.createForest('HomeLab')
     store.saveForest(path, '{ this is not valid json5 ')
-    const res = taskService.readForest(path)
-    expect(res.raw).toBeUndefined()
+    const res = taskService.readRecord(path)
+    expect(res.record).toBeUndefined()
     expect(res.error).toMatch(/JSON5/)
   })
 
   it('reports a store error for a path outside the library root', () => {
-    const res = taskService.readForest('/etc')
-    expect(res.raw).toBeUndefined()
+    const res = taskService.readRecord('/etc')
+    expect(res.record).toBeUndefined()
     expect(res.error).toMatch(/library root/)
   })
 })
 
-describe('taskOp', () => {
-  it('applies a mutation, persists it, and returns the new forest', () => {
+describe('runOp', () => {
+  it('applies a mutation, persists it, and returns the new record', () => {
     const { path } = store.createForest('HomeLab')
-    const res = taskService.taskOp(path, 'addTree', ['Overview'])
+    const res = taskService.runOp(path, 'addTree', ['Overview'])
     expect(res.error).toBeUndefined()
 
-    const ids = Object.keys(res.raw.tasks)
+    const ids = Object.keys(res.record.tasks)
     expect(ids).toHaveLength(1)
-    const root = res.raw.tasks[ids[0]]
+    const root = res.record.tasks[ids[0]]
     expect(root.kind).toBe('project')
     expect(root.title).toBe('Overview')
 
@@ -111,15 +111,15 @@ describe('taskOp', () => {
 
   it('chains ops: add a task above the root, then complete it', () => {
     const [dir, rootId] = domainWithTree()
-    const added = taskService.taskOp(dir, 'addTaskAbove', [rootId, 'First'])
+    const added = taskService.runOp(dir, 'addTaskAbove', [rootId, 'First'])
     expect(added.error).toBeUndefined()
-    const taskId = Object.keys(added.raw.tasks).find((id) => added.raw.tasks[id].kind === 'task')
+    const taskId = Object.keys(added.record.tasks).find((id) => added.record.tasks[id].kind === 'task')
     expect(taskId).toBeTruthy()
 
-    const done = taskService.taskOp(dir, 'setStatus', [taskId, 'completed'])
+    const done = taskService.runOp(dir, 'setStatus', [taskId, 'completed'])
     expect(done.error).toBeUndefined()
-    expect(done.raw.tasks[taskId].status).toBe('completed')
-    expect(done.raw.tasks[taskId].completedAt).toBeTruthy()
+    expect(done.record.tasks[taskId].status).toBe('completed')
+    expect(done.record.tasks[taskId].completedAt).toBeTruthy()
     expect(onDisk(dir).tasks[taskId].status).toBe('completed')
   })
 
@@ -127,37 +127,37 @@ describe('taskOp', () => {
     const [dir, rootId] = domainWithTree()
     const before = store.loadForest(dir).text
     // A project node has no status: setStatus throws, the op returns the error.
-    const res = taskService.taskOp(dir, 'setStatus', [rootId, 'completed'])
-    expect(res.raw).toBeUndefined()
+    const res = taskService.runOp(dir, 'setStatus', [rootId, 'completed'])
+    expect(res.record).toBeUndefined()
     expect(res.error).toMatch(/project/)
-    expect(store.loadForest(dir).text).toBe(before) // forest untouched
+    expect(store.loadForest(dir).text).toBe(before) // file untouched
   })
 
   it('rejects an unknown op name and writes nothing', () => {
     const [dir] = domainWithTree()
     const before = store.loadForest(dir).text
-    const res = taskService.taskOp(dir, 'deleteEverything', [])
-    expect(res.raw).toBeUndefined()
+    const res = taskService.runOp(dir, 'deleteEverything', [])
+    expect(res.record).toBeUndefined()
     expect(res.error).toMatch(/unknown task op/)
     expect(store.loadForest(dir).text).toBe(before)
   })
 
   it('writes the pasted note files for pasteAsTree', () => {
     const [dir, rootId] = domainWithTree('HomeLab', 'Src')
-    taskService.taskOp(dir, 'setNote', [rootId, 'src.md'])
+    taskService.runOp(dir, 'setNote', [rootId, 'src.md'])
     store.writeNote(dir, 'src.md', '# source note\n')
 
-    const raw = taskService.readForest(dir).raw
+    const record = taskService.readRecord(dir).record
     const clip = {
       rootId,
-      tasks: { [rootId]: structuredClone(raw.tasks[rootId]) },
+      tasks: { [rootId]: structuredClone(record.tasks[rootId]) },
       notes: { [rootId]: '# source note\n' },
     }
-    const res = taskService.taskOp(dir, 'pasteAsTree', [clip])
+    const res = taskService.runOp(dir, 'pasteAsTree', [clip])
     expect(res.error).toBeUndefined()
 
     // Two trees now: the original plus the paste.
-    const roots = Object.values(res.raw.tasks).filter((t) => t.kind === 'project')
+    const roots = Object.values(res.record.tasks).filter((t) => t.kind === 'project')
     expect(roots).toHaveLength(2)
 
     // The pasted node got a fresh note file (named for its new id), and that file

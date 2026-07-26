@@ -3,8 +3,8 @@
 
 // One-way export of a project subtree to a nested Markdown outline (the
 // Sub-Projects plan, "Export to Markdown"). Pure and synchronous: note contents
-// are read by the caller and passed in, so this is a straight fold over the raw
-// forest and is unit-tested without any I/O.
+// are read by the caller and passed in, so this is a straight fold over the
+// record and is unit-tested without any I/O.
 //
 // Shape rules:
 //   - A project node is a plain bullet and NESTS its whole subtree one level in.
@@ -17,7 +17,7 @@
 //   - A node's note is inlined beneath it as indented body text (a continuation
 //     paragraph of the item), never a block quote.
 //   - The full subtree is emitted regardless of collapse (the caller passes the
-//     unpruned forest).
+//     unpruned record).
 
 const INDENT = '  ' // two spaces per nesting level
 
@@ -30,7 +30,7 @@ function bulletFor(node) {
 
 // Serialize the subtree rooted at rootId. `notes` maps a node id to its note
 // text (absent or empty means no note). Returns the markdown string.
-export function serializeProject(raw, rootId, notes = {}) {
+export function serializeProject(record, rootId, notes = {}) {
   const out = []
   const seen = new Set()
 
@@ -38,7 +38,7 @@ export function serializeProject(raw, rootId, notes = {}) {
   // main-line successor stays at `depth` (a flat run); a project's successor and
   // every fork nest at `depth + 1`.
   function emit(id, depth) {
-    const node = raw.tasks[id]
+    const node = record.tasks[id]
     if (!node || seen.has(id)) return
     seen.add(id)
     out.push(INDENT.repeat(depth) + bulletFor(node))
@@ -58,6 +58,6 @@ export function serializeProject(raw, rootId, notes = {}) {
     if (node.next) emit(node.next, node.kind === 'project' ? depth + 1 : depth)
   }
 
-  if (raw.tasks[rootId]) emit(rootId, 0)
+  if (record.tasks[rootId]) emit(rootId, 0)
   return out.join('\n') + '\n'
 }
