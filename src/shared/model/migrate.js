@@ -15,11 +15,17 @@
 //
 // schema 2 -> 3 (the record shape; see docs/model_v3_ideas.md). Renames the
 // envelope and the node map, remints every id, and rewrites each node's branch
-// list as two ordered side arrays. Nothing structural changes here: no termini
-// and no merges yet, so a migrated domain draws as it did.
+// list as two ordered side arrays. It then closes every scope and gives every
+// branch a return, the two structural things schema 3 requires and schema 2
+// could not say.
 
 import { mintNodeId, mintDomainId } from './ids.js'
 import { noteFileName } from './notes.js'
+import { branchesIn, indexRecord, mergeErrors } from './validate.js'
+// The one thing this module borrows from the edit layer: schema 2 let a fork hang on the top
+// of a branch, which schema 3 cannot say, and the repair for it is the same one an edit needs
+// when it deletes the node above a branch's host, so there is one implementation of it.
+import { rehomeOrphanedBranches } from './mutations.js'
 
 export const CURRENT_SCHEMA = 3
 
@@ -147,6 +153,7 @@ function closeScopes(nodes, mintId, stamp) {
         createdAt: stamp,
         note: null,
         next: null,
+        mergePoint: null,
         rightBranches: [],
         leftBranches: [],
       }
@@ -154,6 +161,37 @@ function closeScopes(nodes, mintId, stamp) {
       nodes[top].next = terminus.id
       top = terminus.id
     }
+  }
+}
+
+// Give every branch a return, which is the one thing this migration invents rather than
+// translates. A schema-2 branch is precisely work that diverged and never rejoined, so
+// there is nothing in the old file to read a merge point off; the choice (record, section
+// 13) is to fabricate the weakest claim in the most visible place. Each branch merges at
+// the edge level with its own top, so the drawing keeps the geometry it had and gains a
+// short return line at the top of the branch, and one drag corrects any claim the author
+// disagrees with.
+//
+// Where that height runs past the close of the scope the branch was opened in, or past the
+// top of the trunk it left, the merge is clamped down to the highest legal edge. The floor
+// is the branch's own edge, which is legal everywhere, so the search always terminates.
+function fabricateMerges(record) {
+  for (const branch of branchesIn(record)) {
+    const ix = indexRecord(record)
+    const host = ix.at.get(branch.hostId)
+    if (!host || !branch.tipId) continue
+    const trunk = host.trunk
+    // The branch's foot sits one row above its host, so its top sits `length` rows above,
+    // and the trunk node at that height is this many steps along the trunk.
+    const level = Math.min(host.i + branch.trunk.length, trunk.length - 1)
+    let chosen = branch.hostId
+    for (let i = level; i > host.i; i--) {
+      if (!mergeErrors(record, { ...branch, mergePoint: trunk[i] }, ix).length) {
+        chosen = trunk[i]
+        break
+      }
+    }
+    record.nodes[branch.tipId].mergePoint = chosen
   }
 }
 
@@ -187,6 +225,9 @@ function migrate2to3(record) {
       node.status = t.status || 'todo'
       node.completedAt = t.completedAt || null
       node.here = !!t.here
+      // Filled in by fabricateMerges below, for whichever tasks turn out to be the top of
+      // a branch; a project node never carries the field, since it is never a top.
+      node.mergePoint = null
     }
     if (t.note) {
       node.note = noteFileName(id, t.title)
@@ -209,8 +250,14 @@ function migrate2to3(record) {
     }
   }
 
-  // Last, because it needs the finished trunks: every scope gets its close.
+  // Last, because both need the finished trunks: every scope gets its close, and then
+  // every branch gets its return, the merge rules being stated in terms of the scopes.
   closeScopes(nodes, mintNodeId, nowISO())
+  // After closeScopes, because a trunk that gained a terminus has a rising edge at its old
+  // top and so needs no move at all; before fabricateMerges, because a fork's merge depends
+  // on which node it hangs from.
+  rehomeOrphanedBranches({ nodes })
+  fabricateMerges({ nodes })
 
   return {
     record: {

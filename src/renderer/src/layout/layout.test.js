@@ -4,9 +4,11 @@
 import { describe, it, expect } from 'vitest'
 import JSON5 from 'json5'
 import fixtureRaw from '../../../shared/model/fixtures/homelab.record.json?raw'
+import workRaw from '../../../shared/model/fixtures/work.record.json?raw'
 import { buildModel } from '../../../shared/model/model.js'
 import { computeDomainLayout } from './layout.js'
-import { validateRecord } from '../../../shared/model/validate.js'
+import { validateRecord, branchesIn } from '../../../shared/model/validate.js'
+import { trackPath } from '../render/tracks.js'
 import * as M from '../../../shared/model/mutations.js'
 
 // Synthetic, deterministic sizes standing in for layout/measure.js's real DOM
@@ -38,6 +40,89 @@ function rectOf(station) {
 }
 function overlaps(a, b) {
   return !(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top)
+}
+
+// --- the row grid, the clearance bands, and the lateral runs in them ----------
+
+// Half a station dot. layout.js reads it from style.css (.dot{width:11px}) and a station does
+// not report it, so the one number has to be spelled again here: a node's space begins at the
+// top of its dot, and so does the clearance band running above that node's row.
+const DOT_RADIUS = 6
+
+// A node's space, which no lateral run may enter: the top of its dot down to the bottom of
+// its label shape (docs/model_v3_ideas.md, section 7).
+function nodeSpace(station) {
+  return { top: station.anchorY - DOT_RADIUS, bottom: station.cardTop + station.cardH }
+}
+
+// The rows the drawing reveals, base first. Every station on one row shares that row's card
+// top and anchor, so the distinct card tops ARE the rows, and the tallest card on a row is
+// what the band below it has to clear.
+function rowsOf(layout) {
+  const byTop = new Map()
+  for (const s of layout.stations) {
+    const row = byTop.get(s.cardTop) || { cardTop: s.cardTop, anchorY: s.anchorY, tallest: 0 }
+    row.tallest = Math.max(row.tallest, s.cardH)
+    byTop.set(s.cardTop, row)
+  }
+  return [...byTop.values()].sort((a, b) => b.cardTop - a.cardTop) // growth is upward, so y falls as the row rises
+}
+
+// The clearance band in every gap between two adjacent rows: from just above the lower row's
+// dots up to the bottom of the tallest card on the upper row. Anchored to the row rather than
+// to one card, because a run leaving a short card still has to clear a tall one beside it.
+// Growth is upward, so `low` is the larger y of the two edges, as it is in layout.js.
+function bandsOf(layout) {
+  const rows = rowsOf(layout)
+  const bands = []
+  for (let i = 0; i + 1 < rows.length; i++) {
+    bands.push({ low: rows[i].anchorY - DOT_RADIUS, high: rows[i + 1].cardTop + rows[i + 1].tallest })
+  }
+  return bands
+}
+
+// Every horizontal run a lateral line draws: the flat leg of a branch line on its way out to
+// its own lane, and of a return line on its way in to its trunk.
+function lateralRuns(layout) {
+  const runs = []
+  for (const t of layout.tracks) {
+    for (let i = 1; i < t.points.length; i++) {
+      const [x1, y1] = t.points[i - 1]
+      const [x2, y2] = t.points[i]
+      if (y1 === y2 && x1 !== x2) runs.push({ kind: t.kind, y: y1, from: x1, to: x2, hops: t.hops || [] })
+    }
+  }
+  return runs
+}
+
+// Every vertical a track draws, which is what a lateral run may have to hop. A single-node
+// line's riser is a zero-length segment and is no line to follow, so it is left out, as
+// layout.js leaves it out of its own hop scan.
+function verticalsOf(layout) {
+  const verticals = []
+  for (const t of layout.tracks) {
+    for (let i = 1; i < t.points.length; i++) {
+      const [x1, y1] = t.points[i - 1]
+      const [x2, y2] = t.points[i]
+      if (x1 === x2 && y1 !== y2) verticals.push({ x: x1, yMin: Math.min(y1, y2), yMax: Math.max(y1, y2) })
+    }
+  }
+  return verticals
+}
+
+// Which lateral runs fall in a node's space, named rather than counted so that a failure says
+// which run, at what height, and whose station it has walked into.
+function runsInNodeSpace(layout, label) {
+  const found = []
+  for (const run of lateralRuns(layout)) {
+    for (const s of layout.stations) {
+      const space = nodeSpace(s)
+      if (run.y >= space.top && run.y <= space.bottom) {
+        found.push(label + ': a ' + run.kind + ' run at y=' + run.y + ' lies in ' + s.id + "'s space")
+      }
+    }
+  }
+  return found
 }
 
 describe('computeDomainLayout — the HomeLab fixture', () => {
@@ -84,11 +169,16 @@ describe('computeDomainLayout — the HomeLab fixture', () => {
     expect(cursorIds).toEqual(['k_firewall', 'k_migrate', 'k_zigbee'])
   })
 
-  it('draws one junction per fork, three total', () => {
+  it('draws one junction per fork and one per join, six in all', () => {
     const { layout } = loadFixtureLayout()
     // Three forking nodes: k_migrate (2 branches sharing 1 junction), k_vlan (1),
     // k_zigbee (1).
-    expect(layout.junctions).toHaveLength(3)
+    //
+    // Returns: was 3, the forks alone. Every branch now rejoins the trunk it left and each
+    // join is marked as well, so the fixture's four branches add three more diamonds:
+    // k_plex and k_btrfs both merge at k_backups and share one, which is the n-way join the
+    // schema gets for nothing, while k_roam's and k_energy's are their own.
+    expect(layout.junctions).toHaveLength(6)
   })
 
   it('places each junction strictly between the two real cards it connects', () => {
@@ -97,11 +187,41 @@ describe('computeDomainLayout — the HomeLab fixture', () => {
     // k_migrate forks; its junction must sit below k_backups's card (the
     // main-line successor, "upper") and above k_migrate's own card ("lower").
     const migrate = byId.get('k_migrate'), backups = byId.get('k_backups')
-    // find the junction at k_migrate's x (there's exactly one fork at that x)
-    const j = layout.junctions.find((jn) => Math.abs(jn.x - migrate.x) < 1)
+    // Returns: k_migrate's x carries two diamonds now, since k_plex and k_btrfs return to
+    // the same trunk, so the fork is the lower of the pair rather than the only one there. A
+    // fork is drawn against the node below its edge and a join against the node above, which
+    // is what keeps the two apart and puts the fork underneath.
+    const atMigrateX = layout.junctions.filter((jn) => Math.abs(jn.x - migrate.x) < 1)
+    expect(atMigrateX).toHaveLength(2)
+    const j = atMigrateX.reduce((lower, jn) => (jn.y > lower.y ? jn : lower))
     expect(j).toBeDefined()
     expect(j.y).toBeLessThan(migrate.cardTop) // above (smaller y than) the lower card's top
     expect(j.y).toBeGreaterThan(backups.cardTop + backups.cardH) // below (larger y than) the upper card's bottom
+  })
+
+  it("draws one return line per branch, from the branch's tip in to its trunk", () => {
+    const { layout } = loadFixtureLayout()
+    const byId = new Map(layout.stations.map((s) => [s.id, s]))
+    // branchesIn is the same reading of the record the merge rules validate against, so the
+    // count here cannot drift from what the fixture actually spells.
+    const branches = branchesIn(JSON5.parse(fixtureRaw))
+    expect(branches).toHaveLength(4) // k_plex, k_btrfs, k_wifi's line, k_energy
+    const returns = layout.tracks.filter((t) => t.kind === 'return')
+    expect(returns).toHaveLength(branches.length)
+    const matched = new Set()
+    for (const branch of branches) {
+      const tip = byId.get(branch.tipId)
+      const trunk = byId.get(branch.mergePoint)
+      // A return leaves the top of the branch's own trunk, because that is the end the line
+      // departs from, and it arrives at the x of the trunk it left.
+      const line = returns.find((t) => Math.abs(t.points[0][0] - tip.x) < 0.5 && Math.abs(t.points[0][1] - tip.anchorY) < 0.5)
+      expect(line).toBeDefined()
+      const arrival = line.points[line.points.length - 1]
+      expect(Math.abs(arrival[0] - trunk.x)).toBeLessThan(0.5)
+      expect(arrival[1]).toBeLessThan(tip.anchorY) // and it arrives above the tip it left
+      matched.add(line)
+    }
+    expect(matched.size).toBe(branches.length) // each branch has its own line, not one matched twice
   })
 
   it('packs the three projects left to right without overlap', () => {
@@ -175,21 +295,30 @@ describe('computeDomainLayout — edge cases', () => {
   // scenario cannot be spelled there. It survives one row up, on the branch line:
   // b is a tip (nothing above it but its own fork to c), which is exactly the
   // absent-upper-node gap the regression is about.
-  it('lays out a fork on a bare tip with finite coordinates', () => {
+  //
+  // Returns: b was still a bare tip. A branch must now rejoin the trunk it left, and the only
+  // edges on b's trunk are the ones rising from its own nodes, so a fork off a tip with
+  // nothing above it leaves its branch nowhere to land and validateRecord refuses the record.
+  // Giving b a successor is what makes the twig legal, and it also retires the gap the
+  // regression was about: a fork's gap always has a card above it now, since the node its own
+  // branch returns to sits there. The sweep for NaN in every junction and every track point,
+  // which is what the case was written to catch, is unchanged.
+  it('lays out a fork on a branch line with finite coordinates', () => {
     const record = {
       schemaVersion: 3, id: 'd_solo000000', title: 'D', planOrder: ['r'],
       nodes: {
         r: { id: 'r', title: 'Root', kind: 'project', createdAt: 'x', note: null, flagged: false, next: 'z', leftBranches: ['b'], rightBranches: [] },
         z: { id: 'z', kind: 'terminus', createdAt: 'x', note: null, next: null, leftBranches: [], rightBranches: [] },
-        b: { id: 'b', title: 'Branch', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, flagged: false, here: false, next: null, leftBranches: ['c'], rightBranches: [] },
-        c: { id: 'c', title: 'Twig', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, flagged: false, here: false, next: null, leftBranches: [], rightBranches: [] },
+        b: { id: 'b', title: 'Branch', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, flagged: false, here: false, next: 'b2', leftBranches: ['c'], rightBranches: [] },
+        b2: { id: 'b2', title: 'Above', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, flagged: false, here: false, next: null, mergePoint: 'r', leftBranches: [], rightBranches: [] },
+        c: { id: 'c', title: 'Twig', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, flagged: false, here: false, next: null, mergePoint: 'b', leftBranches: [], rightBranches: [] },
       },
     }
     expect(validateRecord(record)).toEqual({ ok: true, errors: [] })
     const model = buildModel(record)
     const sizes = new Map([
       ['r', { cardW: 138, cardH: 49 }], ['z', { cardW: 64, cardH: 10 }],
-      ['b', { cardW: 138, cardH: 49 }], ['c', { cardW: 138, cardH: 49 }],
+      ['b', { cardW: 138, cardH: 49 }], ['b2', { cardW: 138, cardH: 49 }], ['c', { cardW: 138, cardH: 49 }],
     ])
     const layout = computeDomainLayout(model, sizes)
     for (const j of layout.junctions) {
@@ -207,7 +336,7 @@ describe('computeDomainLayout — edge cases', () => {
   })
 })
 
-// --- non-crossing branches and tip-fork connectivity -------------------------
+// --- non-crossing branches, bubbles, and the bands, runs and hops ------------
 
 function mkTask(id, over = {}) {
   return {
@@ -242,7 +371,7 @@ function layoutOf(record) {
   return computeDomainLayout(model, sizes)
 }
 
-// All track segments (risers, L-connectors, and the new tip-fork stubs).
+// All track segments: the risers, and both legs of every branch line and return line.
 function segments(layout) {
   const segs = []
   for (const t of layout.tracks) {
@@ -277,6 +406,12 @@ function countCrossings(layout) {
   return n
 }
 
+// Returns: crossings are no longer forbidden. A branch span is bounded now, two spans on one
+// side may overlap without nesting, and where a crossing does arise the drawing hops it
+// (docs/model_v3_ideas.md, section 7). A count of zero here is therefore a property of these
+// particular arrangements, none of which needs a crossing, rather than an invariant the engine
+// still guarantees; what replaced the invariant is the node-space rule, swept over both
+// fixtures at the foot of this file.
 describe('computeDomainLayout — non-crossing branches', () => {
   // The Wide tree: trunk Alpha->Bravo->Charlie->Delta; Bravo forks to One (left)
   // and Two (right), which therefore start level with Charlie; Charlie forks to
@@ -291,6 +426,12 @@ describe('computeDomainLayout — non-crossing branches', () => {
   //
   // Termini: alpha, the plan's base, is closed by omega above Delta, the top of its
   // trunk — the same trunk, one card longer.
+  //
+  // Returns: each branch now names where it rejoins, on the tip of its own trunk. One and
+  // Apple return to the edge above Charlie, Two (at its tip, Wonder) and Banana to the edge
+  // above Delta, so every span stays inside the plan's own scope. The lanes are the ones the
+  // test was written about; what the returns add is height, Delta rising a row to make room
+  // for the joins that land beneath it.
   const wide = {
     schemaVersion: 3, id: 'd_wide000000', title: 'W', planOrder: ['alpha'],
     nodes: {
@@ -299,8 +440,9 @@ describe('computeDomainLayout — non-crossing branches', () => {
       charlie: mkTask('charlie', { next: 'delta', leftBranches: ['apple'], rightBranches: ['banana'] }),
       delta: mkTask('delta', { next: 'omega' }),
       omega: mkTerminus('omega'),
-      one: mkTask('one'), two: mkTask('two', { next: 'wonder' }), wonder: mkTask('wonder'),
-      apple: mkTask('apple'), banana: mkTask('banana'),
+      one: mkTask('one', { mergePoint: 'charlie' }),
+      two: mkTask('two', { next: 'wonder' }), wonder: mkTask('wonder', { mergePoint: 'delta' }),
+      apple: mkTask('apple', { mergePoint: 'charlie' }), banana: mkTask('banana', { mergePoint: 'delta' }),
     },
   }
 
@@ -315,15 +457,20 @@ describe('computeDomainLayout — non-crossing branches', () => {
   it('draws a deep both-sides nest with no crossing', () => {
     // a spine with nested sub-branches on both sides at overlapping rows
     // (Termini: r is closed by rEnd above r2, the top of the spine)
+    //
+    // Returns: L and R rejoin the spine at the edge above r2, which is the only spine edge
+    // above them with a node to receive the join, since rEnd tops the plan. L2 and R2 leave
+    // that same edge and return to it, and the twigs Lb and Rb do likewise on their own
+    // branch lines: four bubbles, the smallest legal branch there is.
     const deep = {
       schemaVersion: 3, id: 'd_deep000000', title: 'D', planOrder: ['r'],
       nodes: {
         r: mkProject('r', { next: 'r2', leftBranches: ['L'], rightBranches: ['R'] }),
         r2: mkTask('r2', { next: 'rEnd', leftBranches: ['L2'], rightBranches: ['R2'] }),
         rEnd: mkTerminus('rEnd'),
-        L: mkTask('L', { next: 'La', leftBranches: ['Lb'] }), La: mkTask('La'), Lb: mkTask('Lb'),
-        R: mkTask('R', { next: 'Ra', rightBranches: ['Rb'] }), Ra: mkTask('Ra'), Rb: mkTask('Rb'),
-        L2: mkTask('L2'), R2: mkTask('R2'),
+        L: mkTask('L', { next: 'La', leftBranches: ['Lb'] }), La: mkTask('La', { mergePoint: 'r2' }), Lb: mkTask('Lb', { mergePoint: 'L' }),
+        R: mkTask('R', { next: 'Ra', rightBranches: ['Rb'] }), Ra: mkTask('Ra', { mergePoint: 'r2' }), Rb: mkTask('Rb', { mergePoint: 'R' }),
+        L2: mkTask('L2', { mergePoint: 'r2' }), R2: mkTask('R2', { mergePoint: 'r2' }),
       },
     }
     expect(countCrossings(layoutOf(deep))).toBe(0)
@@ -331,8 +478,8 @@ describe('computeDomainLayout — non-crossing branches', () => {
 })
 
 // Drag-and-drop rearranges the model through the pure move mutations; the layout
-// must stay drawable (valid, no overlaps, no branch crossings) after each. These
-// exercise the four moves against the real HomeLab fixture.
+// must stay drawable (valid, no overlaps, no branch crossings, and no lateral run in a
+// node's space) after each. These exercise the four moves against the real HomeLab fixture.
 describe('computeDomainLayout — after drag-and-drop moves', () => {
   const fresh = () => JSON5.parse(fixtureRaw)
   function drawable(record) {
@@ -340,6 +487,9 @@ describe('computeDomainLayout — after drag-and-drop moves', () => {
     const model = buildModel(record)
     const layout = computeDomainLayout(model, syntheticSizes(model).sizes)
     expect(countCrossings(layout)).toBe(0)
+    // A move relocates whole branches, and with them the returns they now carry, so the rule
+    // that survived the loss of the nesting invariant has to hold after each one too.
+    expect(runsInNodeSpace(layout, 'after the move')).toEqual([])
     const rects = layout.stations.map(rectOf)
     for (let i = 0; i < rects.length; i++) {
       for (let j = i + 1; j < rects.length; j++) expect(overlaps(rects[i], rects[j])).toBe(false)
@@ -372,7 +522,7 @@ describe('computeDomainLayout — after drag-and-drop moves', () => {
   })
 })
 
-describe('computeDomainLayout — tip-fork connector', () => {
+describe('computeDomainLayout — the bubble, and junctions anchored to a line', () => {
   // The Move tree: Beta is the tip of its line, and Beta forks left to Gamma, one
   // row above it. Beta must be connected up to the fork junction.
   //
@@ -382,105 +532,272 @@ describe('computeDomainLayout — tip-fork connector', () => {
   // Beta therefore hangs off Alpha as a branch instead, which leaves the geometry
   // this test is about untouched (a fork off a line tip, its junction floating
   // above the line's riser) and costs one extra junction, Alpha's own fork.
-  const move = {
+  //
+  // Returns: Beta forked while it was the tip of its line, and Gamma had no edge above Beta to
+  // rejoin, so the record is refused. Beta therefore carries the plan's close above it and
+  // Gamma leaves the edge between them and returns to that same edge, which makes the Move
+  // tree a bubble, the smallest branch there is. That retires the scenario the test was named
+  // for rather than moving it again: a fork's host always has an edge rising from it now,
+  // because its branch has to return to one, so a fork junction always falls inside its host
+  // line's own riser and the stub layout.js draws for the floating case is unreachable from a
+  // legal record. What the stub existed for is the property below, that no junction floats
+  // free of a line, and that is now asserted for every junction, fork and join alike.
+  const bubble = {
     schemaVersion: 3, id: 'd_move000000', title: 'M', planOrder: ['alpha'],
     nodes: {
-      alpha: mkProject('alpha', { next: 'omega', rightBranches: ['beta'] }),
+      alpha: mkProject('alpha', { next: 'beta' }),
+      beta: mkTask('beta', { next: 'omega', leftBranches: ['gamma'] }),
       omega: mkTerminus('omega'),
-      beta: mkTask('beta', { leftBranches: ['gamma'] }),
-      gamma: mkTask('gamma'),
+      gamma: mkTask('gamma', { mergePoint: 'beta' }),
     },
   }
 
-  it('connects the tip parent up to its floating fork junction', () => {
-    const layout = layoutOf(move)
-    expect(layout.junctions).toHaveLength(2) // Alpha's fork to Beta, and Beta's own to Gamma
+  it('leaves no junction floating: a vertical track runs through every one', () => {
+    const layout = layoutOf(bubble)
+    expect(layout.junctions).toHaveLength(2) // Beta's fork to Gamma, and Gamma's join above Beta
     const beta = layout.stations.find((s) => s.id === 'beta')
-    const j = layout.junctions.find((jn) => Math.abs(jn.x - beta.x) < 0.5) // Beta's, the floating one
-    expect(j).toBeDefined()
-    // a vertical stub at the parent's x runs from Beta's anchor up to the junction y
-    const stub = layout.tracks.find((t) =>
-      t.points.length === 2 &&
-      Math.abs(t.points[0][0] - beta.x) < 0.5 && Math.abs(t.points[1][0] - beta.x) < 0.5 &&
-      (Math.abs(t.points[0][1] - beta.anchorY) < 0.5 || Math.abs(t.points[1][1] - beta.anchorY) < 0.5) &&
-      (Math.abs(t.points[0][1] - j.y) < 0.5 || Math.abs(t.points[1][1] - j.y) < 0.5),
-    )
-    expect(stub).toBeTruthy()
-    // and it is not a degenerate zero-length segment
-    expect(Math.abs(stub.points[0][1] - stub.points[1][1])).toBeGreaterThan(0)
+    for (const j of layout.junctions) {
+      expect(Math.abs(j.x - beta.x)).toBeLessThan(0.5) // both are marked on the trunk, at Beta's x
+      const carrier = verticalsOf(layout).find((v) => Math.abs(v.x - j.x) < 0.5 && j.y >= v.yMin && j.y <= v.yMax)
+      expect(carrier).toBeDefined()
+      expect(carrier.yMax - carrier.yMin).toBeGreaterThan(0) // and no degenerate zero-length segment counts
+    }
+  })
+
+  it('leaves no junction floating in the HomeLab fixture either', () => {
+    const { layout } = loadFixtureLayout()
+    expect(layout.junctions).toHaveLength(6)
+    for (const j of layout.junctions) {
+      const carrier = verticalsOf(layout).find((v) => Math.abs(v.x - j.x) < 0.5 && j.y >= v.yMin && j.y <= v.yMax)
+      expect(carrier).toBeDefined()
+    }
+  })
+
+  it("puts a bubble's two junctions on the one edge, the fork below the merge", () => {
+    // Gamma leaves the edge rising from Beta and returns to that same edge, so both junctions
+    // are marked on it. The two placement conventions are what keep them apart: a fork is
+    // drawn just above the node below its edge, a merge just below the node above it
+    // (docs/model_v3_ideas.md, sections 3 and 6).
+    const layout = layoutOf(bubble)
+    const byId = new Map(layout.stations.map((s) => [s.id, s]))
+    const beta = byId.get('beta'), omega = byId.get('omega'), gamma = byId.get('gamma')
+    const [fork, merge] = [...layout.junctions].sort((p, q) => q.y - p.y)
+    expect(fork.y).toBeGreaterThan(merge.y) // the fork is the lower of the two
+    // and both sit on the one edge Beta -> Omega, clear of the node bounding each end
+    expect(fork.y).toBeLessThan(beta.anchorY - DOT_RADIUS)
+    expect(merge.y).toBeGreaterThan(omega.cardTop + omega.cardH)
+    // the bubble itself runs alongside that edge, in its own lane between the two junctions
+    expect(gamma.x).not.toBe(beta.x)
+    expect(gamma.anchorY).toBeLessThan(fork.y)
+    expect(gamma.cardTop + gamma.cardH).toBeGreaterThan(merge.y)
   })
 })
 
-describe('computeDomainLayout — angled branch connectors', () => {
-  // a is the trunk root (a -> b); a forks right to c, one row above. The branch
-  // connector's flat leg tilts up to c's lane, then a short vertical riser into c,
-  // while the junction diamond stays put at [a.x, junctionY].
+describe('computeDomainLayout — the band, and the flat run in it', () => {
+  // The Span tree: a is the plan's base (a -> b -> z), a forks right to c, and c rejoins at
+  // the edge above b, so the branch leaves the gap above a and returns in the next gap up.
   // (Termini: a is closed by z above b, the top of its trunk.)
-  const tilt = {
-    schemaVersion: 3, id: 'd_tilt000000', title: 'T', planOrder: ['a'],
+  //
+  // Returns: this was the tilt fixture, and the tilt is gone. Cards are aligned to the shared
+  // row grid and a lateral line is horizontal: the branch line leaves its fork junction, runs
+  // flat along the band in the gap above a, and rises into c; the return line rises out of c
+  // into the band below z and runs flat in to the trunk. What used to be tested of the leg,
+  // that it tilted up no more than 12 degrees and left a riser behind, is tested here as
+  // flatness and the same riser.
+  const span = {
+    schemaVersion: 3, id: 'd_span000000', title: 'S', planOrder: ['a'],
     nodes: {
       a: mkProject('a', { next: 'b', rightBranches: ['c'] }),
       b: mkTask('b', { next: 'z' }),
       z: mkTerminus('z'),
-      c: mkTask('c'),
+      c: mkTask('c', { mergePoint: 'b' }),
     },
   }
 
-  it('lifts the elbow to angle the leg up (<=12 deg), keeping the diamond and a vertical riser', () => {
-    const layout = layoutOf(tilt)
-    const j = layout.junctions[0]
+  it('runs a branch line flat from its junction out to its own lane, then rises into the card', () => {
+    const layout = layoutOf(span)
     const a = layout.stations.find((s) => s.id === 'a')
     const c = layout.stations.find((s) => s.id === 'c')
-    const conn = layout.tracks.find((t) => t.points.length === 3) // the branch connector
-    expect(conn).toBeTruthy()
-    const [p0, p1, p2] = conn.points
-    // starts at the diamond, ends at the branch anchor
+    const branch = layout.tracks.find((t) => t.kind === 'branch')
+    expect(branch).toBeTruthy()
+    const [p0, p1, p2] = branch.points
+    // it starts at the diamond, which sits on the trunk at a's x, and ends at c's own anchor
+    const fork = layout.junctions.find((j) => Math.abs(j.y - p0[1]) < 0.5)
+    expect(fork).toBeDefined()
+    expect(Math.abs(fork.x - a.x)).toBeLessThan(0.5)
     expect(Math.abs(p0[0] - a.x)).toBeLessThan(0.5)
-    expect(Math.abs(p0[1] - j.y)).toBeLessThan(0.5)
     expect(Math.abs(p2[0] - c.x)).toBeLessThan(0.5)
     expect(Math.abs(p2[1] - c.anchorY)).toBeLessThan(0.5)
-    // the elbow is at c's lane, lifted off junctionY toward the (higher) anchor,
-    // but not past it — so a vertical riser remains
+    // the run is flat, at the junction's own height, and reaches exactly c's lane
+    expect(p1[1]).toBe(p0[1])
+    expect(Math.abs(p1[0] - p0[0])).toBeGreaterThan(0)
     expect(Math.abs(p1[0] - c.x)).toBeLessThan(0.5)
-    expect(p2[1]).toBeLessThan(p0[1]) // a fork always rises: the anchor is higher (smaller y)
-    expect(p1[1]).toBeLessThan(p0[1]) // elbow lifted up from the junction
-    expect(p1[1]).toBeGreaterThan(p2[1]) // but short of the anchor (riser preserved)
-    // the flat leg is tilted and no steeper than 12 deg
-    const run = Math.abs(p1[0] - p0[0])
-    const rise = Math.abs(p1[1] - p0[1])
-    expect(run).toBeGreaterThan(0)
-    expect(rise).toBeGreaterThan(0)
-    expect(rise / run).toBeLessThanOrEqual(Math.tan((12 * Math.PI) / 180) + 1e-6)
-    // the last leg is a vertical riser, and the diamond did not move
+    // and the last leg is the vertical riser into the card
     expect(Math.abs(p1[0] - p2[0])).toBeLessThan(0.5)
-    expect(Math.abs(j.x - a.x)).toBeLessThan(0.5)
+    expect(p2[1]).toBeLessThan(p1[1]) // a fork rises: the anchor is higher (smaller y)
     expect(countCrossings(layout)).toBe(0)
   })
 
-  it('gives every branch off one junction the same slope, however far out its lane', () => {
-    // a forks right to three branches at increasing lanes; sharing one junction,
-    // their legs must all leave it at the same angle (a single ray), not flatten
-    // as the lane gets further out.
+  it("rises out of the branch's tip into the band, then runs flat in to the trunk", () => {
+    const layout = layoutOf(span)
+    const b = layout.stations.find((s) => s.id === 'b')
+    const c = layout.stations.find((s) => s.id === 'c')
+    const line = layout.tracks.find((t) => t.kind === 'return')
+    expect(line).toBeTruthy()
+    const [p0, p1, p2] = line.points
+    // it leaves the tip's anchor and climbs its own lane, which is the mirror of the fork
+    expect(Math.abs(p0[0] - c.x)).toBeLessThan(0.5)
+    expect(Math.abs(p0[1] - c.anchorY)).toBeLessThan(0.5)
+    expect(Math.abs(p1[0] - c.x)).toBeLessThan(0.5)
+    expect(p1[1]).toBeLessThan(p0[1])
+    // then runs flat in to the trunk it left, at the height it climbed to
+    expect(p2[1]).toBe(p1[1])
+    expect(Math.abs(p2[0] - b.x)).toBeLessThan(0.5)
+    // the join is marked where the run arrives
+    const merge = layout.junctions.find((j) => Math.abs(j.y - p2[1]) < 0.5)
+    expect(merge).toBeDefined()
+    expect(Math.abs(merge.x - b.x)).toBeLessThan(0.5)
+  })
+
+  it('gives every branch off one junction the same run height, however far out its lane', () => {
+    // a forks right to three branches at increasing lanes. Sharing one junction, their runs
+    // must all leave it at its own height rather than tilting up toward their cards, and all
+    // three name the same merge point, so their returns arrive at a single diamond, which is
+    // the n-way join the schema gets for nothing.
     // (Termini: a is closed by z above b, the top of its trunk.)
     const fan = {
       schemaVersion: 3, id: 'd_fan0000000', title: 'F', planOrder: ['a'],
       nodes: {
         a: mkProject('a', { next: 'b', rightBranches: ['c', 'd', 'e'] }),
         b: mkTask('b', { next: 'z' }), z: mkTerminus('z'),
-        c: mkTask('c'), d: mkTask('d'), e: mkTask('e'),
+        c: mkTask('c', { mergePoint: 'b' }), d: mkTask('d', { mergePoint: 'b' }), e: mkTask('e', { mergePoint: 'b' }),
       },
     }
     const layout = layoutOf(fan)
-    const conns = layout.tracks.filter((t) => t.points.length === 3) // the three branch connectors
-    expect(conns).toHaveLength(3)
-    const tan12 = Math.tan((12 * Math.PI) / 180)
-    const runs = conns.map((t) => Math.abs(t.points[1][0] - t.points[0][0]))
-    for (const [p0, p1] of conns.map((t) => t.points)) {
-      const slope = Math.abs(p1[1] - p0[1]) / Math.abs(p1[0] - p0[0])
-      expect(slope).toBeCloseTo(tan12, 6)
+    expect(layout.junctions).toHaveLength(2) // one fork below, one join above, for all three branches
+    const fork = layout.junctions.reduce((lower, j) => (j.y > lower.y ? j : lower))
+    const runs = lateralRuns(layout).filter((r) => r.kind === 'branch')
+    expect(runs).toHaveLength(3)
+    for (const run of runs) {
+      expect(run.y).toBe(fork.y) // flat, and at the junction's height, however far the lane
+      expect(Math.abs(run.from - fork.x)).toBeLessThan(0.5)
     }
-    // the lanes really are at increasing distances (so the slope test has teeth)
-    expect(Math.max(...runs)).toBeGreaterThan(Math.min(...runs) + 1)
-    expect(countCrossings(layout)).toBe(0)
+    // the lanes really are at increasing distances (so the flatness has teeth)
+    const lengths = runs.map((r) => Math.abs(r.to - r.from))
+    expect(Math.max(...lengths)).toBeGreaterThan(Math.min(...lengths) + 1)
+  })
+
+  it("keeps every lateral run inside its gap's clearance band", () => {
+    const { layout } = loadFixtureLayout()
+    const bands = bandsOf(layout)
+    for (const run of lateralRuns(layout)) {
+      const band = bands.find((b) => run.y >= b.high && run.y <= b.low)
+      expect(band).toBeDefined() // every run lies in the band of some gap, not merely between rows
+    }
+    // and the band is the row's, not one card's: k_migrate's two branch lines clear the bottom
+    // of the TALLEST card a row up, which in this fixture is k_firewall's, in another plan
+    // altogether and 14 pixels lower than k_backups's own.
+    const byId = new Map(layout.stations.map((s) => [s.id, s]))
+    const migrate = byId.get('k_migrate'), backups = byId.get('k_backups'), firewall = byId.get('k_firewall')
+    expect(firewall.cardTop).toBe(backups.cardTop) // the same row
+    expect(firewall.cardH).toBeGreaterThan(backups.cardH)
+    const runs = lateralRuns(layout).filter((r) => r.kind === 'branch' && Math.abs(r.from - migrate.x) < 0.5)
+    expect(runs).toHaveLength(2)
+    for (const run of runs) {
+      expect(run.y).toBeGreaterThan(firewall.cardTop + firewall.cardH)
+      expect(run.y).toBeLessThan(migrate.anchorY - DOT_RADIUS)
+    }
+  })
+})
+
+describe('computeDomainLayout — the hop where a run crosses a line', () => {
+  // The Cross tree: the trunk runs p, a, b, c, d, t. a forks right to x1 -> x2, whose return
+  // joins the edge above c; b forks right to y1, whose return joins the edge above d, one edge
+  // higher. b is the higher branch point, so y1 takes the inner lane and x1's band the outer
+  // one, and y1's return therefore climbs its lane straight across the band x2's return runs
+  // in along. That is the crossing section 7 now permits instead of forbidding: the outer
+  // lateral hops it, and the inner line carries on unbroken.
+  const cross = {
+    schemaVersion: 3, id: 'd_cross00000', title: 'X', planOrder: ['p'],
+    nodes: {
+      p: mkProject('p', { next: 'a' }),
+      a: mkTask('a', { next: 'b', rightBranches: ['x1'] }),
+      b: mkTask('b', { next: 'c', rightBranches: ['y1'] }),
+      c: mkTask('c', { next: 'd' }),
+      d: mkTask('d', { next: 't' }),
+      t: mkTerminus('t'),
+      x1: mkTask('x1', { next: 'x2' }), x2: mkTask('x2', { mergePoint: 'c' }),
+      y1: mkTask('y1', { mergePoint: 'd' }),
+    },
+  }
+
+  it("hops the line a run crosses, at that line's x", () => {
+    const layout = layoutOf(cross)
+    const byId = new Map(layout.stations.map((s) => [s.id, s]))
+    const hopped = layout.tracks.filter((t) => t.hops)
+    expect(hopped).toHaveLength(1)
+    // The outer lateral is the one that hops, and it hops at the x of the line it crosses,
+    // which carries on unbroken. Here that line is the inner branch's own return, as much a
+    // line to follow as a trunk is.
+    expect(hopped[0].kind).toBe('return')
+    expect(hopped[0].hops).toEqual([byId.get('y1').x])
+    // the hop marks a crossing that is really there rather than standing in for one avoided
+    expect(countCrossings(layout)).toBe(1)
+  })
+
+  it('leaves a run that crosses nothing unhopped', () => {
+    const layout = layoutOf(cross)
+    const runs = lateralRuns(layout)
+    expect(runs).toHaveLength(4) // two branch lines out, two returns in
+    const plain = runs.filter((r) => r.hops.length === 0)
+    expect(plain).toHaveLength(3)
+    for (const run of plain) {
+      // nothing to hop: no vertical lies strictly between the run's ends at the run's height,
+      // which is the condition layout.js decides a hop by
+      const crossed = verticalsOf(layout).filter((v) =>
+        (v.x - run.from) * (v.x - run.to) < 0 && run.y >= v.yMin && run.y <= v.yMax)
+      expect(crossed).toEqual([])
+    }
+  })
+})
+
+describe('trackPath — the hump it draws for a hop', () => {
+  it('draws a hop as a quadratic hump on the upward side', () => {
+    // The run goes left to right at y=100 and hops a line at x=100 with radius 5: it stops 5
+    // short, arcs over, and resumes 5 past. Growth is upward, so the control point's smaller y
+    // is what puts the hump above the run rather than below it.
+    expect(trackPath([[0, 100], [200, 100]], [100], 5)).toBe('M0,100 L95,100 Q100,90 105,100 L200,100')
+    // a run going the other way hops in the order it meets them, or the path would double back
+    expect(trackPath([[200, 100], [0, 100]], [50, 150], 5))
+      .toBe('M200,100 L155,100 Q150,90 145,100 L55,100 Q50,90 45,100 L0,100')
+  })
+
+  it('leaves a plain polyline alone', () => {
+    expect(trackPath([[0, 100], [0, 40], [200, 40]])).toBe('M0,100 L0,40 L200,40')
+    // and a hop is drawn only where the line actually crosses one: an x outside the run, or a
+    // vertical leg, adds nothing
+    expect(trackPath([[0, 100], [200, 100]], [300], 5)).toBe('M0,100 L200,100')
+    expect(trackPath([[0, 100], [0, 40]], [0], 5)).toBe('M0,100 L0,40')
+  })
+})
+
+describe("computeDomainLayout — no lateral run in a node's space", () => {
+  // The one geometric rule that replaced the nesting invariant: a crossing may happen, but
+  // never between the top of a node's dot and the bottom of its label shape, or the drawing
+  // would read as a line running through a station (docs/model_v3_ideas.md, section 7). The
+  // shared row grid is what buys it, since one y per row for every lane leaves the band between
+  // two rows empty at every lane at once, so this sweeps both fixtures whole rather than
+  // checking a chosen pair.
+  it('keeps every lateral run clear of every node, over both fixtures', () => {
+    const offenders = []
+    for (const [name, raw] of [['HomeLab', fixtureRaw], ['Work', workRaw]]) {
+      const record = JSON5.parse(raw)
+      expect(validateRecord(record)).toEqual({ ok: true, errors: [] })
+      const model = buildModel(record)
+      const layout = computeDomainLayout(model, syntheticSizes(model).sizes)
+      expect(lateralRuns(layout).length).toBeGreaterThan(0) // the sweep has something to sweep
+      offenders.push(...runsInNodeSpace(layout, name))
+    }
+    expect(offenders).toEqual([])
   })
 })

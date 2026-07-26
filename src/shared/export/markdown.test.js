@@ -40,7 +40,9 @@ function record() {
       S1: t('S1', 'Sub task', { status: 'cancelled', next: 'TS' }),
       TS: c('TS', { next: 'TP' }),
       TP: c('TP'),
-      B1: t('B1', 'Branch one'),
+      // Returns: the fork rejoins the trunk it left, at the edge above M2, and a merge
+      // point is stored on the top of the branch (here its only node).
+      B1: t('B1', 'Branch one', { mergePoint: 'M2' }),
     },
   }
 }

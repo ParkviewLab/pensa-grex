@@ -93,6 +93,13 @@ edge by a neighbouring node, and they must choose the same neighbour or every mu
 way each field reads. Branches already name the node below their edge, so `mergePoint` does too: it holds the
 id of the node below the edge into which the return line joins.
 
+Which node carries the field is a separate question, and the answer is the top of the branch's own trunk,
+because that is the end the return leaves from: it is an outgoing edge, as `next` is, and putting it there lets
+a merge be read off the node the line departs. A ProjectNode therefore never carries one, since it always has
+its own close above it and so is never a trunk's top. What that costs is a relocation whenever an edit puts a
+new node on top of a branch, which one pass repairs for every branch at once rather than each operation
+remembering to.
+
 Stated once, that gives a single rule of availability: a node can host a branch, or receive a merge, exactly
 when a trunk edge rises from it. Two positions have no such edge, and both are unavailable for the same reason
 rather than by separate decree. A root TerminusNode has nothing above it. The top node of a branch trunk has
@@ -178,6 +185,17 @@ the picture planar.
 A crossing arises only where a lateral line reaches past a trunk nearer the spine than its own lane, which
 makes the crossing relation a strict order and therefore acyclic: the outer line hops the inner trunk, never
 the reverse.
+
+Order is stored per node, so one thing has to be settled that the arrays do not say: how two branches leaving
+different nodes of one trunk compare. The rule is that the higher branch point is the inner one, so a side's
+lane order is the trunk read from the top down, each node's array in its stored order. That keeps the old
+default where it was harmless, since a branch leaving higher is the one whose span is likelier to nest inside a
+lower one's, and it leaves the author's per-node order meaning exactly what it says.
+
+The consequence is worth stating plainly, because it bounds what "the author's order" buys: reordering is
+available within one node's array, and between nodes the branch point decides, since that is all the arrays can
+express. Making a lower branch inner than a higher one would need a rank stored per branch, and nothing so far
+has asked for it.
 
 What the superseded rule was is worth recording, because it shows the layout engine loses less than one might
 expect. `assignLanes` has two rules. The first, ordering by attach height so that a branch attaching higher
@@ -441,7 +459,8 @@ and refreshed best-effort on a retitle, and the field is what resolves. The bran
 first, and that order is the author's.
 
 A TerminusNode keeps `next`, the branch arrays, and `mergePoint`, because a sub-project's close has an edge
-above it and can therefore host a branch, receive a merge, and even be a branch trunk's own tip. It keeps
+above it and can therefore host a branch, receive a merge, and even be a branch trunk's own tip, which is the
+node that holds the field (section 3). It keeps
 `note` as well: a scope's close is exactly where one would record what finishing it took. What it does not carry
 is a title, a status, a cursor, or a flag, so it cannot be searched for by name or swept up by a flag query; a
 note on a terminus is found by walking to the scope that owns it.
@@ -500,6 +519,12 @@ All of it is settled unless listed as open below, and the whole of it is schedul
   edge, unconditionally, measured from the label shape rather than from a bare dot.
 - Row assignment becomes a longest-path layering, which cannot fail because the merge clauses keep the
   constraint graph acyclic. The height that crossings and corridors add is accepted as a cost.
+- The 12-degree branch tilt and the per-line lift that carried a branch's cards up along it are retired, since
+  the lift moved cards off the shared row grid and it is that grid which makes a clearance band empty at every
+  lane at once. Cards are aligned to their row and a lateral line is a horizontal run in the band plus a
+  vertical riser, which is what makes "no crossing in a node's space" hold rather than merely be hoped for.
+  A tilt confined to the band would have had to flatten for a distant lane, losing the single ray it existed
+  for. See `tree-layout.md`.
 
 ### Vocabulary and file
 
@@ -529,3 +554,8 @@ All of it is settled unless listed as open below, and the whole of it is schedul
   Deferred by decision to its own investigation; see section 10.
 
 - Whether the app reports how many crossings an ordering costs, now that the order is the author's to change.
+
+- Whether two unrelated lateral runs wanting one band on one side of a trunk are given a band each, at the cost
+  of a row, as section 9 says they should be. Left open on evidence: across the nine live domains every
+  overlapping pair of runs, all 137, is a pair leaving the same junction, where the shared segment says
+  something true, and no unrelated pair occurs at all.

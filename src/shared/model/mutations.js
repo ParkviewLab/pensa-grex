@@ -16,10 +16,16 @@
 // terminus closing that base, so nothing can be added above it either (northstar
 // axiom 2). Every project node closes, and the pairing is derived by matching
 // brackets up the trunk rather than stored (see validate.js).
+//
+// Every branch rejoins the trunk it left (axiom 3), so every edit here has to leave each
+// branch with a legal merge point. Two endings do that: normalizeReturns for an ordinary
+// edit, which carries a return up to whatever is now the top of its branch and clamps one
+// whose target has gone; and requireLegalReturns for the two edits that create a scope,
+// which refuse rather than move a return the author did not ask to move.
 
 import { mintNodeId } from './ids.js'
 import { noteFileName } from './notes.js'
-import { pairScopes, trunksOf, isPlanClose } from './validate.js'
+import { pairScopes, trunksOf, isPlanClose, branchesIn, indexRecord, mergeErrors } from './validate.js'
 
 const STATUSES = ['todo', 'in-progress', 'completed', 'cancelled']
 
@@ -56,8 +62,15 @@ function branchCount(node) {
   return (node.leftBranches || []).length + (node.rightBranches || []).length
 }
 
-function addBranch(node, childId, side) {
-  sideArray(node, side).push(childId)
+// A side array is ordered innermost first, nearest the spine, and that order is the
+// author's: it is what decides lane order in the drawing. A new branch lands innermost,
+// because its span is a single edge, which nests inside every span containing that edge
+// and so costs no crossings there. Forks rehomed by a splice keep the order they had and
+// join at the outer end, their spans being whatever they already were.
+function addBranch(node, childId, side, where = 'innermost') {
+  const arr = sideArray(node, side)
+  if (where === 'outermost') arr.push(childId)
+  else arr.unshift(childId)
 }
 
 // A scope's close. It says nothing of its own: no title, no status, no flag, no
@@ -70,6 +83,7 @@ function newTerminus() {
     createdAt: nowISO(),
     note: null,
     next: null,
+    mergePoint: null,
     rightBranches: [],
     leftBranches: [],
   }
@@ -94,6 +108,7 @@ function newTask(title) {
     here: false,
     flagged: false,
     next: null,
+    mergePoint: null,
     rightBranches: [],
     leftBranches: [],
   }
@@ -181,9 +196,133 @@ function normalizeHeres(record) {
   return record
 }
 
+/**
+ * Re-home any branch left hanging on a node with no edge above it. A branch hangs on the
+ * edge rising from its node, and the top of a trunk has no such edge: what sits above the
+ * top of a branch trunk is that branch's own return line, and above a plan's close there is
+ * nothing at all. Deleting the node above a branch's host leaves exactly that, and so does
+ * a schema-2 file, which let a fork attach anywhere.
+ *
+ * The branch moves one node down its host's trunk, which moves its junction by one gap;
+ * where its host is the foot of a single-node branch, that is the branch's own branch point,
+ * so it becomes a sibling of that branch rather than a child of it. Iterated, since the node
+ * it moves onto may itself be the top of its trunk.
+ *
+ * It joins the receiving node's side array at the outer end, which is the right end for this
+ * case rather than the innermost default: a fork that hung on a branch was drawn outside that
+ * branch, and appending is what keeps it there.
+ *
+ * The one function here that mutates in place, because it is a repair rather than an edit:
+ * it is called at the end of an edit that has already cloned, and by the migration on a
+ * record it has just built.
+ */
+export function rehomeOrphanedBranches(record) {
+  for (let pass = 0; pass < 8; pass++) {
+    const ix = indexRecord(record)
+    let moved = 0
+    for (const branch of branchesIn(record)) {
+      const host = record.nodes[branch.hostId]
+      if (!host || host.next) continue
+      const pred = ix.pred.get(branch.hostId)
+      if (!pred || !record.nodes[pred.id]) continue
+      const key = SIDE_KEY[branch.side]
+      host[key] = host[key].filter((id) => id !== branch.footId)
+      sideArray(record.nodes[pred.id], branch.side).push(branch.footId)
+      moved++
+    }
+    if (!moved) return record
+  }
+  return record
+}
+
+// Put every return line back on the top of its own branch. A merge point is stored on the
+// tip of its branch trunk, because that is where the return leaves, so an edit that puts a
+// new node on top has to carry it up; rather than have every mutation remember to, the
+// invariant is repaired here in one pass. The topmost merge point still stored anywhere on
+// a branch trunk moves to that trunk's tip, so a branch's claim travels with it as it
+// grows; a value the edit destroyed along with its node is recovered from `before`, the
+// record as it was; and a branch that has never had one, having been grafted in from
+// elsewhere, gets the smallest legal branch, its own edge. A trunk that is no longer a
+// branch, one detached into a plan of its own, gives its return up.
+function relocateReturns(next, before) {
+  const wasOn = new Map()
+  for (const b of branchesIn(before || {})) if (b.mergePoint) wasOn.set(b.footId, b.mergePoint)
+
+  const branches = branchesIn(next)
+  for (const b of branches) {
+    if (!b.tipId) continue
+    let stored = null
+    for (const id of b.trunk) {
+      const v = next.nodes[id].mergePoint
+      if (v) {
+        stored = v
+        next.nodes[id].mergePoint = null
+      }
+    }
+    const tip = next.nodes[b.tipId]
+    // A project node always has its own close above it, so it is never a trunk's top; if
+    // one is here, the record is malformed and validateRecord will say so.
+    if (tip.kind === 'project') continue
+    tip.mergePoint = stored || wasOn.get(b.footId) || b.hostId
+  }
+
+  const tipIds = new Set(branches.map((b) => b.tipId))
+  for (const node of Object.values(next.nodes)) {
+    // A project node carries no merge point at all, not even an empty one, since it can
+    // never be a trunk's top; every other kind carries the field and leaves it null.
+    if (node.kind === 'project') delete node.mergePoint
+    else if (node.mergePoint && !tipIds.has(node.id)) node.mergePoint = null
+  }
+  return next
+}
+
+// Every complaint the merge rules have about a record, in one list.
+function returnErrors(next) {
+  const ix = indexRecord(next)
+  const errors = []
+  for (const b of branchesIn(next)) errors.push(...mergeErrors(next, b, ix))
+  return errors
+}
+
+// The ordinary ending for a structural edit: relocate every return, then clamp any that
+// the edit made impossible — its target deleted, say — down to the smallest legal branch.
+// Clamping is the only answer available where the node a return named has gone.
+function normalizeReturns(next, before) {
+  rehomeOrphanedBranches(next)
+  relocateReturns(next, before)
+  const ix = indexRecord(next)
+  for (const b of branchesIn(next)) {
+    if (!b.tipId || !b.mergePoint) continue
+    if (mergeErrors(next, b, ix).length) next.nodes[b.tipId].mergePoint = b.hostId
+  }
+  return next
+}
+
+// The ending for an edit that creates a scope. Naming a run as a project, or making a node
+// into one, can leave a branch that departs inside the new scope and rejoins outside it, or
+// the reverse; that breaks the promise that a scope collapses as a single block, and the
+// honest handling is to refuse the edit and name what would be legal rather than to move
+// the author's return somewhere it never asked to be.
+function requireLegalReturns(next, before, refusal) {
+  relocateReturns(next, before)
+  const errs = returnErrors(next)
+  if (errs.length) throw new Error(refusal + ': ' + errs[0])
+  return next
+}
+
 function requireTask(record, taskId) {
   if (!record.nodes[taskId]) throw new Error('unknown task "' + taskId + '"')
   return record.nodes[taskId]
+}
+
+// A branch hangs on the edge rising from a node, and two positions have no such edge: a
+// plan's close, and the top of a branch trunk, whose upper neighbour is that branch's own
+// return line rather than a trunk edge. Both are one rule, and it is the same rule that
+// forbids naming either as a merge point (docs/model_v3_ideas.md, section 3).
+function requireRisingEdge(record, nodeId) {
+  if (!record.nodes[nodeId].next) {
+    throw new Error('nothing rises from "' + nodeId + '": it is the top of its trunk, so there is no edge there to hold a branch')
+  }
 }
 
 /**
@@ -302,6 +441,7 @@ export function convertKind(record, taskId) {
     task.status = 'todo'
     task.completedAt = null
     task.here = false
+    task.mergePoint = null
     if (terminusId) spliceOutNode(next, terminusId)
   } else {
     task.kind = 'project'
@@ -309,8 +449,9 @@ export function convertKind(record, taskId) {
     delete task.completedAt
     delete task.here
     insertCloseForScopeOpenedAt(next, taskId)
+    return requireLegalReturns(next, record, 'this node cannot become a sub-project')
   }
-  return next
+  return normalizeReturns(next, record)
 }
 
 // Put a close for the scope that has just opened at `openId`, at the extent schema 2
@@ -401,7 +542,7 @@ export function wrapRun(record, fromId, toId, title) {
   } else {
     sideArray(next.nodes[pred.id], pred.side)[pred.index] = open.id
   }
-  return next
+  return requireLegalReturns(next, record, 'this run cannot be named as a project')
 }
 
 /**
@@ -419,7 +560,7 @@ export function unwrapProject(record, projectId) {
   const terminusId = scopes(next).pairs.get(projectId)
   spliceOutNode(next, projectId)
   if (terminusId) spliceOutNode(next, terminusId)
-  return next
+  return normalizeReturns(next, record)
 }
 
 // Take one node off its trunk, joining its predecessor to its successor. The node
@@ -442,7 +583,7 @@ function spliceOutNode(next, id) {
   // Its own forks belong to the edge it held, which is now the predecessor's.
   const host = pred && pred.kind === 'next' ? next.nodes[pred.id] : (succ ? next.nodes[succ] : null)
   if (host) {
-    for (const b of branchesOf(node)) addBranch(host, b.child, b.side)
+    for (const b of branchesOf(node)) addBranch(host, b.child, b.side, 'outermost')
   }
   delete next.nodes[id]
 }
@@ -497,7 +638,7 @@ export function insertTask(record, edgeId, title) {
   n.next = at.next
   at.next = n.id
   addNode(next, n)
-  return next
+  return normalizeReturns(next, record)
 }
 
 /**
@@ -527,7 +668,7 @@ export function addTaskBelow(record, taskId, title) {
   n.next = taskId
   sideArray(next.nodes[pred.id], pred.side)[pred.index] = n.id
   addNode(next, n)
-  return next
+  return normalizeReturns(next, record)
 }
 
 // The alternating side for the next branch off a task: 1st left, 2nd right,
@@ -537,35 +678,71 @@ function branchSide(task, side) {
   return branchCount(task) % 2 === 0 ? 'left' : 'right'
 }
 
-/** Fork a new parallel stack off taskId at the gap above it (alternating side). */
-export function addBranchAbove(record, taskId, title, side) {
+/**
+ * Open a branch on the edge rising from `edgeId`: one move that creates three things,
+ * the attachment, a first task inside it, and its return line. A branch is never created
+ * empty, because it carries no title of its own and an empty one would assert nothing.
+ *
+ * Its merge point defaults to `edgeId` itself, the smallest legal branch, which says
+ * that this strand runs alongside that one gap and nothing else; its lane defaults to
+ * innermost, which costs no crossings for a span of one edge. Both are the author's to
+ * change afterwards, the first with setMergePoint.
+ *
+ * Refused on a plan's closing terminus, which has no edge above it to leave.
+ */
+export function openBranch(record, edgeId, title, side) {
   const next = clone(record)
-  const task = requireTask(next, taskId)
+  const host = requireTask(next, edgeId)
+  if (isPlanClose(next, edgeId)) throw new Error('a plan\'s closing terminus has no edge above it to open a branch on')
+  requireRisingEdge(next, edgeId)
   const n = newTask(title)
-  addBranch(task, n.id, branchSide(task, side))
+  n.mergePoint = edgeId
+  addBranch(host, n.id, branchSide(host, side))
   addNode(next, n)
   return next
 }
 
 /**
- * Fork a new parallel stack off taskId at the gap below it (alternating side).
- *
- * A branch is stored on the node whose rising edge it leaves, so the gap below
- * taskId belongs to taskId's predecessor, and that is where the fork goes.
- * Refused when there is no such edge: below a root (nothing precedes a project's
- * base) and below the foot of a branch, whose lower neighbour is its own branch
+ * The branch on the edge above taskId, as the right-click menu's "add branch above"
+ * means it. Kept as its own name because that is what the menu says.
+ */
+export function addBranchAbove(record, taskId, title, side) {
+  return openBranch(record, taskId, title, side)
+}
+
+/**
+ * The branch on the edge below taskId. A branch hangs from the node whose rising edge it
+ * leaves, so the gap below taskId belongs to taskId's predecessor, and that is the edge
+ * this opens. Refused where there is no such edge: below a root, since nothing precedes a
+ * plan's base, and below the foot of a branch, whose lower neighbour is its own branch
  * line rather than a trunk edge.
  */
 export function addBranchBelow(record, taskId, title, side) {
-  const next = clone(record)
-  requireTask(next, taskId)
-  const pred = predecessorOf(next, taskId)
+  requireTask(record, taskId)
+  const pred = predecessorOf(record, taskId)
   if (!pred) throw new Error('cannot add a branch below a root node')
   if (pred.kind !== 'next') throw new Error('cannot add a branch below the first node of a branch')
-  const host = next.nodes[pred.id]
-  const n = newTask(title)
-  addBranch(host, n.id, branchSide(host, side))
-  addNode(next, n)
+  return openBranch(record, pred.id, title, side)
+}
+
+/**
+ * Move a branch's return line to the edge rising from `mergePointId`. The branch is named
+ * by its foot, the node at the bottom of it; the merge point is stored on its tip, where
+ * the return leaves.
+ *
+ * Refused when the target breaks one of the merge rules, and the refusal says what would
+ * be legal instead: a merge sits on the trunk the branch left, at or above the branch's
+ * own node, and inside exactly the scopes the branch's own edge is inside.
+ */
+export function setMergePoint(record, footId, mergePointId) {
+  const next = clone(record)
+  requireTask(next, footId)
+  requireTask(next, mergePointId)
+  const branch = branchesIn(next).find((b) => b.footId === footId)
+  if (!branch) throw new Error('node "' + footId + '" is not the foot of a branch')
+  const errors = mergeErrors(next, { ...branch, mergePoint: mergePointId }, indexRecord(next))
+  if (errors.length) throw new Error(errors[0])
+  next.nodes[branch.tipId].mergePoint = mergePointId
   return next
 }
 
@@ -586,7 +763,7 @@ export function deleteTask(record, taskId, mode = 'subtree') {
     const doomed = subtreeIds(next, taskId)
     next.planOrder = (next.planOrder || []).filter((id) => id !== taskId)
     for (const id of doomed) delete next.nodes[id]
-    return next
+    return normalizeReturns(next, record)
   }
 
   const detachFromPred = (replacement) => {
@@ -613,11 +790,11 @@ export function deleteTask(record, taskId, mode = 'subtree') {
       leftover = []
     }
     if (head) {
-      for (const b of leftover) addBranch(next.nodes[head], b.child, b.side)
+      for (const b of leftover) addBranch(next.nodes[head], b.child, b.side, 'outermost')
     }
     detachFromPred(head)
     delete next.nodes[taskId]
-    return normalizeHeres(next)
+    return normalizeHeres(normalizeReturns(next, record))
   }
 
   // subtree. What is above the deleted node includes the closes of every scope that
@@ -644,12 +821,13 @@ export function deleteTask(record, taskId, mode = 'subtree') {
   for (const id of spared) {
     const terminus = next.nodes[id]
     terminus.next = null
+    terminus.mergePoint = null
     terminus.leftBranches = []
     terminus.rightBranches = []
     next.nodes[top].next = id
     top = id
   }
-  return next
+  return normalizeReturns(next, record)
 }
 
 /**
@@ -680,6 +858,9 @@ export function pasteAsTree(record, clip) {
     node.id = newId
     node.createdAt = stamp
     if (node.next) node.next = map(node.next)
+    // A return inside the clip travels with it; one naming a node outside the clip has
+    // nothing to point at, and relocateReturns gives that branch its own edge instead.
+    if (node.mergePoint) node.mergePoint = idMap.get(node.mergePoint) || null
     node.leftBranches = (node.leftBranches || []).map(map)
     node.rightBranches = (node.rightBranches || []).map(map)
     if ('here' in node) node.here = false
@@ -693,7 +874,7 @@ export function pasteAsTree(record, clip) {
     next.nodes[newId] = node
   }
   next.planOrder.push(map(clip.rootId))
-  return { next, notes }
+  return { next: normalizeReturns(next, record), notes }
 }
 
 // ---- drag-and-drop moves ----
@@ -722,8 +903,10 @@ function cutIncoming(next, id) {
   }
 }
 
-// Graft `id` as a fresh fork off `targetId` (alternating side).
+// Graft `id` as a fresh fork off `targetId` (alternating side). Refused where the target
+// has no edge above it, since a branch has nowhere to hang there.
 function graftBranch(next, targetId, id) {
+  requireRisingEdge(next, targetId)
   const target = next.nodes[targetId]
   addBranch(target, id, branchSide(target))
 }
@@ -748,7 +931,7 @@ function spliceOutTask(next, id) {
   } else {
     leftover = []
   }
-  if (head) for (const b of leftover) addBranch(next.nodes[head], b.child, b.side)
+  if (head) for (const b of leftover) addBranch(next.nodes[head], b.child, b.side, 'outermost')
   if (pred.kind === 'next') next.nodes[pred.id].next = head
   else if (head) sideArray(next.nodes[pred.id], pred.side)[pred.index] = head
   else sideArray(next.nodes[pred.id], pred.side).splice(pred.index, 1)
@@ -784,7 +967,7 @@ export function moveTaskNode(record, id, targetId) {
   if (task.kind !== 'task') throw new Error('moveTaskNode moves a task node; use moveSubtree for a project')
   spliceOutTask(next, id) // the node travels alone; its children stay on the line
   graftBranch(next, targetId, id)
-  return normalizeHeres(next)
+  return normalizeHeres(normalizeReturns(next, record))
 }
 
 /**
@@ -802,7 +985,7 @@ export function moveSubtree(record, rootId, targetId) {
   if (subtreeIds(next, rootId).has(targetId)) throw new Error('cannot graft a subtree onto its own descendant')
   cutIncoming(next, rootId)
   graftBranch(next, targetId, rootId)
-  return normalizeHeres(next)
+  return normalizeHeres(normalizeReturns(next, record))
 }
 
 /**
@@ -818,7 +1001,7 @@ export function detachToTree(record, id) {
   cutIncoming(next, id)
   if (!Array.isArray(next.planOrder)) next.planOrder = []
   next.planOrder.push(id)
-  return next
+  return normalizeReturns(next, record)
 }
 
 /**
@@ -874,7 +1057,7 @@ export function moveIntoLine(record, movedId, belowId) {
   const oldNext = below.next
   below.next = movedId
   next.nodes[tipId].next = oldNext
-  return normalizeHeres(next)
+  return normalizeHeres(normalizeReturns(next, record))
 }
 
 // Swap aId with its main-line successor, keeping each node's own branches: the two
@@ -904,7 +1087,7 @@ export function moveUp(record, id) {
   if (!node.next) throw new Error('nothing above to swap with')
   if (!predecessorOf(next, id)) throw new Error('cannot move a root up')
   swapWithSuccessor(next, id)
-  return normalizeHeres(next)
+  return normalizeHeres(normalizeReturns(next, record))
 }
 
 /**
@@ -919,5 +1102,5 @@ export function moveDown(record, id) {
   if (!pred || pred.kind !== 'next') throw new Error('no main-line predecessor to swap with')
   if (!predecessorOf(next, pred.id)) throw new Error('cannot move below the root')
   swapWithSuccessor(next, pred.id)
-  return normalizeHeres(next)
+  return normalizeHeres(normalizeReturns(next, record))
 }

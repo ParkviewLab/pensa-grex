@@ -5,7 +5,7 @@ import { describe, it, expect } from 'vitest'
 import { validateRecord, pairScopes, trunksOf } from './validate.js'
 import {
   setTitle, uniqueTitle, setNote, toggleFlag, setStatus, cycleStatus, makeHere, clearHere, addTree, convertKind,
-  addTaskAbove, addTaskBelow, addBranchAbove, addBranchBelow, deleteTask, pasteAsTree,
+  addTaskAbove, addTaskBelow, addBranchAbove, addBranchBelow, openBranch, setMergePoint, deleteTask, pasteAsTree,
   moveTaskNode, moveSubtree, detachToTree, reorderRoot, moveIntoLine, moveUp, moveDown,
   wrapRun, unwrapProject,
 } from './mutations.js'
@@ -17,6 +17,13 @@ import {
 // above it on its own trunk, so the plan's trunk now ends at z rather than at m2.
 // Since r is a root, z is the PLAN's close: nothing may sit above it (its .next is
 // null and it holds no branch).
+//
+// Returns: every branch rejoins the trunk it left, so the fork carries a merge point,
+// stored on b2, the top of its own trunk, because that is the end the return line
+// leaves from. It names m1, the branch's own edge, which is the smallest legal branch
+// and what opening a branch creates. m2 is the highest legal alternative, since z closes
+// the plan and no edge rises from it; the tests that want a span wider than one edge
+// ask for it with setMergePoint.
 function base() {
   const t = (id, over = {}) => ({
     id, title: id, kind: 'task', status: 'todo', createdAt: '2026-01-01T00:00:00Z', completedAt: null,
@@ -43,7 +50,7 @@ function base() {
       m2: t('m2', { next: 'z' }),
       z: terminus('z'),
       b1: t('b1', { next: 'b2' }),
-      b2: t('b2'),
+      b2: t('b2', { mergePoint: 'm1' }),
     },
   }
 }
@@ -240,6 +247,20 @@ describe('convertKind', () => {
     // be rid of it is to unwrap its project.
     expect(() => convertKind(base(), 'z')).toThrow()
   })
+
+  it('refuses a conversion whose new scope would straddle a branch span', () => {
+    // A node becoming a project takes the trunk above it as its scope, so a scope
+    // around m2 would open between the fork's branch point and its merge point and
+    // close above it. The return would then land inside a scope the branch was opened
+    // outside, which is what collapsing that scope could not survive, and the refusal
+    // names the two legal merges rather than moving a return unasked.
+    const wide = setMergePoint(base(), 'b1', 'm2')
+    expect(() => convertKind(wide, 'm2'))
+      .toThrow(/this node cannot become a sub-project: .*merge below where "m2" opens, or above where it closes/)
+    // The same conversion one node lower is legal, since that scope contains the span
+    // rather than cutting into it.
+    valid(convertKind(wide, 'm1'))
+  })
 })
 
 describe('makeHere / clearHere', () => {
@@ -412,6 +433,178 @@ describe('addBranch', () => {
   })
 })
 
+describe('openBranch', () => {
+  it('creates the attachment, one task inside it, and its return line', () => {
+    const before = base()
+    const out = openBranch(before, 'm2', 'A')
+    const n = newId(before, out)
+    expect(out.nodes.m2.leftBranches).toEqual([n]) // the attachment names the edge above m2
+    expect(out.nodes[n].kind).toBe('task') // never empty: a branch carries no title, so an empty one asserts nothing
+    expect(out.nodes[n].mergePoint).toBe('m2') // the return, on the edge the branch left
+    valid(out)
+  })
+
+  it('defaults to the smallest legal branch, a bubble on its own edge', () => {
+    // A bubble says that this strand runs alongside that one gap and nothing else. It
+    // is a diamond rather than a loop, since branch and trunk both flow into the node
+    // above the shared edge, and it is what keeps the topmost forkable edge forkable.
+    const out = openBranch(base(), 'm2', 'A')
+    const n = newId(base(), out)
+    expect(out.nodes[n].mergePoint).toBe('m2')
+    expect(out.nodes.m2.next).toBe('z') // the edge the branch leaves and rejoins
+    valid(out)
+  })
+
+  it('lands a new branch innermost, nearest the spine', () => {
+    // A side array is ordered innermost first, and that order is the author's. A new
+    // branch goes to the front because its span is a single edge, which nests inside
+    // every span containing that edge and so costs no crossings there.
+    const one = openBranch(base(), 'm2', 'A', 'left')
+    const first = newId(base(), one)
+    const two = openBranch(one, 'm2', 'B', 'left')
+    const second = newId(one, two)
+    expect(two.nodes.m2.leftBranches).toEqual([second, first])
+    valid(two)
+  })
+
+  it('refuses a plan\'s closing terminus, which has no edge above it to leave', () => {
+    expect(() => openBranch(base(), 'z', 'A')).toThrow(/no edge above it/)
+  })
+
+  it('refuses the top of a branch trunk, whose only line above is its own return', () => {
+    // One rule of availability: a node hosts a branch, or receives a merge, exactly
+    // when a trunk edge rises from it. A tip's return line is not a trunk edge, so a
+    // branch opened there would have nowhere legal to rejoin.
+    expect(() => openBranch(base(), 'b2', 'A')).toThrow(/nothing rises from "b2"/)
+  })
+
+  it('is what the menu\'s "add branch above" and "add branch below" both do', () => {
+    // Above names the edge rising from the node clicked; below names the one rising
+    // from its main-line predecessor. Each opens a bubble on the edge it named.
+    const above = addBranchAbove(base(), 'm2', 'A')
+    expect(above.nodes[newId(base(), above)].mergePoint).toBe('m2')
+    const below = addBranchBelow(base(), 'm2', 'A', 'right')
+    expect(below.nodes[newId(base(), below)].mergePoint).toBe('m1')
+    valid(above); valid(below)
+  })
+})
+
+describe('setMergePoint', () => {
+  it('moves the return line to a higher edge on the trunk the branch left', () => {
+    const out = setMergePoint(base(), 'b1', 'm2')
+    expect(out.nodes.b2.mergePoint).toBe('m2') // stored on the tip, where the return leaves
+    expect(out.nodes.b1.mergePoint).toBeUndefined() // the foot holds none; the return leaves the top
+    valid(out)
+  })
+
+  it('refuses an edge that does not exist, and a target below the branch point', () => {
+    // z closes the plan, so no edge rises from it for a return to join; r sits below
+    // the branch point, so a return landing there would flow back down into the trunk
+    // the branch had just left.
+    expect(() => setMergePoint(base(), 'b1', 'z')).toThrow(/no edge above it/)
+    expect(() => setMergePoint(base(), 'b1', 'r')).toThrow(/loop rather than a return/)
+  })
+
+  it('refuses a straddle, naming both legal alternatives', () => {
+    // nested() runs r -> a -> SP -> s1 -> zs -> zr, and the branch is opened on the
+    // edge above a, outside SP. Rejoining at s1 would put the return inside a scope the
+    // branch was opened outside, and a return has nowhere to land once that scope is
+    // collapsed, so the move is refused rather than drawn.
+    const withBranch = openBranch(nested(), 'a', 'B')
+    const foot = newId(nested(), withBranch)
+    expect(() => setMergePoint(withBranch, foot, 's1'))
+      .toThrow(/merge below where "SP" opens, or above where it closes/)
+    // The alternative it names is real: the edge above zs is outside SP, so the span
+    // contains the whole sub-project instead of cutting into it.
+    const out = setMergePoint(withBranch, foot, 'zs')
+    expect(out.nodes[foot].mergePoint).toBe('zs')
+    valid(out)
+  })
+
+  it('refuses a node that is not the foot of a branch', () => {
+    // A branch is named by its foot, the entry a side array holds. b2 is its tip, which
+    // is where the merge point is stored but not what names the branch, and m2 is on
+    // the trunk the branch left.
+    expect(() => setMergePoint(base(), 'b2', 'm2')).toThrow(/not the foot of a branch/)
+    expect(() => setMergePoint(base(), 'm2', 'm2')).toThrow(/not the foot of a branch/)
+  })
+})
+
+// Every structural edit ends by putting each return line back on the top of its own
+// branch, since that is where it is stored and an edit can move the top. A span the
+// author chose therefore survives the edits around it, and is only shortened where the
+// edge it named has gone.
+describe('returns: where a structural edit leaves a merge point', () => {
+  // A span wider than base()'s bubble, so a relocation has something to show: the fork
+  // off m1 rejoins at the edge above m2, the highest legal merge on that trunk.
+  const wide = () => setMergePoint(base(), 'b1', 'm2')
+
+  it('carries the return up to the new tip when a task is inserted above it', () => {
+    const before = wide()
+    const out = addTaskAbove(before, 'b2', 'N')
+    const n = newId(before, out)
+    expect(out.nodes[n].mergePoint).toBe('m2') // the claim travels as the branch grows
+    expect(out.nodes.b2.mergePoint).toBeNull() // and only the tip holds one
+    valid(out)
+  })
+
+  it('carries the return to the new close when a whole branch is wrapped', () => {
+    const before = wide()
+    const out = wrapRun(before, 'b1', 'b2', 'Phase')
+    const closeId = created(before, out).find((id) => out.nodes[id].kind === 'terminus')
+    expect(out.nodes[closeId].mergePoint).toBe('m2') // the close is the branch's top now
+    expect(out.nodes.b2.mergePoint).toBeNull()
+    valid(out)
+  })
+
+  it('keeps the branch\'s claim when its tip is deleted', () => {
+    // The stored value dies with b2, so it is recovered from the record as it was
+    // rather than snapped back to a bubble: deleting a node the author never named is
+    // no reason to shorten the span they chose.
+    const out = deleteTask(wide(), 'b2', 'subtree')
+    expect(out.nodes.b1.mergePoint).toBe('m2')
+    valid(out)
+  })
+
+  it('clamps a branch to its own edge when the node its return named is deleted', () => {
+    // Clamping is the only answer available where the named edge has gone with m2, and
+    // the smallest legal branch is the one every branch begins as.
+    const out = deleteTask(wide(), 'm2', 'subtree')
+    expect(out.nodes.b2.mergePoint).toBe('m1') // the branch's own edge, a bubble
+    expect(out.nodes.m1.next).toBe('z') // the plan's close was spared and re-stacked
+    valid(out)
+  })
+
+  it('gives the return up when a branch is detached into a plan of its own', () => {
+    // A plan left no trunk, so it has nothing to rejoin. b1 is made a project node
+    // first, since only a project node can be a root, and that puts a close at the top
+    // of the branch and the return on that close.
+    const asProject = convertKind(base(), 'b1')
+    const closeId = newId(base(), asProject)
+    expect(asProject.nodes[closeId].mergePoint).toBe('m1') // carried up to the new top
+    const out = detachToTree(asProject, 'b1')
+    expect(out.nodes[closeId].mergePoint).toBeNull()
+    expect(out.planOrder).toContain('b1')
+    expect(forks(out.nodes.m1)).toEqual([]) // m1 no longer holds the branch
+    valid(out)
+  })
+
+  it('gives a grafted subtree the smallest legal branch, its own edge', () => {
+    // A subtree arriving from elsewhere has never had a return. Grafting a whole plan
+    // onto a trunk task makes it a branch, and it rejoins the edge it now leaves.
+    const two = base()
+    two.nodes.p2 = { id: 'p2', title: 'p2', kind: 'project', createdAt: 'x', note: null, next: 'q2', leftBranches: [], rightBranches: [] }
+    two.nodes.q2 = { id: 'q2', title: 'q2', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: 'z2', leftBranches: [], rightBranches: [] }
+    two.nodes.z2 = { id: 'z2', kind: 'terminus', createdAt: 'x', note: null, next: null, leftBranches: [], rightBranches: [] }
+    two.planOrder = ['r', 'p2']
+    valid(two)
+    const out = moveSubtree(two, 'p2', 'm2')
+    expect(out.nodes.z2.mergePoint).toBe('m2') // a bubble on the edge above m2
+    expect(out.planOrder).toEqual(['r']) // p2 is a branch now, not a plan
+    valid(out)
+  })
+})
+
 // Termini: a nested scope on one trunk, the shape the grammar makes of
 // "P1, a, P2, b, T2, T1" — r(project) -> a -> SP(project) -> s1 -> zs(closes SP)
 // -> zr(closes r). Closes stack in reverse order of opening.
@@ -544,40 +737,27 @@ describe('deleteTask — splice', () => {
     // Termini: no task on a plan's trunk lacks a successor any more (its close is
     // always above it), so the successorless node is the fork tip b2: give b2 a
     // fork, then splice b2 and the fork is promoted onto b1's line.
-    const withFork = addBranchAbove(base(), 'b2', 'F')
-    const f = newId(base(), withFork)
+    //
+    // Returns: that fork can no longer be put there by any mutation. A successorless
+    // node is either a branch's tip or a plan's close, and neither has a trunk edge
+    // above it to hold a fork, so openBranch and every graft refuse it and no valid
+    // record contains the shape. The path survives in deleteTask, so the shape is
+    // staged by hand instead, invalid as it is, and the splice is shown to leave a
+    // legal return behind it: the promoted fork becomes the branch's tip, and the
+    // return it inherited, naming the departed b2, is clamped to the branch's own edge.
+    const withFork = base()
+    withFork.nodes.b2.leftBranches = ['F']
+    withFork.nodes.F = {
+      id: 'F', title: 'F', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null,
+      note: null, here: false, next: null, mergePoint: 'b2', leftBranches: [], rightBranches: [],
+    }
     const out = deleteTask(withFork, 'b2', 'splice')
     expect(out.nodes.b2).toBeUndefined()
-    expect(out.nodes.b1.next).toBe(f) // fork promoted to succeed b1
+    expect(out.nodes.b1.next).toBe('F') // fork promoted to succeed b1
+    expect(out.nodes.F.mergePoint).toBe('m1') // clamped: the edge it named went with b2
     valid(out)
   })
 
-  it('keeps only the tip-most cursor when a splice merges two cursored lines', () => {
-    // p(project) -> a -> Z(the plan's close); a forks to r(here) -> t; t forks to
-    // b0(here). Splice t: b0 is promoted onto r's line, which would carry two
-    // cursors — the tip-most (b0) survives.
-    //
-    // Termini: the merge is staged on a branch rather than on the plan's trunk,
-    // because t must have no successor for its fork to be promoted, and the top of
-    // a trunk under a project is now always that project's close.
-    const record = {
-      schemaVersion: 3, id: 'd_test000000', title: 'T', planOrder: ['p'],
-      nodes: {
-        p: { id: 'p', title: 'p', kind: 'project', createdAt: 'x', note: null, next: 'a', leftBranches: [], rightBranches: [] },
-        a: { id: 'a', title: 'a', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: 'Z', leftBranches: ['r'], rightBranches: [] },
-        Z: { id: 'Z', kind: 'terminus', createdAt: 'x', note: null, next: null, leftBranches: [], rightBranches: [] },
-        r: { id: 'r', title: 'r', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: true, next: 't', leftBranches: [], rightBranches: [] },
-        t: { id: 't', title: 't', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: null, leftBranches: ['b0'], rightBranches: [] },
-        b0: { id: 'b0', title: 'b0', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: true, next: null, leftBranches: [], rightBranches: [] },
-      },
-    }
-    valid(record)
-    const out = deleteTask(record, 't', 'splice')
-    expect(out.nodes.r.next).toBe('b0')
-    expect(out.nodes.r.here).toBe(false) // cleared
-    expect(out.nodes.b0.here).toBe(true) // kept (tip-most)
-    valid(out)
-  })
 })
 
 describe('wrapRun / unwrapProject', () => {
@@ -611,6 +791,19 @@ describe('wrapRun / unwrapProject', () => {
     valid(out)
   })
 
+  it('refuses a run whose scope would straddle a branch span', () => {
+    // The fork off m1 rejoins above m2, so naming m2 alone as a project would open a
+    // scope inside that span and close it inside too, leaving the return to land in a
+    // scope the branch was opened outside. Wrapping the whole span instead is legal,
+    // and the span survives it untouched.
+    const wide = setMergePoint(base(), 'b1', 'm2')
+    expect(() => wrapRun(wide, 'm2', undefined, 'Just m2'))
+      .toThrow(/this run cannot be named as a project: .*merge below where "Just m2" opens, or above where it closes/)
+    const out = wrapRun(wide, 'm1', 'm2', 'Phase')
+    expect(out.nodes.b2.mergePoint).toBe('m2')
+    valid(out)
+  })
+
   it('refuses a run that straddles a scope, reads downward, or leaves one trunk', () => {
     expect(() => wrapRun(base(), 'm2', 'z', 'Straddle')).toThrow() // z closes the plan, opened below the run
     expect(() => wrapRun(base(), 'm2', 'm1', 'Backwards')).toThrow()
@@ -637,6 +830,9 @@ describe('pasteAsTree', () => {
   // note, so the paste can be checked to keep statuses, clear cursors, and carry
   // notes by content: r(project) -> m1(here) -> m2(completed) -> z(r's close);
   // fork b1 -> b2(note).
+  //
+  // Returns: the fork's merge point rides in the clip like any other field, and it
+  // holds an id, so the paste has to remap it along with .next and the branch arrays.
   const clip = () => ({
     rootId: 'r',
     nodes: {
@@ -645,7 +841,7 @@ describe('pasteAsTree', () => {
       m2: { id: 'm2', title: 'm2', kind: 'task', status: 'completed', createdAt: 'old', completedAt: '2026-02-02T00:00:00Z', note: null, here: false, next: 'z', leftBranches: [], rightBranches: [] },
       z:  { id: 'z',  kind: 'terminus', createdAt: 'old', note: null, next: null, leftBranches: [], rightBranches: [] },
       b1: { id: 'b1', title: 'b1', kind: 'task', status: 'todo', createdAt: 'old', completedAt: null, note: null, here: false, next: 'b2', leftBranches: [], rightBranches: [] },
-      b2: { id: 'b2', title: 'b2', kind: 'task', status: 'todo', createdAt: 'old', completedAt: null, note: 'b2.md', here: false, next: null, leftBranches: [], rightBranches: [] },
+      b2: { id: 'b2', title: 'b2', kind: 'task', status: 'todo', createdAt: 'old', completedAt: null, note: 'b2.md', here: false, next: null, mergePoint: 'm1', leftBranches: [], rightBranches: [] },
     },
     notes: { b2: '# b2 note\n' },
   })
@@ -685,6 +881,9 @@ describe('pasteAsTree', () => {
     // that should now point at its new id.
     expect(next.nodes[t.m2.next].kind).toBe('terminus')
     expect(next.nodes[t.m2.next].next).toBeNull()
+    // Returns: the return line is an edge too, and it is remapped with the rest, so
+    // the pasted fork still rejoins the pasted trunk rather than the copied one.
+    expect(t.b2.mergePoint).toBe(t.m1.id)
   })
 
   it('carries a note by content into a fresh file named for the new id and title', () => {
@@ -741,10 +940,20 @@ describe('moveTaskNode', () => {
   })
 
   it('carries the "here" cursor with the moved node', () => {
-    const out = moveTaskNode(base(), 'm1', 'b2') // m1 is "here"
+    // Returns: the target was b2, the fork's tip, and a graft there is now refused,
+    // since the only line above a tip is its own return and a fork landing there would
+    // have nowhere legal to rejoin. b1 puts the same cursor question to a node that
+    // does have a trunk edge above it.
+    const out = moveTaskNode(base(), 'm1', 'b1') // m1 is "here"
     expect(out.nodes.m1.here).toBe(true)
-    expect(forks(out.nodes.b2).map((b) => b.child)).toContain('m1')
+    expect(forks(out.nodes.b1).map((b) => b.child)).toContain('m1')
     valid(out)
+  })
+
+  it('refuses a graft onto the top of a branch trunk', () => {
+    // The same rule that refuses opening a branch there: no trunk edge rises from a
+    // tip, so there is no edge to hold the fork this would create.
+    expect(() => moveTaskNode(base(), 'm2', 'b2')).toThrow(/nothing rises from "b2"/)
   })
 
   it('refuses a project node, a terminus, and a drop onto itself', () => {
@@ -764,6 +973,11 @@ describe('moveTaskNode', () => {
 // at SP would carry the plan's close away with it (it is above SP on that trunk),
 // leaving both plans unbalanced; a branch-borne scope is closed within its own
 // trunk, so it can be grafted, detached, or spliced whole.
+//
+// Returns: the branch rejoins at a, the node it left, and its merge point is stored on
+// zs, the top of the branch's own trunk, which is a terminus here because the branch
+// ends in the sub-project's close. Nothing higher is legal on that trunk: zr closes the
+// plan, so no edge rises from it.
 function withSub() {
   const t = (id, over = {}) => ({
     id, title: id, kind: 'task', status: 'todo', createdAt: '2026-01-01T00:00:00Z', completedAt: null,
@@ -786,7 +1000,7 @@ function withSub() {
       f1: t('f1', { next: 'SP' }),
       SP: p('SP', { next: 's1' }),
       s1: t('s1', { next: 'zs' }),
-      zs: terminus('zs'),
+      zs: terminus('zs', { mergePoint: 'a' }),
     },
   }
 }
@@ -931,6 +1145,24 @@ describe('moveIntoLine', () => {
   it('refuses inserting a subtree into its own line, or above itself', () => {
     expect(() => moveIntoLine(withSub(), 'SP', 's1')).toThrow()
     expect(() => moveIntoLine(line4(), 'b', 'b')).toThrow()
+  })
+
+  it('keeps only the tip-most cursor when a move merges two cursored lines', () => {
+    // Returns: this began as a deleteTask 'splice', whose promoted fork merged two
+    // lines, and that staging is no longer a record validateRecord will accept.
+    // Promotion needs a successorless node holding a fork, and the only successorless
+    // nodes are a branch's tip and a plan's close, neither of which has a trunk edge
+    // above it for a fork to hang from. A move merges two lines just as that splice
+    // did: b2 carries its cursor off the fork onto m1's line, which already has one,
+    // and the tip-most survives.
+    const record = base()
+    record.nodes.b2.here = true // a second cursor, legal while b2 is on its own line
+    valid(record)
+    const out = moveIntoLine(record, 'b2', 'm1')
+    expect(out.nodes.m1.next).toBe('b2')
+    expect(out.nodes.m1.here).toBe(false) // cleared
+    expect(out.nodes.b2.here).toBe(true) // kept (tip-most)
+    valid(out)
   })
 })
 

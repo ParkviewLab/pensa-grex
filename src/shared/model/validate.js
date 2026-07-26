@@ -7,18 +7,21 @@
 // surface the errors to the user. A record older than the current schema must be
 // brought up to date with migrate.js first.
 //
-// Schema 3, as far as this stage takes it: every node has a kind ('task' |
-// 'project'); a task carries a status and may hold "here", a project node has
-// neither. A node's forks are two ordered arrays of child ids, `leftBranches` and
-// `rightBranches`, both naming the edge that RISES from the node holding them, so
-// there is no separate "above or below" to store. Roots are structural — a node
-// with no incoming edge — and every root must be a project node.
+// Schema 3: every node has a kind ('task' | 'project' | 'terminus'); a task carries
+// a status and may hold "here", a project node has neither, and a terminus says
+// nothing of its own beyond a note. A node's forks are two ordered arrays of child
+// ids, `leftBranches` and `rightBranches`, both naming the edge that RISES from the
+// node holding them, so there is no separate "above or below" to store. Roots are
+// structural — a node with no incoming edge — and every root must be a project node.
 //
-// The terminus kind, the grammar it brings, and merges are not here yet; they
-// arrive with stages 5 and 6.
+// Every branch rejoins the trunk it left (northstar axiom 3), and `mergePoint` is
+// where it rejoins: the id of the node below the edge its return line joins. It is
+// stored on the top of the branch's own trunk, because that is the end the return
+// leaves from.
 
 const VALID_STATUSES = ['todo', 'in-progress', 'completed', 'cancelled']
 const KINDS = ['task', 'project', 'terminus']
+const SIDE_KEY = { left: 'leftBranches', right: 'rightBranches' }
 
 // A node's forks, both sides, in one list. Order is left then right; within a
 // side it is the author's stored order.
@@ -108,6 +111,162 @@ export function trunksOf(record) {
   return trunks
 }
 
+// ---- branches and their returns ----
+
+// Every branch in the record, as the merge rules and the drawing read one:
+//
+//   hostId      the node whose rising edge it leaves, which is its branch point
+//   footId      its first node, the id the host's side array holds
+//   side, index where it sits in that array, which is ordered innermost first
+//   trunk       its own nodes, base to top
+//   tipId       the top of that trunk, where its return line leaves
+//   mergePoint  the node below the edge that return joins, stored on the tip
+//
+// The merge point is stored on the tip because that is the end the return leaves from:
+// it is an outgoing edge, as `next` is. A project node therefore never carries one,
+// since it always has its own close above it and so is never a trunk's top.
+export function branchesIn(record) {
+  const nodes = (record && record.nodes) || {}
+  const list = []
+  for (const [hostId, host] of Object.entries(nodes)) {
+    for (const side of ['left', 'right']) {
+      const arr = Array.isArray(host[SIDE_KEY[side]]) ? host[SIDE_KEY[side]] : []
+      for (let index = 0; index < arr.length; index++) {
+        const footId = arr[index]
+        const trunk = []
+        const seen = new Set()
+        let id = footId
+        while (id && nodes[id] && !seen.has(id)) {
+          seen.add(id)
+          trunk.push(id)
+          id = nodes[id].next
+        }
+        const tipId = trunk.length ? trunk[trunk.length - 1] : null
+        list.push({
+          hostId, footId, side, index, trunk, tipId,
+          mergePoint: tipId ? nodes[tipId].mergePoint || null : null,
+        })
+      }
+    }
+  }
+  return list
+}
+
+// One pass for everything the merge rules ask repeatedly: which trunk a node is on and
+// where in it, what each node hangs from, and which terminus closes which project. Every
+// branch asks the same questions, so the answers are built once and passed around.
+export function indexRecord(record) {
+  const nodes = (record && record.nodes) || {}
+  const trunks = trunksOf(record)
+  const at = new Map()
+  for (const trunk of trunks) {
+    for (let i = 0; i < trunk.length; i++) at.set(trunk[i], { trunk, i })
+  }
+  const pred = new Map()
+  for (const [id, node] of Object.entries(nodes)) {
+    if (node.next) pred.set(node.next, { id, via: 'next' })
+    for (const b of branchChildrenOf(node)) pred.set(b.child, { id, via: 'branch' })
+  }
+  const { pairs, closes, errors } = pairScopes(record, trunks)
+  return { nodes, trunks, at, pred, pairs, closes, errors }
+}
+
+// The innermost scope still open at the edge rising from `nodeId`, which is the bound
+// clause 3 of the merge rules imposes. Found by matching brackets downward rather than
+// by descending to the nearest project node, and the difference is not academic: on a
+// trunk running P, a, P2, b, T2, c, T, the nearest project node below c is P2, whose
+// close sits below c, so taking it would make a legal branch look unsatisfiable. Every
+// terminus passed on the way down closed a scope that also opened below us, so the
+// project node pairing with it is skipped; the first unpaired project node is the answer.
+// At the foot of a branch trunk the walk hops to the parent trunk at that branch's own
+// node, since that is the edge the branch hangs from. A plan's base always ends the
+// walk, so every position has exactly one enclosing scope.
+export function enclosingScopeOpen(record, nodeId, ix) {
+  const { nodes, pred } = ix
+  let id = nodeId
+  let pending = 0
+  const seen = new Set()
+  while (id && nodes[id] && !seen.has(id)) {
+    seen.add(id)
+    const node = nodes[id]
+    if (node.kind === 'terminus') pending++
+    else if (node.kind === 'project') {
+      if (pending === 0) return id
+      pending--
+    }
+    const p = pred.get(id)
+    id = p ? p.id : null
+  }
+  return null
+}
+
+// Whether one branch's return is legal, and what is wrong with it if not. Returns an
+// array of messages; empty means legal.
+//
+// Three clauses (docs/model_v3_ideas.md, section 4), and the third widens into the one
+// nesting rule that section 8 keeps. A scope [P .. T] owns the edges rising from P up to
+// the one rising from the node below T: exactly the edges that vanish when the scope is
+// collapsed. So clause 3 and its mirror are one biconditional — for every scope on the
+// trunk, the branch's own edge is inside it exactly when its join edge is. Both inside is
+// a branch that returns within its scope; both outside is a branch whose span contains
+// that whole scope, or misses it entirely. One of each is a branch escaping the scope it
+// was opened in, or entering one it was opened outside, and either would leave a return
+// line with nowhere to land when that scope is collapsed.
+export function mergeErrors(record, branch, ix) {
+  const { nodes, at, pairs } = ix
+  const errors = []
+  const label = 'the branch at "' + branch.footId + '"'
+  const m = branch.mergePoint
+
+  if (!branch.tipId) return ['a branch array names "' + branch.footId + '", which is not a node']
+  // A branch hangs on the edge rising from its node, and the top of a trunk has no such
+  // edge: what sits above the top of a branch trunk is that branch's own return line, and
+  // above a plan's close there is nothing at all.
+  if (nodes[branch.hostId] && !nodes[branch.hostId].next) {
+    return [label + ' hangs on "' + branch.hostId + '", which is the top of its trunk and so has no edge to hold it']
+  }
+  if (!m) return [label + ' has no merge point; every branch rejoins the trunk it left']
+  if (!nodes[m]) return [label + ' merges at unknown node "' + m + '"']
+
+  const host = at.get(branch.hostId)
+  const merge = at.get(m)
+  if (!host || !merge || host.trunk !== merge.trunk) {
+    return [label + ' merges at "' + m + '", which is not on the trunk it left']
+  }
+  if (merge.i < host.i) {
+    return [label + ' merges below its own branch point, which is a loop rather than a return']
+  }
+  if (!nodes[m].next) {
+    return [label + ' merges above "' + m + '", which has no edge above it']
+  }
+
+  const trunk = host.trunk
+  const scopeName = (openId) => '"' + (nodes[openId].title || openId) + '"'
+
+  // Clause 3, against the innermost scope open at the branch point, which is the bound the
+  // author actually has to work within. Any wider scope containing the branch point
+  // contains this one, so a merge outside a wider one is outside this one too, and naming
+  // the tightest is both correct and the more useful thing to say.
+  const enclosingId = enclosingScopeOpen(record, branch.hostId, ix)
+  const enclosingClose = enclosingId ? at.get(pairs.get(enclosingId)) : null
+  if (enclosingClose && enclosingClose.trunk === trunk && merge.i >= enclosingClose.i) {
+    errors.push(label + ' merges past the close of ' + scopeName(enclosingId) + ', the scope it was opened in; a branch cannot reach out of its scope')
+  }
+
+  // The mirror of clause 3, which is section 8's one nesting rule: a branch may not merge
+  // inside a scope it was opened outside, since a return landing inside a scope would have
+  // nowhere to land once that scope were collapsed.
+  for (const [openId, closeId] of pairs) {
+    const open = at.get(openId)
+    const close = at.get(closeId)
+    if (!open || !close || open.trunk !== trunk) continue
+    const inside = (i) => i >= open.i && i <= close.i - 1
+    if (inside(host.i) || !inside(merge.i)) continue
+    errors.push(label + ' merges inside ' + scopeName(openId) + ', a scope it was opened outside; merge below where ' + scopeName(openId) + ' opens, or above where it closes')
+  }
+  return errors
+}
+
 // DFS from every root, following .next and both branch arrays, detecting cycles
 // (a node revisited while still on the current path) and collecting every
 // reachable node id, so unreachable nodes (including detached cycles) can be
@@ -130,6 +289,13 @@ function walkReachable(record, rootIds, errors) {
     visiting.add(nodeId)
     if (node.next) walk(node.next, path.concat(nodeId))
     for (const b of branchChildrenOf(node)) walk(b.child, path.concat(nodeId))
+    // A return line is an edge too: it leaves this node and arrives at whatever sits
+    // above its merge point, so the cycle check has to follow it. A legal return makes a
+    // diamond rather than a loop, since the merge clauses forbid merging below the branch
+    // point; a return that reaches downward is the cycle this catches.
+    if (node.mergePoint && record.nodes[node.mergePoint] && record.nodes[node.mergePoint].next) {
+      walk(record.nodes[node.mergePoint].next, path.concat(nodeId))
+    }
     visiting.delete(nodeId)
     visited.add(nodeId)
   }
@@ -156,6 +322,9 @@ export function validateRecord(record) {
       if (node[key] != null && !Array.isArray(node[key])) {
         errors.push('node "' + id + '" has a ' + key + ' that is not an array')
       }
+    }
+    if (node.mergePoint != null && typeof node.mergePoint !== 'string') {
+      errors.push('node "' + id + '" has a mergePoint that is not a node id')
     }
   }
   if (errors.length) return { ok: false, errors }
@@ -221,12 +390,13 @@ export function validateRecord(record) {
     }
   }
 
-  const lines = trunksOf(record)
+  const ix = indexRecord(record)
+  const lines = ix.trunks
 
   // Scopes: every project node closes, every terminus closes something, and both
   // happen on one trunk.
-  const { pairs, errors: scopeErrors } = pairScopes(record, lines)
-  errors.push(...scopeErrors)
+  const pairs = ix.pairs
+  errors.push(...ix.errors)
 
   // A terminus arrives by a trunk edge, never as a branch child: a scope that opened
   // on one trunk cannot close at the foot of another.
@@ -251,6 +421,21 @@ export function validateRecord(record) {
       errors.push('the plan\'s closing terminus "' + terminusId + '" has a branch; there is no edge above it to hold one')
     }
   }
+
+  // Returns: every branch has one, only a branch's top holds one, and each one obeys the
+  // merge rules. The typed-edge rule belongs to the node above a join edge — exactly one
+  // trunk predecessor, and then zero or more return predecessors, which is what carries
+  // the sense that everything must arrive before that node proceeds. A return is
+  // therefore not counted among the incoming edges above, and two branches may share a
+  // merge point, which gives an n-way join at no cost in the schema.
+  const branches = branchesIn(record)
+  const tipIds = new Set(branches.map((b) => b.tipId).filter(Boolean))
+  for (const [id, node] of Object.entries(nodes)) {
+    if (node.mergePoint && !tipIds.has(id)) {
+      errors.push('node "' + id + '" holds a merge point but is not the top of a branch trunk; a return line leaves a branch at its top')
+    }
+  }
+  for (const branch of branches) errors.push(...mergeErrors(record, branch, ix))
 
   for (const line of lines) {
     const hereCount = line.filter((id) => nodes[id] && nodes[id].here).length
