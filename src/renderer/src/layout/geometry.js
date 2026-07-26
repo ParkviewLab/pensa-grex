@@ -295,11 +295,21 @@ function rangesOverlap(a, b) {
 // a hop.
 //
 // What survives untouched is the band reservation: each branch reserves a contiguous band
-// of lanes wide enough for its whole subtree, packed by first-fit against the row ranges
+// of lanes wide enough for its whole subtree, packed by first-fit against the extents
 // already placed on that side, because cards must still not overlap whatever the lines do.
-export function assignLanes(model, row) {
+//
+// `extentOf(ids, startId)` says how far a line reaches, and is the one thing the packer needs
+// to know about the vertical. The row grid answers in row indices; the pixel solve answers in
+// pixels, and includes a line's tail and the point its own incoming line arrives at, because
+// those are drawn too and two lines sharing a lane must not overlap in either. Either way the
+// packer only ever asks whether two extents overlap, so it does not care which it is given.
+export function assignLanes(model, row, extentOf) {
+  const extent = extentOf || ((ids) => {
+    const rows = ids.map((i) => row.get(i))
+    return { min: Math.min(...rows), max: Math.max(...rows) }
+  })
   const lineOfTask = new Map() // taskId -> the line's own start-task id
-  const lineRows = new Map() // lineId -> {min,max} of the line's own rows
+  const lineRows = new Map() // lineId -> {min,max} of the line's own extent
   const treeOfLine = new Map() // lineId -> the tree root's task id
   const lane = new Map() // lineId -> absolute integer lane
   const childrenOf = new Map() // lineId -> [{ child, side }], innermost first
@@ -315,17 +325,20 @@ export function assignLanes(model, row) {
       const task = model.getNode(id)
       id = task ? task.next : null
     }
-    const rows = ids.map((i) => row.get(i))
-    // A branch's return line climbs from its tip into the band below the node above its merge
-    // point, so the lane it occupies reaches that far even though its cards do not. The
-    // packer reasons in rows, so the range it packs against has to include that reach, or a
-    // branch whose merge was stretched well above its own top could be given a lane another
-    // branch's cards hold at those rows, and its return would run through them.
-    const tip = model.getNode(ids[ids.length - 1])
-    const mergeNode = tip && tip.mergePoint ? model.getNode(tip.mergePoint) : null
-    const above = mergeNode ? mergeNode.next : null
-    const reach = above && row.has(above) ? row.get(above) - 1 : -Infinity
-    lineRows.set(startId, { min: Math.min(...rows), max: Math.max(Math.max(...rows), reach) })
+    const own = extent(ids, startId)
+    // A branch's return line climbs from its tip toward the node above its merge point, so the
+    // lane it occupies reaches that far even though its cards do not. A branch whose merge was
+    // stretched well above its own top could otherwise be given a lane another branch's cards
+    // hold up there, and its return would run through them. In rows that reach is the row below
+    // the node above the merge point; a pixel extent carries it already, in the tail.
+    let reach = -Infinity
+    if (!extentOf) {
+      const tip = model.getNode(ids[ids.length - 1])
+      const mergeNode = tip && tip.mergePoint ? model.getNode(tip.mergePoint) : null
+      const above = mergeNode ? mergeNode.next : null
+      if (above && row.has(above)) reach = row.get(above) - 1
+    }
+    lineRows.set(startId, { min: own.min, max: Math.max(own.max, reach) })
     return ids
   }
 

@@ -590,3 +590,43 @@ describe('solveHeights', () => {
     expect(climbOf('f', 'h')).toBeCloseTo(METRICS.rise, 9) // the same climb, one level in
   })
 })
+
+describe('assignLanes — extents in pixels', () => {
+  // The packer only ever asks whether two lines' extents overlap, so it can be given rows or
+  // pixels. These two tests pin that indifference, which is what lets the row grid and the pixel
+  // solve share one packer while the engine is switched over.
+  const twoBranches = () => fakeModel(
+    [{ id: 't', rootTaskId: 'a' }],
+    {
+      a: { next: 'b', branches: [{ child: 'f', side: 'left' }] },
+      b: { next: 'c' }, c: { next: 'd' }, d: { branches: [{ child: 'g', side: 'left' }] },
+      f: { mergePoint: 'a' }, g: { mergePoint: 'd' },
+    },
+  )
+
+  it('shares a lane between two lines whose pixel extents do not overlap', () => {
+    const model = twoBranches()
+    // f sits low, g sits high, and neither reaches the other: the same lane serves both, exactly
+    // as it does when the packer is given rows.
+    const spans = { a: [0, 300], b: [0, 300], c: [0, 300], d: [0, 300], f: [200, 300], g: [0, 100] }
+    const extentOf = (ids) => ({
+      min: Math.min(...ids.map((i) => spans[i][0])),
+      max: Math.max(...ids.map((i) => spans[i][1])),
+    })
+    const { lane, lineOfTask } = assignLanes(model, null, extentOf)
+    expect(lane.get(lineOfTask.get('f'))).toBe(-1)
+    expect(lane.get(lineOfTask.get('g'))).toBe(-1)
+  })
+
+  it('pushes the second line outward when their pixel extents do overlap', () => {
+    const model = twoBranches()
+    const spans = { a: [0, 300], b: [0, 300], c: [0, 300], d: [0, 300], f: [100, 250], g: [90, 240] }
+    const extentOf = (ids) => ({
+      min: Math.min(...ids.map((i) => spans[i][0])),
+      max: Math.max(...ids.map((i) => spans[i][1])),
+    })
+    const { lane, lineOfTask } = assignLanes(model, null, extentOf)
+    const lanes = [lane.get(lineOfTask.get('f')), lane.get(lineOfTask.get('g'))].sort((x, y) => y - x)
+    expect(lanes).toEqual([-1, -2])
+  })
+})
