@@ -14,7 +14,8 @@
 // tree's root is a project node, and a root has no incoming edge, so nothing can
 // be added below it (see docs/northstar.md, axiom 2).
 
-import { mintTaskId } from './ids.js'
+import { mintNodeId } from './ids.js'
+import { noteFileName } from './notes.js'
 
 const STATUSES = ['todo', 'in-progress', 'completed', 'cancelled']
 
@@ -28,7 +29,7 @@ function nowISO() {
 
 function newTask(title) {
   return {
-    id: mintTaskId(),
+    id: mintNodeId(),
     title: typeof title === 'string' && title.length ? title : 'New task',
     kind: 'task',
     status: 'todo',
@@ -44,7 +45,7 @@ function newTask(title) {
 
 function newProjectNode(title) {
   return {
-    id: mintTaskId(),
+    id: mintNodeId(),
     title: typeof title === 'string' && title.length ? title : 'New project',
     kind: 'project',
     createdAt: nowISO(),
@@ -407,7 +408,7 @@ export function pasteAsTree(record, clip) {
   const next = clone(record)
   if (!Array.isArray(next.rootOrder)) next.rootOrder = []
   const idMap = new Map()
-  for (const oldId of Object.keys(clip.tasks)) idMap.set(oldId, mintTaskId())
+  for (const oldId of Object.keys(clip.tasks)) idMap.set(oldId, mintNodeId())
   const map = (id) => idMap.get(id) || id
   const stamp = nowISO()
   const notes = []
@@ -420,7 +421,7 @@ export function pasteAsTree(record, clip) {
     node.branches = (node.branches || []).map((b) => ({ ...b, child: map(b.child) }))
     if ('here' in node) node.here = false
     if (node.note) {
-      node.note = newId + '.md'
+      node.note = noteFileName(newId, node.title)
       notes.push({ file: node.note, content: (clip.notes && clip.notes[oldId]) || '' })
     }
     // Keep pasted titles unique in the destination: check against the domain's

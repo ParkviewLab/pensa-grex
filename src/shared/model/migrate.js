@@ -13,7 +13,7 @@
 // old root keeps its status (lossless). The trees[] registry is replaced by
 // rootOrder, an ordered list of root-node ids (see docs/model_ideas.md).
 
-import { mintTaskId } from './ids.js'
+import { mintNodeId } from './ids.js'
 
 export const CURRENT_SCHEMA = 2
 
@@ -39,7 +39,7 @@ function migrate1to2(record) {
   const rootOrder = []
   for (const tree of next.trees || []) {
     const root = {
-      id: mintTaskId(),
+      id: mintNodeId(),
       title: tree.name,
       kind: 'project',
       createdAt: nowISO(),

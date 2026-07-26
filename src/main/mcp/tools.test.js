@@ -63,7 +63,7 @@ describe('tool registration by scope tier', () => {
 describe('tools drive the task authority', () => {
   let s
   beforeEach(() => {
-    store.createForest('HomeLab')
+    store.createDomain('HomeLab')
     store.setLastDomain('HomeLab') // so tools default to the open domain
     s = fakeServer('destructive')
   })
@@ -130,7 +130,7 @@ describe('tools drive the task authority', () => {
   })
 
   it('resolves a domain by name and errors on an unknown one', async () => {
-    store.createForest('Work')
+    store.createDomain('Work')
     expect(data(await s.call('list_projects', { domain: 'Work' })).projects).toEqual([])
     expect((await s.call('list_projects', { domain: 'Nope' })).isError).toBe(true)
   })

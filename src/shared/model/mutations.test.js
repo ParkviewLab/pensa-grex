@@ -429,11 +429,12 @@ describe('pasteAsTree', () => {
     expect(t.b1.next).toBe(t.b2.id)
   })
 
-  it('carries a note by content into a fresh file named for the new id', () => {
+  it('carries a note by content into a fresh file named for the new id and title', () => {
     const { next, notes } = pasteAsTree(empty(), clip())
     const t = byTitle(next)
-    expect(t.b2.note).toBe(t.b2.id + '.md')
-    expect(notes).toEqual([{ file: t.b2.id + '.md', content: '# b2 note\n' }])
+    // The id resolves and the slug is decorative (see model/notes.js).
+    expect(t.b2.note).toBe(t.b2.id + '_b2.md')
+    expect(notes).toEqual([{ file: t.b2.id + '_b2.md', content: '# b2 note\n' }])
   })
 
   it('does not mutate the clip, so the same copy can be pasted again disjointly', () => {

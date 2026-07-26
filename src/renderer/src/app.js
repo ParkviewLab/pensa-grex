@@ -212,9 +212,9 @@ async function seedSamples() {
     { name: 'Work', record: workFixtureRaw },
   ]
   for (const { name, record } of samples) {
-    const created = await api.createForest(name)
+    const created = await api.createDomain(name)
     if (created.error) continue
-    await api.saveForest(created.path, record)
+    await api.saveDomainFile(created.path, record)
     if (name === 'HomeLab') {
       await api.writeNote(created.path, 'k_plex.md',
         '# Fix Plex transcoding\n\nHardware transcoding is not kicking in on 4K HEVC.\n\n- [ ] Confirm the GPU is passed through to the container\n- [ ] Check the Plex transcoder logs\n')
@@ -768,7 +768,7 @@ function restoreSwitcher() {
 async function createDomainFlow() {
   const name = await promptText({ title: 'New domain', label: 'Domain name', value: '' })
   if (name === null) { restoreSwitcher(); return }
-  const res = await api.createForest(name)
+  const res = await api.createDomain(name)
   if (res.error) {
     await chooseAction({ title: 'Could not create domain', message: res.error, actions: [{ label: 'OK', value: null }] })
     restoreSwitcher()
@@ -794,7 +794,7 @@ async function deleteDomainFlow() {
   closeContextMenu()
   // No queued record save to cancel: task ops write synchronously through main,
   // so nothing can re-create the trashed domain after this point.
-  const res = await api.deleteForest(path)
+  const res = await api.deleteDomain(path)
   if (res.error) {
     await chooseAction({ title: 'Could not delete domain', message: res.error, actions: [{ label: 'OK', value: null }] })
     return
@@ -823,7 +823,7 @@ async function boot() {
     domains = await api.listDomains()
   }
   if (!domains.length) {
-    showEmpty('No forest library found')
+    showEmpty('No domain library found')
     return
   }
   const last = domains.find((d) => d.name === settings.lastDomain) || domains[0]
