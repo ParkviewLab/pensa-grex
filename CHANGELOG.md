@@ -4,6 +4,32 @@ All notable changes to this project are recorded here.
 
 ## [Unreleased]
 
+## [v3.0.0] - 2026-07-26
+
+### Highlights
+
+This release replaces the tree-of-forks model with a plan-of-projects model in which every branch rejoins the trunk it left, and every scope is closed by a terminus node drawn as an inverted project hull. The on-disk layout changes accordingly: each domain is now a directory of plain JSON under a domains/ root, with notes in their own subdirectory and ids that are chronologically sortable, and a one-shot startup migration moves an existing schema-2 library across, fabricating a merge point for each branch. The MCP tool surface is renamed to match (create_plan, paste_as_plan, detach_to_plan, reorder_plan) and gains open_branch, wrap_run, unwrap_project, and set_merge_point, while add_task loses its mode and now always names an edge; the menu's "New tree" and "Paste as new tree" become "New plan" and "Paste as new plan", and the drawing retires the 12-degree tilt and per-line lift in favour of row-aligned cards with lateral runs that hop verticals.
+
+### Docs
+
+- V2.1.0 [skip ci] (8da2835)
+- Add rust_port_ideas notebook (off-Electron / 100% Rust study) (#60) (ad08485)
+- Add Migration and repo strategy to rust_port_ideas (#61) (6aeecc9)
+- Record the model v3 design (domains, termini, merging branches) (#62) (1784403)
+- Amend the northstar to model v3 (single entry, every fork returns) (#63) (8b17e9b)
+
+### Features
+
+- The domain library on disk, and the id scheme (#65) (c6519e3)
+- The schema-3 record, and the migration that brings a library across (#66) (ae438ff)
+- Termini close every scope, and the verbs that open and shut them (#67) (4b3cb80)
+- Every branch rejoins the trunk it left, and the drawing that shows it (#68) (d4bcdf5)
+- The tool surface and the outline in the vocabulary of model v3 (#69) (af050b8)
+
+### Refactor
+
+- Name the record and the model, and drop the forest (#64) (0c7a856)
+
 ## [v2.1.0] - 2026-07-21
 
 ### Highlights
