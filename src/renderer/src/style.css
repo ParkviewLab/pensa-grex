@@ -111,12 +111,16 @@ body{
    connector, so the main line of a stack reads before its branches. */
 .track.riser{ stroke-width:3; }
 /* A branch line leaving a fork and a return line rejoining the trunk are the same
-   kind of lateral line, so they are drawn alike. */
+   kind of lateral line, so they are drawn alike. Both climb at twelve degrees at each
+   end, where the round linecap and linejoin above matter more than they did flat: a
+   join between a ramp and a flat run is shallow, and a mitre would spike at it. */
 .track.branch, .track.return{ stroke-width:2.3; }
-/* An underpass: the lateral line breaks and the trunk runs on, with a cap on each severed
-   end so the gap reads as a line passing behind rather than as a line that stops. The cap
-   stands parallel to the trunk and is drawn a little thinner than the line it caps. */
-.underpass-cap{ stroke:var(--line); stroke-width:1.8; }
+/* An underpass: the lateral line is cut and the line it crosses runs on, with a cap on each
+   severed end so the gap reads as a line passing behind rather than as a line that stops.
+   Each cap stands parallel to the line being passed under (a trunk, or a return) and is drawn
+   a little thinner than the line it caps. The cut is made by clipping rather than by ending
+   the path, since the round linecap above would otherwise leave a bulb of ink past the cap. */
+.underpass-cap{ stroke:var(--line); stroke-width:1.6; }
 .fork{ fill:var(--line); }
 .burst line{ stroke:var(--burst-a); stroke-width:1.4; }
 .burst.b line{ stroke:var(--burst-b); }
