@@ -13,6 +13,7 @@ import {
 import * as store from './store.js'
 import * as taskService from './taskService.js'
 import { createMcpService } from './mcp/index.js'
+import { migrateLibraryIfNeeded } from './migrateLibrary.js'
 
 const isDev = !app.isPackaged
 const GITHUB_URL = 'https://github.com/ParkviewLab/pensa-grex'
@@ -261,6 +262,24 @@ app.whenReady().then(() => {
   session.defaultSession.webRequest.onHeadersReceived((details, cb) => {
     cb({ responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [csp] } })
   })
+
+  // Bring a schema-2 library across before any window can read the library, so the
+  // user's domains are simply there rather than appearing a moment later. The pass
+  // writes a new library and leaves the old one intact; a domain it has already
+  // migrated is skipped, so this is a no-op on every launch after the first.
+  try {
+    const { migrated, failed, skipped } = migrateLibraryIfNeeded()
+    for (const d of migrated) {
+      console.log(`migrated "${d.title}" to schema 3: ${d.nodes} nodes, ${d.notesCopied} notes, ${d.bookmarks} bookmarks -> ${d.dir}`)
+      if (d.notesMissing.length) console.warn(`  note files not found in the old domain: ${d.notesMissing.join(', ')}`)
+    }
+    for (const f of failed) console.error(`could not migrate "${f.dir}": ${f.error} (its old files are untouched)`)
+    if (skipped) console.log(`${skipped} domain(s) were already migrated`)
+  } catch (e) {
+    // A failure here must not stop the app from opening: the old library is intact
+    // and the new one is simply empty or partial.
+    console.error('the library migration did not run:', (e && e.message) || e)
+  }
 
   mainWindow = createWindow()
   buildMenu()

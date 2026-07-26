@@ -170,7 +170,7 @@ export function createNoteEditor({ readNote, writeNote, openExternal, onFirstWri
   // record; `raw` in this module is the editor's own text.
   async function reconcile(dir, record) {
     if (!isOpen() || domainPath !== dir || file === null) return
-    const taskExists = !!(record && record.tasks[taskId])
+    const taskExists = !!(record && record.nodes[taskId])
     if (!taskExists) {
       close()
       if (notify) notify('The task whose note you were editing was removed by another writer, so the note was closed.')

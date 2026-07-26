@@ -69,10 +69,10 @@ describe('domains', () => {
     const load = store.loadDomainFile(created.path)
     // Written as plain JSON, so the strict parser reads it (northstar axiom 7).
     const parsed = JSON.parse(load.text)
-    expect(parsed.schema).toBe(2)
+    expect(parsed.schemaVersion).toBe(3)
     expect(parsed.id).toBe(created.id)
-    expect(parsed.domain).toBe('HomeLab')
-    expect(parsed.rootOrder).toEqual([])
+    expect(parsed.title).toBe('HomeLab')
+    expect(parsed.planOrder).toEqual([])
     expect(existsSync(join(created.path, 'notes'))).toBe(true)
     expect(store.listDomains()).toEqual([{ id: created.id, name: 'HomeLab', path: created.path }])
   })
@@ -80,7 +80,7 @@ describe('domains', () => {
   it('takes the listed name from the record, not from the directory label', () => {
     const created = store.createDomain('HomeLab')
     const rec = JSON.parse(store.loadDomainFile(created.path).text)
-    rec.domain = 'Renamed In Place'
+    rec.title = 'Renamed In Place'
     store.saveDomainFile(created.path, JSON.stringify(rec, null, 2) + '\n')
     // The directory label still says homelab; the title is the record's.
     expect(basename(created.path)).toContain('homelab')
@@ -102,7 +102,7 @@ describe('domains', () => {
 
   it('round-trips saved domain text verbatim', () => {
     const { path } = store.createDomain('HomeLab')
-    const text = '{ "schema": 2, "domain": "HomeLab", "rootOrder": [], "tasks": {} }\n'
+    const text = '{ "schemaVersion": 3, "title": "HomeLab", "planOrder": [], "nodes": {} }\n'
     expect(store.saveDomainFile(path, text)).toEqual({ ok: true })
     expect(store.loadDomainFile(path).text).toBe(text)
   })
@@ -186,7 +186,7 @@ describe('bookmarks', () => {
   it('round-trips bookmark text in the domain directory and reads a missing file as empty', () => {
     const { path } = store.createDomain('HomeLab')
     expect(store.getBookmarks(path)).toEqual({ text: '' })
-    const text = JSON.stringify({ bookmarks: [{ name: 'Overview', collapsed: [], zoom: 1, anchor: ['k_a'] }] })
+    const text = JSON.stringify({ bookmarks: [{ name: 'Overview', collapsed: [], nodes: ['n_a'] }] })
     expect(store.setBookmarks(path, text)).toEqual({ ok: true })
     expect(store.getBookmarks(path).text).toBe(text)
   })

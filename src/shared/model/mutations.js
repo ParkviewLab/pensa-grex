@@ -27,6 +27,35 @@ function nowISO() {
   return new Date().toISOString()
 }
 
+// A node's forks live in two ordered arrays, one per side, and each array names
+// the edge that RISES from the node holding it. These four helpers are the only
+// places that know that, so everything below can go on speaking of a node's
+// branches without caring which array a fork sits in.
+const SIDE_KEY = { left: 'leftBranches', right: 'rightBranches' }
+
+function sideArray(node, side) {
+  const key = SIDE_KEY[side] || SIDE_KEY.left
+  if (!Array.isArray(node[key])) node[key] = []
+  return node[key]
+}
+
+// Left then right, each in its stored order, with the index a caller needs to
+// splice or repoint the entry it found.
+function branchesOf(node) {
+  return [
+    ...(node.leftBranches || []).map((child, index) => ({ child, side: 'left', index })),
+    ...(node.rightBranches || []).map((child, index) => ({ child, side: 'right', index })),
+  ]
+}
+
+function branchCount(node) {
+  return (node.leftBranches || []).length + (node.rightBranches || []).length
+}
+
+function addBranch(node, childId, side) {
+  sideArray(node, side).push(childId)
+}
+
 function newTask(title) {
   return {
     id: mintNodeId(),
@@ -39,7 +68,8 @@ function newTask(title) {
     here: false,
     flagged: false,
     next: null,
-    branches: [],
+    rightBranches: [],
+    leftBranches: [],
   }
 }
 
@@ -52,17 +82,18 @@ function newProjectNode(title) {
     note: null,
     flagged: false,
     next: null,
-    branches: [],
+    rightBranches: [],
+    leftBranches: [],
   }
 }
 
 // The task whose .next or whose branch points at taskId, or null if taskId is a
 // root. validateRecord guarantees at most one such incoming edge.
 function predecessorOf(record, taskId) {
-  for (const [id, task] of Object.entries(record.tasks)) {
+  for (const [id, task] of Object.entries(record.nodes)) {
     if (task.next === taskId) return { id, kind: 'next' }
-    const bi = (task.branches || []).findIndex((b) => b.child === taskId)
-    if (bi !== -1) return { id, kind: 'branch', branchIndex: bi }
+    const b = branchesOf(task).find((x) => x.child === taskId)
+    if (b) return { id, kind: 'branch', side: b.side, index: b.index }
   }
   return null
 }
@@ -76,10 +107,10 @@ function subtreeIds(record, startId) {
     const id = stack.pop()
     if (ids.has(id)) continue
     ids.add(id)
-    const t = record.tasks[id]
+    const t = record.nodes[id]
     if (!t) continue
     if (t.next) stack.push(t.next)
-    for (const b of t.branches || []) stack.push(b.child)
+    for (const b of branchesOf(t)) stack.push(b.child)
   }
   return ids
 }
@@ -97,10 +128,10 @@ function lineIds(record, taskId) {
   const ids = []
   let id = start
   const seen = new Set()
-  while (id && record.tasks[id] && !seen.has(id)) {
+  while (id && record.nodes[id] && !seen.has(id)) {
     seen.add(id)
     ids.push(id)
-    id = record.tasks[id].next
+    id = record.nodes[id].next
   }
   return ids
 }
@@ -110,28 +141,28 @@ function lineIds(record, taskId) {
 // so the <=1-here-per-line invariant holds. Harmless when nothing merged.
 function normalizeHeres(record) {
   const seenLineStart = new Set()
-  for (const id of Object.keys(record.tasks)) {
+  for (const id of Object.keys(record.nodes)) {
     const line = lineIds(record, id)
     const startKey = line[0]
     if (seenLineStart.has(startKey)) continue
     seenLineStart.add(startKey)
-    const heres = line.filter((tid) => record.tasks[tid].here)
+    const heres = line.filter((tid) => record.nodes[tid].here)
     if (heres.length > 1) {
       const keep = heres[heres.length - 1]
-      for (const tid of heres) if (tid !== keep) record.tasks[tid].here = false
+      for (const tid of heres) if (tid !== keep) record.nodes[tid].here = false
     }
   }
   return record
 }
 
 function requireTask(record, taskId) {
-  if (!record.tasks[taskId]) throw new Error('unknown task "' + taskId + '"')
-  return record.tasks[taskId]
+  if (!record.nodes[taskId]) throw new Error('unknown task "' + taskId + '"')
+  return record.nodes[taskId]
 }
 
 /**
  * Start a new project in the domain: a fresh project-node root titled `name`,
- * appended to rootOrder. The one way to begin a tree from nothing (an empty
+ * appended to planOrder. The one way to begin a tree from nothing (an empty
  * domain, or after the last tree was deleted). The root carries the project's
  * name; tasks are grown above it.
  */
@@ -139,8 +170,8 @@ export function addTree(record, name) {
   const next = clone(record)
   const root = newProjectNode(name)
   addNode(next, root)
-  if (!Array.isArray(next.rootOrder)) next.rootOrder = []
-  next.rootOrder.push(root.id)
+  if (!Array.isArray(next.planOrder)) next.planOrder = []
+  next.planOrder.push(root.id)
   return next
 }
 
@@ -154,7 +185,7 @@ export function addTree(record, name) {
 export function uniqueTitle(record, desired, excludeId) {
   const want = String(desired)
   const taken = new Set()
-  for (const [id, t] of Object.entries(record.tasks || {})) {
+  for (const [id, t] of Object.entries(record.nodes || {})) {
     if (id !== excludeId && t && typeof t.title === 'string') taken.add(t.title)
   }
   if (!taken.has(want)) return want
@@ -170,7 +201,7 @@ export function uniqueTitle(record, desired, excludeId) {
 // Used by every add* mutation; the node is not yet in the record, so excludeId is null.
 function addNode(record, node) {
   node.title = uniqueTitle(record, node.title, null)
-  record.tasks[node.id] = node
+  record.nodes[node.id] = node
   return node
 }
 
@@ -253,8 +284,8 @@ export function makeHere(record, taskId) {
   const next = clone(record)
   const task = requireTask(next, taskId)
   if (task.kind === 'project') throw new Error('cannot set "here" on a project node')
-  for (const id of lineIds(next, taskId)) next.tasks[id].here = false
-  next.tasks[taskId].here = true
+  for (const id of lineIds(next, taskId)) next.nodes[id].here = false
+  next.nodes[taskId].here = true
   return next
 }
 
@@ -262,7 +293,7 @@ export function makeHere(record, taskId) {
 export function clearHere(record, taskId) {
   const next = clone(record)
   requireTask(next, taskId)
-  for (const id of lineIds(next, taskId)) next.tasks[id].here = false
+  for (const id of lineIds(next, taskId)) next.nodes[id].here = false
   return next
 }
 
@@ -293,8 +324,8 @@ export function addTaskBelow(record, taskId, title) {
   if (!pred) throw new Error('cannot add a task below a root node')
   const n = newTask(title)
   n.next = taskId
-  if (pred.kind === 'next') next.tasks[pred.id].next = n.id
-  else next.tasks[pred.id].branches[pred.branchIndex].child = n.id
+  if (pred.kind === 'next') next.nodes[pred.id].next = n.id
+  else sideArray(next.nodes[pred.id], pred.side)[pred.index] = n.id
   addNode(next, n)
   return next
 }
@@ -303,7 +334,7 @@ export function addTaskBelow(record, taskId, title) {
 // 3rd left, ... unless an explicit side is given.
 function branchSide(task, side) {
   if (side === 'left' || side === 'right') return side
-  return task.branches.length % 2 === 0 ? 'left' : 'right'
+  return branchCount(task) % 2 === 0 ? 'left' : 'right'
 }
 
 /** Fork a new parallel stack off taskId at the gap above it (alternating side). */
@@ -311,21 +342,29 @@ export function addBranchAbove(record, taskId, title, side) {
   const next = clone(record)
   const task = requireTask(next, taskId)
   const n = newTask(title)
-  task.branches.push({ child: n.id, side: branchSide(task, side), at: 'above' })
+  addBranch(task, n.id, branchSide(task, side))
   addNode(next, n)
   return next
 }
 
 /**
  * Fork a new parallel stack off taskId at the gap below it (alternating side).
- * Refused below a root node — a root has no gap below it.
+ *
+ * A branch is stored on the node whose rising edge it leaves, so the gap below
+ * taskId belongs to taskId's predecessor, and that is where the fork goes.
+ * Refused when there is no such edge: below a root (nothing precedes a project's
+ * base) and below the foot of a branch, whose lower neighbour is its own branch
+ * line rather than a trunk edge.
  */
 export function addBranchBelow(record, taskId, title, side) {
   const next = clone(record)
-  const task = requireTask(next, taskId)
-  if (!predecessorOf(next, taskId)) throw new Error('cannot add a branch below a root node')
+  requireTask(next, taskId)
+  const pred = predecessorOf(next, taskId)
+  if (!pred) throw new Error('cannot add a branch below a root node')
+  if (pred.kind !== 'next') throw new Error('cannot add a branch below the first node of a branch')
+  const host = next.nodes[pred.id]
   const n = newTask(title)
-  task.branches.push({ child: n.id, side: branchSide(task, side), at: 'below' })
+  addBranch(host, n.id, branchSide(host, side))
   addNode(next, n)
   return next
 }
@@ -345,48 +384,46 @@ export function deleteTask(record, taskId, mode = 'subtree') {
 
   if (!pred) {
     const doomed = subtreeIds(next, taskId)
-    next.rootOrder = (next.rootOrder || []).filter((id) => id !== taskId)
-    for (const id of doomed) delete next.tasks[id]
+    next.planOrder = (next.planOrder || []).filter((id) => id !== taskId)
+    for (const id of doomed) delete next.nodes[id]
     return next
   }
 
   const detachFromPred = (replacement) => {
     if (pred.kind === 'next') {
-      next.tasks[pred.id].next = replacement
+      next.nodes[pred.id].next = replacement
     } else if (replacement) {
-      next.tasks[pred.id].branches[pred.branchIndex].child = replacement
+      sideArray(next.nodes[pred.id], pred.side)[pred.index] = replacement
     } else {
-      next.tasks[pred.id].branches.splice(pred.branchIndex, 1)
+      sideArray(next.nodes[pred.id], pred.side).splice(pred.index, 1)
     }
   }
 
   if (mode === 'splice') {
-    const task = next.tasks[taskId]
+    const task = next.nodes[taskId]
     const succ = task.next
     let head = null
-    let leftover = task.branches
+    let leftover = branchesOf(task)
     if (succ) {
       head = succ
-    } else if (task.branches.length) {
-      head = task.branches[0].child
-      leftover = task.branches.slice(1)
+    } else if (leftover.length) {
+      head = leftover[0].child
+      leftover = leftover.slice(1)
     } else {
       leftover = []
     }
     if (head) {
-      for (const b of leftover) {
-        next.tasks[head].branches.push({ child: b.child, side: b.side, at: b.at })
-      }
+      for (const b of leftover) addBranch(next.nodes[head], b.child, b.side)
     }
     detachFromPred(head)
-    delete next.tasks[taskId]
+    delete next.nodes[taskId]
     return normalizeHeres(next)
   }
 
   // subtree
   const doomed = subtreeIds(next, taskId)
   detachFromPred(null)
-  for (const id of doomed) delete next.tasks[id]
+  for (const id of doomed) delete next.nodes[id]
   return next
 }
 
@@ -398,7 +435,7 @@ export function deleteTask(record, taskId, mode = 'subtree') {
  * by content, not by file: a node that carried a note is given a fresh note file
  * named for its new id, and that file's text is returned in `notes` for the
  * caller to write into the destination domain. The clip's (mapped) root id is
- * appended to rootOrder, so the pasted tree lands to the right of the rest.
+ * appended to planOrder, so the pasted tree lands to the right of the rest.
  *
  * `clip` is { rootId, tasks: { oldId: record }, notes: { oldId: content } }, the
  * snapshot bridge/api.js gathers at copy time. Returns { next, notes } where
@@ -406,30 +443,31 @@ export function deleteTask(record, taskId, mode = 'subtree') {
  */
 export function pasteAsTree(record, clip) {
   const next = clone(record)
-  if (!Array.isArray(next.rootOrder)) next.rootOrder = []
+  if (!Array.isArray(next.planOrder)) next.planOrder = []
   const idMap = new Map()
-  for (const oldId of Object.keys(clip.tasks)) idMap.set(oldId, mintNodeId())
+  for (const oldId of Object.keys(clip.nodes)) idMap.set(oldId, mintNodeId())
   const map = (id) => idMap.get(id) || id
   const stamp = nowISO()
   const notes = []
-  for (const [oldId, rec] of Object.entries(clip.tasks)) {
+  for (const [oldId, rec] of Object.entries(clip.nodes)) {
     const newId = idMap.get(oldId)
     const node = structuredClone(rec)
     node.id = newId
     node.createdAt = stamp
     if (node.next) node.next = map(node.next)
-    node.branches = (node.branches || []).map((b) => ({ ...b, child: map(b.child) }))
+    node.leftBranches = (node.leftBranches || []).map(map)
+    node.rightBranches = (node.rightBranches || []).map(map)
     if ('here' in node) node.here = false
     if (node.note) {
       node.note = noteFileName(newId, node.title)
       notes.push({ file: node.note, content: (clip.notes && clip.notes[oldId]) || '' })
     }
     // Keep pasted titles unique in the destination: check against the domain's
-    // existing nodes and the pasted nodes already placed (uniqueTitle walks next.tasks).
+    // existing nodes and the pasted nodes already placed (uniqueTitle walks next.nodes).
     if (typeof node.title === 'string') node.title = uniqueTitle(next, node.title, null)
-    next.tasks[newId] = node
+    next.nodes[newId] = node
   }
-  next.rootOrder.push(map(clip.rootId))
+  next.planOrder.push(map(clip.rootId))
   return { next, notes }
 }
 
@@ -446,23 +484,23 @@ export function pasteAsTree(record, clip) {
 
 // Detach `id` from whatever points at it, cutting the incoming edge cleanly so
 // its whole subtree travels with it. A root (no predecessor) is dropped from
-// rootOrder; a main-line child leaves its predecessor a tip; a branch child is
+// planOrder; a main-line child leaves its predecessor a tip; a branch child is
 // spliced out of its predecessor's branch list.
 function cutIncoming(next, id) {
   const pred = predecessorOf(next, id)
   if (!pred) {
-    next.rootOrder = (next.rootOrder || []).filter((rid) => rid !== id)
+    next.planOrder = (next.planOrder || []).filter((rid) => rid !== id)
   } else if (pred.kind === 'next') {
-    next.tasks[pred.id].next = null
+    next.nodes[pred.id].next = null
   } else {
-    next.tasks[pred.id].branches.splice(pred.branchIndex, 1)
+    sideArray(next.nodes[pred.id], pred.side).splice(pred.index, 1)
   }
 }
 
 // Graft `id` as a fresh fork off `targetId` (alternating side).
 function graftBranch(next, targetId, id) {
-  const target = next.tasks[targetId]
-  target.branches.push({ child: id, side: branchSide(target), at: 'above' })
+  const target = next.nodes[targetId]
+  addBranch(target, id, branchSide(target))
 }
 
 // Splice a single task out of its line, leaving it detached and childless: its
@@ -471,35 +509,36 @@ function graftBranch(next, targetId, id) {
 // reconnection deleteTask's 'splice' mode performs. The node keeps its identity;
 // only its edges are cleared, ready to be re-attached elsewhere.
 function spliceOutTask(next, id) {
-  const task = next.tasks[id]
+  const task = next.nodes[id]
   const pred = predecessorOf(next, id)
   if (!pred) throw new Error('a task node always has a predecessor')
   const succ = task.next
   let head = null
-  let leftover = task.branches
+  let leftover = branchesOf(task)
   if (succ) {
     head = succ
-  } else if (task.branches.length) {
-    head = task.branches[0].child
-    leftover = task.branches.slice(1)
+  } else if (leftover.length) {
+    head = leftover[0].child
+    leftover = leftover.slice(1)
   } else {
     leftover = []
   }
-  if (head) for (const b of leftover) next.tasks[head].branches.push({ child: b.child, side: b.side, at: b.at })
-  if (pred.kind === 'next') next.tasks[pred.id].next = head
-  else if (head) next.tasks[pred.id].branches[pred.branchIndex].child = head
-  else next.tasks[pred.id].branches.splice(pred.branchIndex, 1)
+  if (head) for (const b of leftover) addBranch(next.nodes[head], b.child, b.side)
+  if (pred.kind === 'next') next.nodes[pred.id].next = head
+  else if (head) sideArray(next.nodes[pred.id], pred.side)[pred.index] = head
+  else sideArray(next.nodes[pred.id], pred.side).splice(pred.index, 1)
   task.next = null
-  task.branches = []
+  task.leftBranches = []
+  task.rightBranches = []
 }
 
 // The end of a node's main line: follow .next to the node whose .next is null.
 function mainLineTip(next, id) {
   let cur = id
   const seen = new Set()
-  while (next.tasks[cur] && next.tasks[cur].next && !seen.has(cur)) {
+  while (next.nodes[cur] && next.nodes[cur].next && !seen.has(cur)) {
     seen.add(cur)
-    cur = next.tasks[cur].next
+    cur = next.nodes[cur].next
   }
   return cur
 }
@@ -543,7 +582,7 @@ export function moveSubtree(record, rootId, targetId) {
 
 /**
  * Detach a sub-project into its own independent tree: cut its incoming edge and
- * append it to rootOrder, so it becomes a structural root. Only a project node
+ * append it to planOrder, so it becomes a structural root. Only a project node
  * can be a root; refuses a task node and a node that is already a root.
  */
 export function detachToTree(record, id) {
@@ -552,13 +591,13 @@ export function detachToTree(record, id) {
   if (node.kind !== 'project') throw new Error('only a project node can become a root')
   if (!predecessorOf(next, id)) throw new Error('node is already a root')
   cutIncoming(next, id)
-  if (!Array.isArray(next.rootOrder)) next.rootOrder = []
-  next.rootOrder.push(id)
+  if (!Array.isArray(next.planOrder)) next.planOrder = []
+  next.planOrder.push(id)
   return next
 }
 
 /**
- * Move a root to position `index` in the left-to-right tree order. rootOrder is
+ * Move a root to position `index` in the left-to-right tree order. planOrder is
  * advisory and may omit some roots (buildModel appends the unlisted by
  * createdAt); this canonicalises it to the full current root order first, then
  * places `rootId` at the clamped index, so the index is meaningful. Refuses a
@@ -569,14 +608,14 @@ export function reorderRoot(record, rootId, index) {
   requireTask(next, rootId)
   if (predecessorOf(next, rootId)) throw new Error('reorderRoot expects a root node')
   const isRoot = (id) => !predecessorOf(next, id)
-  const listed = (next.rootOrder || []).filter((id) => next.tasks[id] && isRoot(id))
-  const unlisted = Object.keys(next.tasks)
+  const listed = (next.planOrder || []).filter((id) => next.nodes[id] && isRoot(id))
+  const unlisted = Object.keys(next.nodes)
     .filter((id) => isRoot(id) && !listed.includes(id))
-    .sort((a, b) => String(next.tasks[a].createdAt).localeCompare(String(next.tasks[b].createdAt)))
+    .sort((a, b) => String(next.nodes[a].createdAt).localeCompare(String(next.nodes[b].createdAt)))
   const order = [...listed, ...unlisted]
   order.splice(order.indexOf(rootId), 1)
   order.splice(Math.max(0, Math.min(index, order.length)), 0, rootId)
-  next.rootOrder = order
+  next.planOrder = order
   return next
 }
 
@@ -606,10 +645,10 @@ export function moveIntoLine(record, movedId, belowId) {
     spliceOutTask(next, movedId) // one task; its children stay behind
     tipId = movedId
   }
-  const below = next.tasks[belowId]
+  const below = next.nodes[belowId]
   const oldNext = below.next
   below.next = movedId
-  next.tasks[tipId].next = oldNext
+  next.nodes[tipId].next = oldNext
   return normalizeHeres(next)
 }
 
@@ -617,13 +656,13 @@ export function moveIntoLine(record, movedId, belowId) {
 // exchange positions on the line. aId's predecessor (main line or branch) is
 // repointed at the successor, which then points back at aId.
 function swapWithSuccessor(next, aId) {
-  const a = next.tasks[aId]
+  const a = next.nodes[aId]
   const bId = a.next
-  const b = next.tasks[bId]
+  const b = next.nodes[bId]
   const pred = predecessorOf(next, aId)
   if (pred) {
-    if (pred.kind === 'next') next.tasks[pred.id].next = bId
-    else next.tasks[pred.id].branches[pred.branchIndex].child = bId
+    if (pred.kind === 'next') next.nodes[pred.id].next = bId
+    else sideArray(next.nodes[pred.id], pred.side)[pred.index] = bId
   }
   a.next = b.next
   b.next = aId

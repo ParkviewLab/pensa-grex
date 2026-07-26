@@ -105,8 +105,12 @@ describe('tools drive the task authority', () => {
 
   it('copy_project -> paste_as_tree duplicates the tree', async () => {
     const cp = data(await s.call('create_project', { name: 'Src' }))
-    await s.call('add_task', { target_id: cp.id, position: 'above', mode: 'continue', title: 'A task' })
+    const at = data(await s.call('add_task', { target_id: cp.id, position: 'above', mode: 'continue', title: 'A task' }))
     const clip = data(await s.call('copy_project', { node_id: cp.id }))
+    // The clip carries the whole subtree under the key pasteAsTree reads, `nodes`:
+    // the record-wide tasks -> nodes rename reaches the clip snapshot too. Asserted
+    // by name so a producer that emits the old key fails here rather than downstream.
+    expect(Object.keys(clip.nodes || {}).sort()).toEqual([cp.id, at.id].sort())
     const pasted = data(await s.call('paste_as_tree', { clip }))
     expect(pasted.id).toBeTruthy()
     const lp = data(await s.call('list_projects', {}))

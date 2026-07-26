@@ -5,12 +5,15 @@ import { describe, it, expect } from 'vitest'
 import { assignRows, junctionGaps, buildRowGrid, assignLanes } from './geometry.js'
 
 // A minimal stand-in for the buildModel() runtime model (model/model.js),
-// exposing only what geometry.js actually reads: .trees and .getTask(id).
-function fakeModel(trees, taskDefs) {
-  const tasks = new Map(Object.entries(taskDefs).map(([id, t]) => [
-    id, { id, next: t.next || null, branches: t.branches || [], predecessorId: t.predecessorId ?? null },
+// exposing only what geometry.js actually reads: .trees, .nodes and .getNode(id).
+// A model node's .branches is [{ child, side }] — the record's two per-side
+// arrays already flattened in left-then-right order — with no `at`: a branch
+// array names the edge rising from the node that holds it.
+function fakeModel(trees, nodeDefs) {
+  const nodes = new Map(Object.entries(nodeDefs).map(([id, n]) => [
+    id, { id, next: n.next || null, branches: n.branches || [], predecessorId: n.predecessorId ?? null },
   ]))
-  return { trees, tasks, getTask: (id) => tasks.get(id) || null }
+  return { trees, nodes, getNode: (id) => nodes.get(id) || null }
 }
 
 describe('assignRows', () => {
@@ -25,10 +28,10 @@ describe('assignRows', () => {
     expect(row.get('c')).toBe(2)
   })
 
-  it('starts a branch level with its parent\'s .next for at:"above"', () => {
+  it('starts a branch level with its parent\'s .next', () => {
     const model = fakeModel(
       [{ id: 't1', rootTaskId: 'a' }],
-      { a: { next: 'b', branches: [{ child: 'x', side: 'left', at: 'above' }] }, b: {}, x: {} },
+      { a: { next: 'b', branches: [{ child: 'x', side: 'left' }] }, b: {}, x: {} },
     )
     const row = assignRows(model)
     expect(row.get('a')).toBe(0)
@@ -36,14 +39,22 @@ describe('assignRows', () => {
     expect(row.get('x')).toBe(1) // level with b, not with a
   })
 
-  it('starts a branch level with its own parent for at:"below"', () => {
+  // Schema 3: this test used to assert the distinct geometry of a fork attached at
+  // the gap BELOW its node (at:'below'), which put the child level with that node
+  // itself, one gap lower than its .next. The shape can no longer say it — the
+  // migration moves such a fork onto the node beneath, where it means the same
+  // thing — so the assertion is replaced by the nearest true one about the new
+  // shape: an array names the edge RISING from its holder, so the child is at the
+  // holder's row + 1 even in the case where at:'below' had its bite, a holder with
+  // no .next of its own to be level with.
+  it('starts a branch one row above its holder even when the holder has no .next', () => {
     const model = fakeModel(
       [{ id: 't1', rootTaskId: 'a' }],
-      { a: { next: 'b', branches: [] }, b: { branches: [{ child: 'x', side: 'left', at: 'below' }] }, x: {} },
+      { a: { next: 'b', branches: [] }, b: { branches: [{ child: 'x', side: 'left' }] }, x: {} },
     )
     const row = assignRows(model)
     expect(row.get('b')).toBe(1)
-    expect(row.get('x')).toBe(1) // level with b itself, one gap lower than b.next would be
+    expect(row.get('x')).toBe(2) // one gap above b, the edge b's array names
   })
 })
 
@@ -51,10 +62,25 @@ describe('junctionGaps', () => {
   it('reports the lower row of the gap a fork attaches to', () => {
     const model = fakeModel(
       [{ id: 't1', rootTaskId: 'a' }],
-      { a: { next: 'b', branches: [{ child: 'x', side: 'left', at: 'above' }] }, b: {}, x: {} },
+      { a: { next: 'b', branches: [{ child: 'x', side: 'left' }] }, b: {}, x: {} },
     )
     const row = assignRows(model)
     expect(junctionGaps(model, row)).toEqual(new Set([0]))
+  })
+
+  it('reports one gap per forking node, always that node\'s own row', () => {
+    // Every fork leaves the gap above the node holding it, so two forks held at
+    // different rows carry two junctions; a node with none carries no junction.
+    const model = fakeModel(
+      [{ id: 't1', rootTaskId: 'a' }],
+      {
+        a: { next: 'b', branches: [{ child: 'x', side: 'left' }] },
+        b: { next: 'c', branches: [{ child: 'y', side: 'right' }] },
+        c: {}, x: {}, y: {},
+      },
+    )
+    const row = assignRows(model)
+    expect(junctionGaps(model, row)).toEqual(new Set([0, 1]))
   })
 })
 
@@ -71,7 +97,7 @@ describe('buildRowGrid', () => {
   it('widens a gap that carries a fork junction', () => {
     const withFork = fakeModel(
       [{ id: 't1', rootTaskId: 'a' }],
-      { a: { next: 'b', branches: [{ child: 'x', side: 'left', at: 'above' }] }, b: {}, x: {} },
+      { a: { next: 'b', branches: [{ child: 'x', side: 'left' }] }, b: {}, x: {} },
     )
     const withoutFork = fakeModel([{ id: 't1', rootTaskId: 'a' }], { a: { next: 'b' }, b: {} })
     const sizes = new Map([['a', { cardW: 138, cardH: 50 }], ['b', { cardW: 138, cardH: 50 }], ['x', { cardW: 138, cardH: 50 }]])
@@ -107,6 +133,9 @@ describe('assignLanes', () => {
   })
 
   it('alternates left (negative) then right (positive) by branch order when side is unset', () => {
+    // A model from buildModel() always carries a side, since a fork lives in one
+    // of the two per-side arrays; this pins geometry's own fallback for a branch
+    // that reaches it without one.
     const model = fakeModel(
       [{ id: 't1', rootTaskId: 'a' }],
       {
@@ -132,7 +161,7 @@ describe('assignLanes', () => {
   })
 
   it('reuses a lane for two branches whose rows never overlap', () => {
-    // a forks x1 (a single-task branch, occupying only row 1); b (further up
+    // a forks x1 (a single-task branch, occupying only row 1); c (further up
     // the trunk) forks x2 (also a single-task branch, at row 3) — x1 and x2
     // never coexist in the same row, so they should share lane -1.
     const model = fakeModel(
@@ -170,18 +199,19 @@ describe('assignLanes', () => {
 describe('assignLanes — non-crossing ordering', () => {
   // The Wide tree: trunk alpha->bravo->charlie->delta; charlie forks left=one,
   // right=two; delta forks left=apple, right=banana; two continues up to wonder.
-  // Two's line now spans rows 2-3 and overlaps banana's row 3. The branch that
-  // attaches HIGHER (banana, off delta/row3) must sit INNER; the lower-attaching
-  // two (off charlie/row2) is pushed outer, so delta's connector to banana no
-  // longer crosses two's lane.
+  // Every fork rises from its holder, so charlie's children sit at row 3 and
+  // delta's at row 4. Two's line spans rows 3-4 and overlaps banana's row 4. The
+  // branch that attaches HIGHER (banana, at row 4 off delta) must sit INNER; the
+  // lower-attaching two (row 3, off charlie) is pushed outer, so delta's
+  // connector to banana no longer crosses two's lane.
   function wide() {
     return fakeModel(
       [{ id: 't1', rootTaskId: 'alpha' }],
       {
         alpha: { next: 'bravo' },
         bravo: { next: 'charlie' },
-        charlie: { next: 'delta', branches: [{ child: 'one', side: 'left', at: 'below' }, { child: 'two', side: 'right', at: 'below' }] },
-        delta: { branches: [{ child: 'apple', side: 'left', at: 'below' }, { child: 'banana', side: 'right', at: 'below' }] },
+        charlie: { next: 'delta', branches: [{ child: 'one', side: 'left' }, { child: 'two', side: 'right' }] },
+        delta: { branches: [{ child: 'apple', side: 'left' }, { child: 'banana', side: 'right' }] },
         one: {}, two: { next: 'wonder' }, wonder: {}, apple: {}, banana: {},
       },
     )
@@ -192,7 +222,8 @@ describe('assignLanes — non-crossing ordering', () => {
     const row = assignRows(model)
     const { lane, lineOfTask } = assignLanes(model, row)
     const l = (id) => lane.get(lineOfTask.get(id))
-    // right side: banana (attaches at delta/row3) inner, two (charlie/row2) outer
+    // right side: banana (attaches at row 4, off delta) inner, two (row 3, off
+    // charlie) outer
     expect(l('banana')).toBeGreaterThan(0)
     expect(l('two')).toBeGreaterThan(0)
     expect(l('banana')).toBeLessThan(l('two'))
@@ -205,14 +236,14 @@ describe('assignLanes — non-crossing ordering', () => {
 
   it('reserves a band for a nested subtree so an inner sub-branch cannot collide', () => {
     // b (right branch of the trunk) has its own right sub-branch s; b's line
-    // spans rows 2-4 so it overlaps a sibling c at row 3. b's band must be wide
+    // spans rows 1-3 so it overlaps a sibling c at row 2. b's band must be wide
     // enough for s, and c must sit outside the whole band.
     const model = fakeModel(
       [{ id: 't1', rootTaskId: 'a' }],
       {
-        a: { next: 'a2', branches: [{ child: 'b', side: 'right', at: 'above' }] },
-        a2: { branches: [{ child: 'c', side: 'right', at: 'above' }] },
-        b: { next: 'b2', branches: [{ child: 's', side: 'right', at: 'above' }] },
+        a: { next: 'a2', branches: [{ child: 'b', side: 'right' }] },
+        a2: { branches: [{ child: 'c', side: 'right' }] },
+        b: { next: 'b2', branches: [{ child: 's', side: 'right' }] },
         b2: { next: 'b3' }, b3: {}, s: {}, c: {},
       },
     )

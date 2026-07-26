@@ -55,7 +55,7 @@ export async function measureDomain(model) {
   const container = offscreenContainer()
 
   const cardEls = new Map()
-  for (const [id, task] of model.tasks) {
+  for (const [id, task] of model.nodes) {
     const card = buildCard(task, { isCursor: task.here })
     container.appendChild(card)
     cardEls.set(id, card)

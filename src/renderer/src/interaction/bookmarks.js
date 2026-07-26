@@ -11,6 +11,8 @@
 // unit-tested; app.js reads the live layout and drives the viewport with them.
 // See docs/interaction_model.md for the camera-anchor resolution.
 
+import { branchChildrenOf } from '../../../shared/model/validate.js'
+
 // The id of the station nearest a world-space point (the viewport centre), by
 // squared distance to each card's centre. Null if there are no stations.
 export function centeredStationId(stations, cx, cy) {
@@ -32,7 +34,7 @@ export function anchorChain(record, id) {
   const chain = []
   const seen = new Set()
   let cur = id
-  while (cur && record.tasks[cur] && !seen.has(cur)) {
+  while (cur && record.nodes[cur] && !seen.has(cur)) {
     seen.add(cur)
     chain.push(cur)
     cur = predecessorId(record, cur)
@@ -41,9 +43,9 @@ export function anchorChain(record, id) {
 }
 
 function predecessorId(record, id) {
-  for (const [pid, t] of Object.entries(record.tasks)) {
+  for (const [pid, t] of Object.entries(record.nodes)) {
     if (t.next === id) return pid
-    if ((t.branches || []).some((b) => b.child === id)) return pid
+    if (branchChildrenOf(t).some((b) => b.child === id)) return pid
   }
   return null
 }

@@ -13,28 +13,17 @@
 // (Reingold-Tilford / Walker / Buchheim / van der Ploeg) and this variant are
 // written up in docs/tree-layout.md.
 
-// Row 0 is every tree's root; a main-line successor (.next) is +1. A branch
-// child starts at its parent's row +1 for at:'above' (level with the
-// parent's own .next — a fork's branches and its main-line continuation
-// begin at the same height) or at the parent's own row for at:'below'
-// (level with the parent itself, one gap lower).
-// A tree root sits at the base (row 0) with no gap below it, so a fork "below" a
-// root has nowhere to go; it is treated as a fork above instead — the child
-// rises to the parent's row +1, matching the below-on-root fallback in
-// layout.js. Without this the child would be pinned at the root's own row while
-// the connector aimed a row higher, producing a dangling track or, when the
-// root has no successor, NaN coordinates.
-function rootSet(model) {
-  return new Set(model.trees.map((t) => t.rootTaskId))
-}
-
-function childRow(id, r, b, roots) {
-  if (b.at !== 'below') return r + 1 // above: level with the parent's own .next
-  return roots.has(id) ? r + 1 : r // below-on-root rises; below elsewhere is level with the parent
-}
-
+// Row 0 is every tree's root; a main-line successor (.next) is +1, and so is a
+// branch child, because a branch array names the edge rising from the node
+// holding it. A fork's branches and its main-line continuation therefore begin at
+// the same height, which is what makes the junction sit in the gap between the
+// forking node and both of them.
+//
+// Schema 2 also allowed a fork to attach at the gap BELOW its node, which had to
+// be special-cased here and in layout.js, and had no answer at all on a root.
+// Schema 3 cannot say it: the migration moves such a fork onto the node beneath,
+// where it means the same thing, so the special cases are gone.
 export function assignRows(model) {
-  const roots = rootSet(model)
   const row = new Map()
   for (const tree of model.trees) {
     const stack = [[tree.rootTaskId, 0]]
@@ -42,29 +31,22 @@ export function assignRows(model) {
       const [id, r] = stack.pop()
       if (row.has(id)) continue
       row.set(id, r)
-      const task = model.getTask(id)
+      const task = model.getNode(id)
       if (!task) continue
       if (task.next) stack.push([task.next, r + 1])
-      for (const b of task.branches) {
-        stack.push([b.child, childRow(id, r, b, roots)])
-      }
+      for (const b of task.branches) stack.push([b.child, r + 1])
     }
   }
   return row
 }
 
 // The lower row index of every gap (r, r+1) that carries at least one fork
-// junction — used to widen that gap's pitch so the diamond has room. A
-// below-on-root fork uses the gap above the root (r), like an above fork.
+// junction — used to widen that gap's pitch so the diamond has room. Every fork
+// leaves the gap above the node that holds it, so the gap is that node's own row.
 export function junctionGaps(model, row) {
-  const roots = rootSet(model)
   const gaps = new Set()
-  for (const [id, task] of model.tasks) {
-    for (const b of task.branches) {
-      const r = row.get(id)
-      const below = b.at === 'below' && !roots.has(id)
-      gaps.add(below ? r - 1 : r)
-    }
+  for (const [id, task] of model.nodes) {
+    if (task.branches.length) gaps.add(row.get(id))
   }
   return gaps
 }
@@ -117,7 +99,7 @@ export function assignLanes(model, row) {
   const lane = new Map() // lineId -> absolute integer lane
   const childrenOf = new Map() // lineId -> [{ child, side, attach }]
   const relLane = new Map() // lineId -> lane relative to its parent spine
-  const maxLanes = model.tasks.size + 2 // a generous, always-sufficient bound
+  const maxLanes = model.nodes.size + 2 // a generous, always-sufficient bound
 
   function walkLine(startId) {
     const ids = []
@@ -125,7 +107,7 @@ export function assignLanes(model, row) {
     while (id) {
       ids.push(id)
       lineOfTask.set(id, startId)
-      const task = model.getTask(id)
+      const task = model.getNode(id)
       id = task ? task.next : null
     }
     const rows = ids.map((i) => row.get(i))
@@ -140,7 +122,7 @@ export function assignLanes(model, row) {
     const ids = walkLine(startId)
     const kids = []
     for (const id of ids) {
-      model.getTask(id).branches.forEach((b, idx) => {
+      model.getNode(id).branches.forEach((b, idx) => {
         const side = b.side === 'left' || b.side === 'right' ? b.side : (idx % 2 === 0 ? 'left' : 'right')
         kids.push({ child: b.child, side, attach: row.get(b.child) })
         collectChildren(b.child)

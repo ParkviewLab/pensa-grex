@@ -11,8 +11,8 @@
 
 import { runOp as runOpCore, readRecord as readRecordCore } from '../../../shared/domainOps.js'
 import { mintDomainId } from '../../../shared/model/ids.js'
-import homelabRaw from '../../../shared/model/fixtures/homelab.forest.json5?raw'
-import workRaw from '../../../shared/model/fixtures/work.forest.json5?raw'
+import homelabRaw from '../../../shared/model/fixtures/homelab.record.json?raw'
+import workRaw from '../../../shared/model/fixtures/work.record.json?raw'
 
 function wrapRealBridge(bridge) {
   return {
@@ -81,7 +81,7 @@ function makeFallback() {
       if (files.has(path)) return { error: 'exists' }
       const id = mintDomainId()
       ids.set(path, id)
-      files.set(path, JSON.stringify({ schema: 2, id, domain: name, rootOrder: [], tasks: {} }, null, 2) + '\n')
+      files.set(path, JSON.stringify({ schema: 2, id, domain: name, planOrder: [], tasks: {} }, null, 2) + '\n')
       return { id, name, path }
     },
     deleteDomain:      async (dir) => {
