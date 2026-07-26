@@ -22,6 +22,7 @@ import DOMPurify from 'dompurify'
 import 'katex/dist/katex.min.css'
 import { wrapSelection, prefixLines, insertLink } from './mdCommands.js'
 import { reconcileDecision } from './reconcile.js'
+import { noteFileName } from '../../../shared/model/notes.js'
 
 marked.use(markedKatex({ throwOnError: false }))
 
@@ -367,7 +368,7 @@ export function createNoteEditor({ readNote, writeNote, openExternal, onFirstWri
   async function open(task, dir) {
     taskId = task.id
     domainPath = dir
-    file = task.note || task.id + '.md'
+    file = task.note || noteFileName(task.id, task.title)
     recorded = !!task.note
     conflictWarned = false
     title.textContent = task.title

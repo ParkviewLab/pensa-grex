@@ -1,31 +1,44 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 
-// The persistence store: settings plus the on-disk forest library. A library
-// is a root directory holding one sub-directory per domain; each domain
-// directory holds a forest.json5 and its per-task *.md note files. The renderer
-// never touches the filesystem — it calls these through the preload bridge, and
-// every path it supplies is re-derived and bounds-checked here (see pathsafe.js)
-// so a malformed domain path or note filename cannot read or write outside its
-// domain directory.
+// The persistence store: settings plus the on-disk domain library. A library is a
+// root directory holding one directory per domain, named for the app, a slug of
+// the domain's title, and the domain's id (`pensagrex_domain_work_d_mrtwgppt01`);
+// each domain directory holds a domain.json, a bookmarks.json, and a notes/
+// directory of per-node *.md files. The renderer never touches the filesystem —
+// it calls these through the preload bridge, and every path it supplies is
+// re-derived and bounds-checked here (see pathsafe.js) so a malformed domain path
+// or note filename cannot read or write outside its domain directory.
 //
-// Forest text crosses IPC as raw JSON5 text, unparsed: the renderer owns the
-// schema (parse with json5, validate with model/validate.js), so this layer
-// stays deliberately ignorant of forest structure and needs no json5 itself.
-// Writes are atomic (write a .tmp sibling, then rename) so an interrupted save
+// The directory's name is a label and the record's id is the identity, so a
+// mismatch between them is repaired by regenerating the label, never by trusting
+// the path.
+//
+// A domain's text crosses IPC unparsed: the renderer owns the schema (validate
+// with model/validate.js), so this layer stays almost ignorant of structure. The
+// one exception is listDomains, which reads each file for its display title,
+// because the title no longer lives in the directory name.
+//
+// Writes are atomic (write a .tmp sibling, fsync, rename) so an interrupted save
 // never truncates a good file.
 
 import { app, shell } from 'electron'
-import { join, dirname, resolve } from 'node:path'
+import { join, dirname, resolve, basename } from 'node:path'
 import {
   existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync,
   openSync, writeSync, fsyncSync, closeSync,
 } from 'node:fs'
-import { isValidDomainName, isValidNoteFile, resolveUnder } from './pathsafe.js'
+import {
+  isValidDomainTitle, isValidNoteFile, resolveUnder, domainDirName, domainDirId,
+} from './pathsafe.js'
+import { mintDomainId } from '../shared/model/ids.js'
 
-const FOREST_FILE = 'forest.json5'
+const DOMAIN_FILE = 'domain.json'
+// Notes moved out of the domain directory's top level and into their own
+// subdirectory, so a domain directory has three entries whatever its size.
+const NOTES_DIR = 'notes'
 // Bookmarks are a saved, named view (northstar axiom 9): shared WITH the domain
-// data, so they live in the domain directory alongside forest.json5 (the live,
+// data, so they live in the domain directory alongside domain.json (the live,
 // client-local collapse view stays in the userData sidecar, kept out of here).
 const BOOKMARKS_FILE = 'bookmarks.json'
 
@@ -87,7 +100,7 @@ function atomicWrite(absPath, text) {
 // The default library lives under the app's userData directory; a user can
 // repoint it to any folder via setLibraryRoot (chooseLibraryRoot in the UI).
 export function getLibraryRoot() {
-  return readSettingsSafe().libraryRoot || join(app.getPath('userData'), 'forests')
+  return readSettingsSafe().libraryRoot || join(app.getPath('userData'), 'domains')
 }
 
 export function setLibraryRoot(root) {
@@ -104,7 +117,7 @@ export function setLibraryRoot(root) {
 
 export function getSettings() {
   const s = readSettingsSafe()
-  return { libraryRoot: s.libraryRoot || join(app.getPath('userData'), 'forests'), lastDomain: s.lastDomain || null }
+  return { libraryRoot: s.libraryRoot || join(app.getPath('userData'), 'domains'), lastDomain: s.lastDomain || null }
 }
 
 export function setLastDomain(name) {
@@ -187,7 +200,7 @@ function ensureLibraryRoot() {
 
 // A domain directory must be an immediate child of the current library root.
 // Throws otherwise — the renderer only ever passes back paths it got from
-// listDomains/createForest, so anything else is a bug or an attack.
+// listDomains/createDomain, so anything else is a bug or an attack.
 function requireDomainDir(dirPath) {
   const root = resolve(getLibraryRoot())
   const abs = resolve(dirPath)
@@ -195,6 +208,25 @@ function requireDomainDir(dirPath) {
   return abs
 }
 
+// A domain's display title comes from its record, since the directory holds only
+// a slug of it. A file that will not parse still lists (as its slug), because a
+// domain the user can see and try to open is better than one that has silently
+// vanished from the switcher.
+function titleOf(dir, id) {
+  try {
+    const rec = JSON.parse(readFileSync(join(dir, DOMAIN_FILE), 'utf-8'))
+    const t = rec && (rec.title || rec.domain)
+    if (typeof t === 'string' && t) return t
+  } catch {
+    // fall through to the label
+  }
+  const label = basename(dir).replace(/^pensagrex_domain_/, '').replace('_' + id, '')
+  return label || id
+}
+
+// Every directory in the library root that this app owns and that holds a record.
+// A directory whose name does not carry a domain id is not ours, so a library root
+// may hold unrelated folders safely.
 export function listDomains() {
   const root = ensureLibraryRoot()
   let entries
@@ -204,34 +236,43 @@ export function listDomains() {
     return []
   }
   return entries
-    .filter((e) => e.isDirectory() && existsSync(join(root, e.name, FOREST_FILE)))
-    .map((e) => ({ name: e.name, path: join(root, e.name) }))
+    .map((e) => ({ e, id: e.isDirectory() ? domainDirId(e.name) : null }))
+    .filter(({ e, id }) => id && existsSync(join(root, e.name, DOMAIN_FILE)))
+    .map(({ e, id }) => ({ id, name: titleOf(join(root, e.name), id), path: join(root, e.name) }))
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
-export function createForest(name) {
-  if (!isValidDomainName(name)) return { error: 'invalid domain name' }
+// A new domain: a minted id, a directory labelled with a slug of the title and
+// that id, an empty record, and the notes directory it will fill. The title stays
+// unique across the library, because it is how a person (and the MCP surface)
+// names a domain, and two domains answering to one name is worse than a refusal.
+export function createDomain(title) {
+  if (!isValidDomainTitle(title)) return { error: 'invalid domain title' }
   const root = ensureLibraryRoot()
-  const dir = resolveUnder(root, name)
-  if (!dir) return { error: 'invalid domain name' }
-  if (existsSync(dir)) return { error: `a domain named "${name}" already exists` }
-  mkdirSync(dir, { recursive: true })
-  const skeleton = `{\n  schema: 2,\n  domain: ${JSON.stringify(name)},\n  rootOrder: [],\n  tasks: {},\n}\n`
-  atomicWrite(join(dir, FOREST_FILE), skeleton)
-  return { name, path: dir }
+  if (listDomains().some((d) => d.name === title)) {
+    return { error: `a domain named "${title}" already exists` }
+  }
+  const id = mintDomainId()
+  const dir = resolveUnder(root, domainDirName(title, id))
+  if (!dir) return { error: 'invalid domain title' }
+  if (existsSync(dir)) return { error: 'a domain directory of that name already exists' }
+  mkdirSync(join(dir, NOTES_DIR), { recursive: true })
+  const skeleton = { schema: 2, id, domain: title, rootOrder: [], tasks: {} }
+  atomicWrite(join(dir, DOMAIN_FILE), JSON.stringify(skeleton, null, 2) + '\n')
+  return { id, name: title, path: dir }
 }
 
-// Move a whole domain directory (its forest.json5 and all note files) to the OS
+// Move a whole domain directory (its record, bookmarks, and notes) to the OS
 // Trash, so a deletion is recoverable. Path-bounded to an immediate child of the
-// library root, and it must actually be a domain (hold a forest.json5).
-export async function deleteForest(dirPath) {
+// library root, and it must actually be a domain (hold a domain.json).
+export async function deleteDomain(dirPath) {
   let dir
   try {
     dir = requireDomainDir(dirPath)
   } catch (e) {
     return { error: e.message }
   }
-  if (!existsSync(join(dir, FOREST_FILE))) return { error: 'not a domain (no forest.json5)' }
+  if (!existsSync(join(dir, DOMAIN_FILE))) return { error: 'not a domain (no domain.json)' }
   try {
     await shell.trashItem(dir)
     return { ok: true }
@@ -240,7 +281,7 @@ export async function deleteForest(dirPath) {
   }
 }
 
-export function loadForest(dirPath) {
+export function loadDomainFile(dirPath) {
   let dir
   try {
     dir = requireDomainDir(dirPath)
@@ -248,14 +289,14 @@ export function loadForest(dirPath) {
     return { error: e.message }
   }
   try {
-    return { text: readFileSync(join(dir, FOREST_FILE), 'utf-8') }
+    return { text: readFileSync(join(dir, DOMAIN_FILE), 'utf-8') }
   } catch (e) {
     return { error: e.message }
   }
 }
 
-export function saveForest(dirPath, text) {
-  if (typeof text !== 'string') return { error: 'forest text must be a string' }
+export function saveDomainFile(dirPath, text) {
+  if (typeof text !== 'string') return { error: 'domain text must be a string' }
   let dir
   try {
     dir = requireDomainDir(dirPath)
@@ -263,17 +304,20 @@ export function saveForest(dirPath, text) {
     return { error: e.message }
   }
   try {
-    atomicWrite(join(dir, FOREST_FILE), text)
+    atomicWrite(join(dir, DOMAIN_FILE), text)
     return { ok: true }
   } catch (e) {
     return { error: e.message }
   }
 }
 
+// Notes live in the domain's notes/ subdirectory. The filename is still a bare
+// name with no separators (see isValidNoteFile and shared/model/notes.js), so the
+// subdirectory is added here and cannot be escaped from the renderer's side.
 function requireNotePath(dirPath, file) {
   const dir = requireDomainDir(dirPath)
   if (!isValidNoteFile(file)) throw new Error('invalid note filename')
-  const abs = resolveUnder(dir, file)
+  const abs = resolveUnder(dir, NOTES_DIR, file)
   if (!abs) throw new Error('invalid note filename')
   return abs
 }
@@ -302,6 +346,9 @@ export function writeNote(dirPath, file, text) {
     return { error: e.message }
   }
   try {
+    // createDomain makes notes/, but a domain directory that arrived some other
+    // way (a hand copy, a restore from the Trash) may not have it yet.
+    mkdirSync(dirname(abs), { recursive: true })
     atomicWrite(abs, text)
     return { ok: true }
   } catch (e) {
@@ -325,7 +372,7 @@ export function deleteNote(dirPath, file) {
 }
 
 // Write an exported markdown file to a user-chosen absolute path. Unlike
-// saveForest and writeNote, this deliberately writes OUTSIDE the library root:
+// saveDomainFile and writeNote, this deliberately writes OUTSIDE the library root:
 // export is a one-way "save a copy anywhere", whose trust boundary is the user's
 // explicit choice in the native save dialog (the pensagrex:export-markdown handler in
 // index.js), not the library bound. Still atomic, so an interrupted write never
@@ -342,7 +389,7 @@ export function writeExport(absPath, text) {
 }
 
 // The domain's saved bookmarks, as raw text — the renderer owns the JSON shape,
-// so this layer stays schema-agnostic (as with forest text). A missing file
+// so this layer stays schema-agnostic (as with the domain text). A missing file
 // reads as empty; the renderer treats empty as "no bookmarks yet". Bounded to the
 // domain directory, atomic on write.
 export function getBookmarks(dirPath) {

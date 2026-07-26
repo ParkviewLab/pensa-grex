@@ -17,6 +17,9 @@
 //   saveText(dir, text)         -> { ok }    | { error }
 //   writeNote(dir, file, text)  -> { ok }    | { error }
 
+// Reads with JSON5 and writes plain JSON: the tolerant parser still accepts a file
+// an earlier version wrote (unquoted keys, a trailing comma) and the sample
+// fixtures, while every write from here on is plain JSON, per northstar axiom 7.
 import JSON5 from 'json5'
 import { validateRecord } from './model/validate.js'
 import { migrateRecord } from './model/migrate.js'
@@ -51,14 +54,14 @@ export function readRecord(storage, dir) {
   try {
     record = JSON5.parse(loaded.text)
   } catch (e) {
-    return { error: 'domain file is not valid JSON5: ' + e.message }
+    return { error: 'domain file will not parse: ' + e.message }
   }
   const migrated = migrateRecord(record)
   record = migrated.record
   const v = validateRecord(record)
   if (!v.ok) return { error: 'record failed validation: ' + v.errors.join('; ') }
   if (migrated.changed) {
-    const w = storage.saveText(dir, JSON5.stringify(record, null, 2))
+    const w = storage.saveText(dir, JSON.stringify(record, null, 2) + '\n')
     if (w.error) return { error: w.error }
   }
   return { record }
@@ -75,7 +78,7 @@ export function runOp(storage, dir, op, args) {
   try {
     record = JSON5.parse(loaded.text)
   } catch (e) {
-    return { error: 'domain file is not valid JSON5: ' + e.message }
+    return { error: 'domain file will not parse: ' + e.message }
   }
   record = migrateRecord(record).record
 
@@ -105,7 +108,7 @@ export function runOp(storage, dir, op, args) {
     const w = storage.writeNote(dir, n.file, n.content)
     if (w && w.error) return { error: w.error }
   }
-  const saved = storage.saveText(dir, JSON5.stringify(next, null, 2))
+  const saved = storage.saveText(dir, JSON.stringify(next, null, 2) + '\n')
   if (saved.error) return { error: saved.error }
   return { record: next }
 }

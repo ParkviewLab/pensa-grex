@@ -9,14 +9,14 @@
 // atomically, each operation completes without yielding the event loop, so
 // concurrent callers serialize with no lock.
 
-import { loadForest, saveForest, writeNote } from './store.js'
+import { loadDomainFile, saveDomainFile, writeNote } from './store.js'
 import { runOp as runOpCore, readRecord as readRecordCore } from '../shared/domainOps.js'
 
 // The on-disk store, adapted to the synchronous storage-callback shape the core
 // expects. Every path is still re-derived and bounds-checked inside store.js.
 const storage = {
-  loadText: (dir) => loadForest(dir),
-  saveText: (dir, text) => saveForest(dir, text),
+  loadText: (dir) => loadDomainFile(dir),
+  saveText: (dir, text) => saveDomainFile(dir, text),
   writeNote: (dir, file, content) => writeNote(dir, file, content),
 }
 

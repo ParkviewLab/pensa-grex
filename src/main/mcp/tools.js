@@ -13,6 +13,7 @@
 
 import { z } from 'zod'
 import { serializeProject } from '../../shared/export/markdown.js'
+import { noteFileName } from '../../shared/model/notes.js'
 
 const STATUSES = ['todo', 'in-progress', 'completed', 'cancelled']
 
@@ -258,7 +259,7 @@ export function registerTools(server, deps, scope) {
     description: 'Create a new empty domain (forest).',
     inputSchema: { name: z.string() },
   }, guard(async (a) => {
-    const res = store.createForest(a.name)
+    const res = store.createDomain(a.name)
     if (res.error) return fail(res.error)
     notify('pensagrex:domains-changed', {})
     return json(res)
@@ -316,7 +317,7 @@ export function registerTools(server, deps, scope) {
   }, guard(async (a) => {
     const dir = dirOf(a); const r = record(dir); const t = r.tasks[a.node_id]
     if (!t) throw new Error(`no node "${a.node_id}" in this domain`)
-    const file = t.note || a.node_id + '.md'
+    const file = t.note || noteFileName(a.node_id, t.title)
     const w = store.writeNote(dir, file, a.content)
     if (w && w.error) return fail(w.error)
     if (!t.note) return runWrite(taskService, dir, 'setNote', [a.node_id, file], a.node_id)
@@ -373,7 +374,7 @@ export function registerTools(server, deps, scope) {
   }, guard(async (a) => {
     let dir
     try { dir = resolveDir(store, a.name_or_path) } catch (e) { return fail(e.message) }
-    const res = await store.deleteForest(dir)
+    const res = await store.deleteDomain(dir)
     if (res.error) return fail(res.error)
     notify('pensagrex:domains-changed', {})
     notify('pensagrex:domain-changed', { dir }) // in case the deleted domain is the open one

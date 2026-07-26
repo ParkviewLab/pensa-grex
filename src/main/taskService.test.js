@@ -30,14 +30,16 @@ afterEach(() => {
   rmSync(h.userData, { recursive: true, force: true })
 })
 
-// The forest file as it currently sits on disk, parsed.
+// The domain file as it currently sits on disk, parsed. Read with the tolerant
+// parser, because a test may plant a file an older version would have written;
+// what this version WRITES is checked to be plain JSON separately, below.
 function onDisk(dir) {
-  return JSON5.parse(store.loadForest(dir).text)
+  return JSON5.parse(store.loadDomainFile(dir).text)
 }
 
 // A domain with one project tree; returns [dir, rootId].
 function domainWithTree(name = 'HomeLab', treeName = 'Overview') {
-  const { path } = store.createForest(name)
+  const { path } = store.createDomain(name)
   const res = taskService.runOp(path, 'addTree', [treeName])
   expect(res.error).toBeUndefined()
   return [path, Object.keys(res.record.tasks)[0]]
@@ -45,15 +47,26 @@ function domainWithTree(name = 'HomeLab', treeName = 'Overview') {
 
 describe('readRecord', () => {
   it('reads a fresh domain as an empty schema-2 record', () => {
-    const { path } = store.createForest('HomeLab')
+    const { path } = store.createDomain('HomeLab')
     const res = taskService.readRecord(path)
     expect(res.error).toBeUndefined()
     expect(res.record.schema).toBe(2)
     expect(res.record.tasks).toEqual({})
   })
 
+  it('persists every write as plain JSON, parseable without the tolerant reader', () => {
+    // Axiom 7 now names plain JSON, so the strict parser is the test: a file with
+    // unquoted keys or a trailing comma would throw here.
+    const [dir, rootId] = domainWithTree()
+    taskService.runOp(dir, 'addTaskAbove', [rootId, 'First'])
+    const text = store.loadDomainFile(dir).text
+    expect(() => JSON.parse(text)).not.toThrow()
+    expect(text.endsWith('\n')).toBe(true)
+    expect(Object.values(JSON.parse(text).tasks).some((t) => t.title === 'First')).toBe(true)
+  })
+
   it('migrates a schema-1 record and persists the upgrade once', () => {
-    const { path } = store.createForest('HomeLab')
+    const { path } = store.createDomain('HomeLab')
     const v1 = {
       schema: 1, domain: 'HomeLab',
       trees: [{ id: 't1', name: 'Overview', rootTaskId: 'a' }],
@@ -61,7 +74,7 @@ describe('readRecord', () => {
         a: { id: 'a', title: 'A', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: null, branches: [] },
       },
     }
-    store.saveForest(path, JSON5.stringify(v1))
+    store.saveDomainFile(path, JSON5.stringify(v1))
 
     const res = taskService.readRecord(path)
     expect(res.error).toBeUndefined()
@@ -77,8 +90,8 @@ describe('readRecord', () => {
   })
 
   it('reports a JSON5 parse error rather than throwing', () => {
-    const { path } = store.createForest('HomeLab')
-    store.saveForest(path, '{ this is not valid json5 ')
+    const { path } = store.createDomain('HomeLab')
+    store.saveDomainFile(path, '{ this is not valid json5 ')
     const res = taskService.readRecord(path)
     expect(res.record).toBeUndefined()
     expect(res.error).toMatch(/JSON5/)
@@ -93,7 +106,7 @@ describe('readRecord', () => {
 
 describe('runOp', () => {
   it('applies a mutation, persists it, and returns the new record', () => {
-    const { path } = store.createForest('HomeLab')
+    const { path } = store.createDomain('HomeLab')
     const res = taskService.runOp(path, 'addTree', ['Overview'])
     expect(res.error).toBeUndefined()
 
@@ -125,21 +138,21 @@ describe('runOp', () => {
 
   it('refuses an op that breaks an invariant and writes nothing', () => {
     const [dir, rootId] = domainWithTree()
-    const before = store.loadForest(dir).text
+    const before = store.loadDomainFile(dir).text
     // A project node has no status: setStatus throws, the op returns the error.
     const res = taskService.runOp(dir, 'setStatus', [rootId, 'completed'])
     expect(res.record).toBeUndefined()
     expect(res.error).toMatch(/project/)
-    expect(store.loadForest(dir).text).toBe(before) // file untouched
+    expect(store.loadDomainFile(dir).text).toBe(before) // file untouched
   })
 
   it('rejects an unknown op name and writes nothing', () => {
     const [dir] = domainWithTree()
-    const before = store.loadForest(dir).text
+    const before = store.loadDomainFile(dir).text
     const res = taskService.runOp(dir, 'deleteEverything', [])
     expect(res.record).toBeUndefined()
     expect(res.error).toMatch(/unknown task op/)
-    expect(store.loadForest(dir).text).toBe(before)
+    expect(store.loadDomainFile(dir).text).toBe(before)
   })
 
   it('writes the pasted note files for pasteAsTree', () => {

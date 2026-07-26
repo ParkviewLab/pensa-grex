@@ -50,7 +50,7 @@ async function connect(scope = 'destructive', notify) {
 
 describe('MCP end to end (real SDK client over loopback HTTP)', () => {
   it('initializes, lists tools, and a tool call edits the record on disk', async () => {
-    store.createForest('HomeLab')
+    store.createDomain('HomeLab')
     store.setLastDomain('HomeLab')
     await connect('destructive')
 
@@ -70,7 +70,7 @@ describe('MCP end to end (real SDK client over loopback HTTP)', () => {
   })
 
   it('honours the read-only scope (no write tools are exposed)', async () => {
-    store.createForest('HomeLab')
+    store.createDomain('HomeLab')
     store.setLastDomain('HomeLab')
     await connect('read-only')
     const names = (await client.listTools()).tools.map((t) => t.name)
@@ -80,7 +80,7 @@ describe('MCP end to end (real SDK client over loopback HTTP)', () => {
   })
 
   it('pushes domain-changed after an MCP write (the live-update wrapper)', async () => {
-    store.createForest('HomeLab')
+    store.createDomain('HomeLab')
     store.setLastDomain('HomeLab')
     const events = []
     await connect('read-write', (channel, data) => events.push([channel, data]))
@@ -89,7 +89,7 @@ describe('MCP end to end (real SDK client over loopback HTTP)', () => {
   })
 
   it('advertises the re-read instructions and the work_flagged prompt', async () => {
-    store.createForest('HomeLab')
+    store.createDomain('HomeLab')
     store.setLastDomain('HomeLab')
     await connect('read-only') // instructions + prompt are not scope-gated
     expect(client.getInstructions()).toMatch(/re-read/i)
