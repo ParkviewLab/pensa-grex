@@ -646,7 +646,7 @@ async function deleteTaskFlow(taskId) {
 }
 
 async function addTreeFlow() {
-  const name = await promptText({ title: 'New tree', label: 'Tree name', value: '' })
+  const name = await promptText({ title: 'New plan', label: 'Plan name', value: '' })
   if (name === null) return
   applyOp('addTree', name)
 }
@@ -729,9 +729,9 @@ function openTaskMenu(x, y, taskId) {
 }
 
 function openCanvasMenu(x, y) {
-  const items = [{ label: 'New tree…', onClick: () => addTreeFlow() }]
+  const items = [{ label: 'New plan…', onClick: () => addTreeFlow() }]
   // Paste a previously copied project as a new tree in this domain.
-  if (clipboard) items.push({ label: 'Paste as new tree', onClick: () => pasteTreeFlow() })
+  if (clipboard) items.push({ label: 'Paste as new plan', onClick: () => pasteTreeFlow() })
   items.push({ separator: true })
   items.push({ label: 'Add bookmark…', onClick: () => addBookmarkFlow() })
   if (bookmarks.length) {

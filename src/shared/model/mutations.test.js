@@ -1053,6 +1053,27 @@ describe('detachToTree', () => {
     expect(() => detachToTree(withSub(), 's1')).toThrow() // s1 is a task
     expect(() => detachToTree(withSub(), 'r')).toThrow() // r is already a root
   })
+
+  // Termini: a scope travels as a pair, so a sub-project with work above it takes its own
+  // close and leaves the rest of the trunk joined across the gap. Getting this wrong is not
+  // subtle: the old trunk keeps the detached scope's close and loses its own, and neither
+  // side is a legal plan afterwards. withSub()'s close happens to be at the top of its
+  // trunk, so only a scope with something above it puts the question.
+  it('takes its own close with it and rejoins the trunk it left', () => {
+    const wrapped = wrapRun(base(), 'm1', 'm1', 'Sub')
+    const subId = ids(wrapped).find((id) => wrapped.nodes[id].title === 'Sub')
+    const closeId = pairScopes(wrapped, trunksOf(wrapped)).pairs.get(subId)
+    valid(wrapped)
+    expect(wrapped.nodes.r.next).toBe(subId)
+    expect(wrapped.nodes[closeId].next).toBe('m2')
+
+    const out = detachToTree(wrapped, subId)
+    expect(out.planOrder).toContain(subId)
+    expect(out.nodes.r.next).toBe('m2') // the old trunk is joined across the gap
+    expect(out.nodes[closeId].next).toBeNull() // the detached plan ends at its own close
+    expect(out.nodes[subId].next).toBe('m1') // and keeps what was inside it
+    valid(out)
+  })
 })
 
 describe('reorderRoot', () => {
