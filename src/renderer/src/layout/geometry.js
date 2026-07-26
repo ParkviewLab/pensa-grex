@@ -125,6 +125,157 @@ export function buildRowGrid(model, row, sizes, { rowGap, junctionExtra, baseY }
   return { cardTopY, tasksByRow, tallestByRow, maxRow }
 }
 
+// ---- the pixel solve ----
+//
+// Every branch in the model, as the vertical solve needs to see one: the node it hangs from,
+// its first node, the top of its own trunk, and the node below the edge its return joins.
+// validate.js has the same walk over a record; a model holds its nodes in a Map and flattens
+// the two side arrays into one `branches` list, so the walk is spelled again here rather than
+// shared through a shape neither side has.
+export function branchesOfModel(model) {
+  const list = []
+  for (const [hostId, host] of model.nodes) {
+    for (const b of host.branches) {
+      const trunk = []
+      const seen = new Set()
+      let id = b.child
+      while (id && model.getNode(id) && !seen.has(id)) {
+        seen.add(id)
+        trunk.push(id)
+        id = model.getNode(id).next
+      }
+      const tipId = trunk.length ? trunk[trunk.length - 1] : null
+      list.push({ hostId, footId: b.child, side: b.side, trunk, tipId, mergePoint: tipId ? model.getNode(tipId).mergePoint || null : null })
+    }
+  }
+  return list
+}
+
+// How much clear air an edge needs between the lower node's circle and the upper node's card
+// bottom. A plain edge needs the minimum and nothing more; an edge carrying a junction needs
+// enough that the twelve-degree line does not disappear behind the card at the far end of the
+// gap, because a lateral climbs `cardW/2 * tan12` while it crosses a card's own half-width and
+// the cards are painted over the tracks. An edge that both hosts a fork and receives a merge
+// needs its two diamonds kept apart as well: no constraint in the solve relates them, since
+// one is bounded through the branch and the other is not.
+function airOnEdge(m, { hostsFork, receivesMerge, upperW, lowerW }) {
+  let air = m.minAir
+  // A fork's line leaves at the lower node's x and climbs, so the card it could hide behind is
+  // the upper one, directly above the junction it left.
+  if (hostsFork) air = Math.max(air, m.departClear + (upperW / 2) * m.tan12 + m.junctionMargin)
+  // A return arrives below the upper node's card and descends as it goes outward, so the card it
+  // could hide behind is the lower one.
+  if (receivesMerge) air = Math.max(air, m.arriveClear + (lowerW / 2) * m.tan12 + m.junctionMargin)
+  if (hostsFork && receivesMerge) air = Math.max(air, m.departClear + m.diamondGap + m.arriveClear)
+  return air
+}
+
+/**
+ * Where every card sits, in pixels, with no row grid and nothing rounded.
+ *
+ * Three constraints, each a lower bound on one node given another, so the whole thing is a
+ * longest path over the graph validateRecord already proves acyclic (a trunk's own order, a
+ * branch's foot above the node it leaves, and the node above a join edge above the branch tip
+ * returning there). Infeasibility is therefore not a failure mode: every defect is a bad
+ * drawing rather than an impossible one.
+ *
+ *   succession, A then B = A.next   u(B) >= u(A) + anchorGap + air(A,B) + cardH(B)
+ *   fork, host A, foot F            u(F) >= u(A) + anchorGap + departClear + rise + arriveClear + cardH(F)
+ *   return, tip T, merge M, P=M.next  u(P) >= u(T) + anchorGap + departClear + rise + arriveClear + cardH(P)
+ *
+ * The fork constraint is an equality in practice, which is what makes the twelve degrees exact:
+ * a branch's foot is the first node of its own line, so nothing else can push it. The return's
+ * is a genuine inequality, since P also has its trunk predecessor to clear, and the slack is
+ * the tail: the spine a branch grows above its last card before its return peels off. That the
+ * constraint's own weight is the tail's floor is what guarantees the tail never dips below
+ * departClear.
+ *
+ * `rise` is the same for every lateral, because a lateral ramps for half a lane at each end
+ * whatever its span, so height does not depend on lane assignment and the two can be computed
+ * one after the other rather than together.
+ *
+ * Returns cardTopY (screen y, growth upward so values fall as a plan rises, the base at
+ * metrics.baseY), tails keyed by a branch's foot, and the air each trunk edge was given.
+ */
+export function solveHeights(model, sizes, metrics) {
+  const m = metrics
+  const cardH = (id) => (sizes.get(id) ? sizes.get(id).cardH : 0)
+  const cardW = (id) => (sizes.get(id) ? sizes.get(id).cardW : 0)
+  const branches = branchesOfModel(model)
+
+  const hostsFork = new Set(branches.map((b) => b.hostId))
+  const receivesMerge = new Set(branches.map((b) => b.mergePoint).filter(Boolean))
+  const airBelow = new Map() // the upper node of an edge -> the air that edge was given
+
+  const above = new Map() // id -> [{ to, weight }]
+  const indegree = new Map()
+  for (const id of model.nodes.keys()) {
+    above.set(id, [])
+    indegree.set(id, 0)
+  }
+  const constrain = (lowerId, upperId, weight) => {
+    if (!above.has(lowerId) || !indegree.has(upperId)) return
+    above.get(lowerId).push({ to: upperId, weight })
+    indegree.set(upperId, indegree.get(upperId) + 1)
+  }
+
+  for (const [id, node] of model.nodes) {
+    if (node.next && model.getNode(node.next)) {
+      const air = airOnEdge(m, {
+        hostsFork: hostsFork.has(id),
+        receivesMerge: receivesMerge.has(id),
+        upperW: cardW(node.next),
+        lowerW: cardW(id),
+      })
+      airBelow.set(node.next, air)
+      constrain(id, node.next, m.anchorGap + air + cardH(node.next))
+    }
+  }
+  const lateral = m.anchorGap + m.departClear + m.rise + m.arriveClear
+  for (const b of branches) {
+    constrain(b.hostId, b.footId, lateral + cardH(b.footId))
+    if (!b.tipId || !b.mergePoint) continue
+    const merge = model.getNode(b.mergePoint)
+    if (!merge || !merge.next || !model.getNode(merge.next)) continue
+    constrain(b.tipId, merge.next, lateral + cardH(merge.next))
+  }
+
+  const u = new Map()
+  const queue = []
+  for (const id of model.nodes.keys()) {
+    if (indegree.get(id) === 0) {
+      u.set(id, 0)
+      queue.push(id)
+    }
+  }
+  for (let head = 0; head < queue.length; head++) {
+    const id = queue[head]
+    for (const edge of above.get(id)) {
+      u.set(edge.to, Math.max(u.has(edge.to) ? u.get(edge.to) : 0, u.get(id) + edge.weight))
+      indegree.set(edge.to, indegree.get(edge.to) - 1)
+      if (indegree.get(edge.to) === 0) queue.push(edge.to)
+    }
+  }
+  // A cycle leaves its members unplaced. validateRecord refuses one, so this is reached only by
+  // a record that got past it; put them at the base rather than let the drawing vanish.
+  for (const id of model.nodes.keys()) if (!u.has(id)) u.set(id, 0)
+
+  // The tail is what is left over once the return has climbed: derived rather than solved, and
+  // at least departClear by the constraint above.
+  const tails = new Map()
+  for (const b of branches) {
+    if (!b.tipId || !b.mergePoint) continue
+    const merge = model.getNode(b.mergePoint)
+    const p = merge && merge.next ? merge.next : null
+    if (!p || !u.has(p)) continue
+    tails.set(b.footId, u.get(p) - cardH(p) - m.arriveClear - m.rise - u.get(b.tipId) - m.anchorGap)
+  }
+
+  const cardTopY = new Map()
+  for (const [id, height] of u) cardTopY.set(id, m.baseY - height)
+  return { cardTopY, tails, airBelow, branches }
+}
+
 function rangesOverlap(a, b) {
   return a.min <= b.max && b.min <= a.max
 }

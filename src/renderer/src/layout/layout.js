@@ -18,10 +18,26 @@
 
 import { assignRows, buildRowGrid, assignLanes } from './geometry.js'
 
+const TAN12 = Math.tan((12 * Math.PI) / 180)
+
 const DEFAULTS = {
   laneStep: 228, // fixed card width (188) + a horizontal gap between lanes
   rowGap: 40, // vertical clearance between one row's card and the next
   junctionExtra: 30, // extra clearance in a gap that carries a junction
+
+  // ---- the pixel engine (see docs/tree-layout.md) ----
+  // A lateral line leaves its own spine climbing at exactly this angle, ramping for half a lane
+  // at each end and running flat between, so a branch one lane out is a single straight climb
+  // and every wider one climbs the same total. That is what keeps the climb independent of lane
+  // distance, and so keeps heights independent of lane assignment.
+  tan12: TAN12,
+  rampRun: 114, // half a lane
+  rise: 228 * TAN12, // 2 * rampRun * tan12, the climb of every lateral, about 48.5
+  minAir: 25, // clear air between a card's bottom edge and the circle of the node beneath it
+  departClear: 12, // how far above a circle a lateral line departs, and a tail's floor
+  arriveClear: 12, // how far below a card's bottom edge a lateral line arrives
+  junctionMargin: 4, // slack over the corner a twelve-degree line cuts across a card's width
+  diamondGap: 12, // least distance between two junction diamonds sharing one edge
   baseY: 0, // row 0's card-top y, before the final shift to positive bounds
   anchorGap: 14, // how far a dot/sputnik sits above its own row's card top
   dotRadius: 6, // half a station dot (style.css .dot{width:11px}), rounded up

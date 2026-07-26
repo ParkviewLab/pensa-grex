@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 
 import { describe, it, expect } from 'vitest'
-import { assignRows, junctionGaps, buildRowGrid, assignLanes } from './geometry.js'
+import { assignRows, junctionGaps, buildRowGrid, assignLanes, solveHeights } from './geometry.js'
 
 // A minimal stand-in for the buildModel() runtime model (model/model.js),
 // exposing only what geometry.js actually reads: .trees, .nodes and .getNode(id).
@@ -440,5 +440,153 @@ describe('assignLanes — lane order and band reservation', () => {
     // collide on the same lane — they must not.
     expect(l('c')).not.toBe(l('s'))
     expect(l('c')).not.toBe(l('b'))
+  })
+})
+
+// A metrics object standing in for the layout engine's own, with round numbers so that a
+// failure reads as arithmetic rather than as noise. tan12 and rise are the real ones, since
+// they are what the twelve degrees means.
+const TAN12 = Math.tan((12 * Math.PI) / 180)
+const METRICS = {
+  baseY: 0, anchorGap: 10, minAir: 20, departClear: 10, arriveClear: 10,
+  tan12: TAN12, rampRun: 100, rise: 200 * TAN12, junctionMargin: 4, diamondGap: 12,
+}
+const sizesOf = (map) => new Map(Object.entries(map).map(([id, [cardW, cardH]]) => [id, { cardW, cardH }]))
+
+describe('solveHeights', () => {
+  // Growth is upward and screen y falls as a plan rises, so these helpers read a solve the way
+  // the drawing does: a circle sits anchorGap above its own card's top, a card hangs below it.
+  const circle = (top) => top - METRICS.anchorGap
+  const bottom = (top, h) => top + h
+
+  it('packs a plain chain at the minimum, and only the minimum', () => {
+    const model = fakeModel([{ id: 't', rootTaskId: 'a' }], { a: { next: 'b' }, b: { next: 'c' }, c: {} })
+    const sizes = sizesOf({ a: [188, 50], b: [188, 90], c: [188, 50] })
+    const { cardTopY } = solveHeights(model, sizes, METRICS)
+
+    // The air between a card's bottom edge and the circle beneath it is exactly minAir, and each
+    // pair packs by its own two heights rather than by the tallest card on a shared row.
+    for (const [lower, upper] of [['a', 'b'], ['b', 'c']]) {
+      const air = circle(cardTopY.get(lower)) - bottom(cardTopY.get(upper), sizes.get(upper).cardH)
+      expect(air).toBeCloseTo(METRICS.minAir, 9)
+    }
+  })
+
+  it('places a branch foot so its line leaves the trunk at exactly twelve degrees', () => {
+    const model = fakeModel(
+      [{ id: 't', rootTaskId: 'a' }],
+      { a: { next: 'b', branches: [{ child: 'f', side: 'left' }] }, b: {}, f: { mergePoint: 'a' } },
+    )
+    const sizes = sizesOf({ a: [188, 50], b: [188, 50], f: [188, 50] })
+    const { cardTopY } = solveHeights(model, sizes, METRICS)
+
+    // The line departs departClear above a's circle and arrives arriveClear below f's card
+    // bottom; the climb between those two points is the rise, which is what the angle means.
+    const departure = circle(cardTopY.get('a')) - METRICS.departClear
+    const arrival = bottom(cardTopY.get('f'), 50) + METRICS.arriveClear
+    expect(departure - arrival).toBeCloseTo(METRICS.rise, 9)
+  })
+
+  it('gives an edge that hosts a fork more air than a plain one, so the line clears the card above', () => {
+    const plain = fakeModel([{ id: 't', rootTaskId: 'a' }], { a: { next: 'b' }, b: {} })
+    const forked = fakeModel(
+      [{ id: 't', rootTaskId: 'a' }],
+      { a: { next: 'b', branches: [{ child: 'f', side: 'left' }] }, b: {}, f: { mergePoint: 'a' } },
+    )
+    const sizes = sizesOf({ a: [188, 50], b: [188, 50], f: [188, 50] })
+    const airOf = (model) => {
+      const { airBelow } = solveHeights(model, sizes, METRICS)
+      return airBelow.get('b')
+    }
+    // The line climbs (cardW / 2) * tan12 while it crosses b's own half-width, so b's card has to
+    // be that much further up or the line would pass behind it and re-emerge past its corner.
+    expect(airOf(plain)).toBeCloseTo(METRICS.minAir, 9)
+    expect(airOf(forked)).toBeCloseTo(METRICS.departClear + 94 * TAN12 + METRICS.junctionMargin, 9)
+  })
+
+  it('stretches the join edge when the branch is the taller side, and leaves no tail', () => {
+    // A branch of three cards spanning one trunk edge: the trunk cannot pack that tightly, so the
+    // edge above the merge point grows to fit the strand beside it.
+    const model = fakeModel(
+      [{ id: 't', rootTaskId: 'a' }],
+      {
+        a: { next: 'b', branches: [{ child: 'f1', side: 'left' }] }, b: {},
+        f1: { next: 'f2' }, f2: { next: 'f3' }, f3: { mergePoint: 'a' },
+      },
+    )
+    const sizes = sizesOf({ a: [188, 50], b: [188, 50], f1: [188, 50], f2: [188, 50], f3: [188, 50] })
+    const { cardTopY, tails } = solveHeights(model, sizes, METRICS)
+
+    // Measured from the solve rather than from airBelow: airBelow is what the succession
+    // constraint asked of the edge, and the point here is that the return's constraint asked for
+    // much more and won.
+    const gap = circle(cardTopY.get('a')) - bottom(cardTopY.get('b'), 50)
+    expect(gap).toBeGreaterThan(METRICS.minAir * 3) // the edge really did stretch
+    // The return still leaves exactly departClear above the tip's circle: the branch is the
+    // binding side, so there is no slack to put in a tail.
+    expect(tails.get('f1')).toBeCloseTo(METRICS.departClear, 9)
+    const departure = circle(cardTopY.get('f3')) - METRICS.departClear
+    const arrival = bottom(cardTopY.get('b'), 50) + METRICS.arriveClear
+    expect(departure - arrival).toBeCloseTo(METRICS.rise, 9)
+  })
+
+  it('grows a tail instead when the trunk run is the taller side', () => {
+    // One card spanning four trunk edges: the trunk is already at its minimum and cannot come
+    // down, so the branch's spine runs on above its card before the return peels off.
+    const model = fakeModel(
+      [{ id: 't', rootTaskId: 'a' }],
+      {
+        a: { next: 'b', branches: [{ child: 'f', side: 'left' }] },
+        b: { next: 'c' }, c: { next: 'd' }, d: { next: 'e' }, e: {},
+        f: { mergePoint: 'd' },
+      },
+    )
+    const sizes = sizesOf({ a: [188, 50], b: [188, 50], c: [188, 50], d: [188, 50], e: [188, 50], f: [188, 50] })
+    const { cardTopY, tails } = solveHeights(model, sizes, METRICS)
+
+    expect(tails.get('f')).toBeGreaterThan(METRICS.departClear)
+    // Whatever the tail's length, the return still climbs at exactly twelve degrees into its
+    // arrival, which is the point of deriving the tail rather than solving for it.
+    const departure = circle(cardTopY.get('f')) - tails.get('f')
+    const arrival = bottom(cardTopY.get('e'), 50) + METRICS.arriveClear
+    expect(departure - arrival).toBeCloseTo(METRICS.rise, 9)
+  })
+
+  it('stretches a bubble\'s own edge, both junctions on it and the branch between them', () => {
+    const model = fakeModel(
+      [{ id: 't', rootTaskId: 'a' }],
+      { a: { next: 'b', branches: [{ child: 'f', side: 'left' }] }, b: {}, f: { mergePoint: 'a' } },
+    )
+    const sizes = sizesOf({ a: [188, 50], b: [188, 50], f: [188, 50] })
+    const { cardTopY } = solveHeights(model, sizes, METRICS)
+
+    // The smallest branch leaves an edge and returns to it, so that one edge carries the whole
+    // lens: the two clearances and the two climbs, plus the branch's own card and the one
+    // anchorGap its own circle takes.
+    const gap = circle(cardTopY.get('a')) - bottom(cardTopY.get('b'), 50)
+    expect(gap).toBeCloseTo(
+      2 * (METRICS.departClear + METRICS.rise + METRICS.arriveClear) + 50 + METRICS.anchorGap, 9,
+    )
+    // And the branch's card really does sit inside that gap.
+    expect(cardTopY.get('f')).toBeLessThan(cardTopY.get('a'))
+    expect(cardTopY.get('f')).toBeGreaterThan(cardTopY.get('b'))
+  })
+
+  it('places a nested branch off its own host, so depth alone does not compound the climb', () => {
+    const model = fakeModel(
+      [{ id: 't', rootTaskId: 'a' }],
+      {
+        a: { next: 'b', branches: [{ child: 'f', side: 'left' }] }, b: {},
+        f: { next: 'g', branches: [{ child: 'h', side: 'left' }] }, g: { mergePoint: 'a' },
+        h: { mergePoint: 'f' },
+      },
+    )
+    const sizes = sizesOf({ a: [188, 50], b: [188, 50], f: [188, 50], g: [188, 50], h: [188, 50] })
+    const { cardTopY } = solveHeights(model, sizes, METRICS)
+
+    const climbOf = (host, foot) =>
+      (circle(cardTopY.get(host)) - METRICS.departClear) - (bottom(cardTopY.get(foot), 50) + METRICS.arriveClear)
+    expect(climbOf('a', 'f')).toBeCloseTo(METRICS.rise, 9)
+    expect(climbOf('f', 'h')).toBeCloseTo(METRICS.rise, 9) // the same climb, one level in
   })
 })
