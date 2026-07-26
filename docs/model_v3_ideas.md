@@ -8,9 +8,11 @@ SPDX-License-Identifier: CC-BY-4.0
 The canonical record of one design conversation. `model_v3_ideas.html` is its presentation and carries the
 drawn figures; when the two drift, this file wins and the page is regenerated from it.
 
-Nothing here is implemented. The running app is schema 2, in which forks never rejoin. Where this document and
-`northstar.md` disagree, the northstar is the authority until it is amended, and the amendment it needs is set
-out in section 2. All of it is scheduled as v3.0.0.
+Nothing here is implemented in code; the running app is schema 2, in which forks never rejoin. The northstar
+amendment this design requires is set out in section 2, and it landed on 2026-07-26, so axiom numbers in this
+document are the amended ones: single entry and single exit is axiom 2, every fork returns is axiom 3, and what
+were axioms 3 through 8 are now 4 through 9. Section 2 keeps the pre-amendment numbers where it quotes what
+changed. All of it is scheduled as v3.0.0.
 
 ## 1 The vocabulary
 
@@ -49,8 +51,8 @@ have an edge above it, and tasks can be added above it in the ordinary way.
 
 In schema 2 a fork opens a parallel stack and that stack simply ends. In v3 every branch returns to the trunk
 it left. That is not a naming change; it changes the class of graph from a strict tree to a single-entry,
-single-exit block structure, and it contradicts the northstar in three places: `northstar.md:38` inside intent
-1, `northstar.md:73` as axiom 2, and `model_ideas.md:26` in the definition of a tree. The axiom is the one that
+single-exit block structure, and it contradicted the northstar in three places: inside intent 1, as axiom 2,
+and in `model_ideas.md`'s definition of a tree. The axiom is the one that
 matters, because it underwrites the single-incoming-edge rule in `validateForest`, the tree-membership walk in
 `buildForest`, and the cycle check; if it merely lost a clause, nothing would tell a later reader which of
 those survive.
@@ -74,12 +76,13 @@ be drawn inside one plan. The operation that resolves it already exists as `deta
 second and better-defined purpose: the way out when work genuinely does not rejoin. So add-branch and detach
 become a pair of choices at the moment of divergence, where today add-branch alone covers both cases.
 
-Intent 1 changes with it, and so does axiom 6. The triad Task, Fork, Stack becomes Projects, Tasks, Branches,
-and the stack verbs go: with a terminus closing every trunk there is no free tip, so nothing is pushed and
-every addition is an insertion at an edge. Axiom 4 had already half-retired them, since completing a task
-leaves it on the map recoloured and only delete removes it, so nothing has popped for some time. Axiom 6 names
-JSON5, and the file becomes plain JSON; what that costs is comments and trailing commas, so the ownership claim
-in intent 3 survives intact, JSON being still plain text, grep-able, diff-able, and readable in any editor.
+Intent 1 changes with it, and so does the file axiom, numbered 6 then and 7 now. The triad Task, Fork, Stack
+becomes Projects, Tasks, Branches, and the stack verbs go: with a terminus closing every trunk there is no free
+tip, so nothing is pushed and every addition is an insertion at an edge. The status axiom had already
+half-retired them, since completing a task leaves it on the map recoloured and only delete removes it, so
+nothing has popped for some time. The file axiom names JSON5, and the file becomes plain JSON; what that costs
+is comments and trailing commas, so the ownership claim in intent 3 survives intact, JSON being still plain
+text, grep-able, diff-able, and readable in any editor.
 
 ## 3 Where a lateral line attaches
 
@@ -216,7 +219,7 @@ disjoint, never partially overlapping; two branch spans, since section 7, may ov
 likes.
 
 This rule survives the decision in section 7 because it was never about crossings; a branch line runs beside a
-scope without touching it. It is about the promise axiom 3 would make, that a scope can be collapsed as a
+scope without touching it. It is about the promise axiom 3 makes, that a scope can be collapsed as a
 single block, and a return line landing inside a collapsed scope has nowhere to land. The two nesting rules had
 two different justifications, and only this one turns on something a hop cannot repair. It also holds on both
 sides of the trunk, since collapsibility has nothing to do with which half-plane a branch occupies.
@@ -277,7 +280,7 @@ accepted; the remedy for it is deferred, and the two notes below record the thin
 anything.
 
 *Deferred.* Magnifying a node's label shape on hover, to whatever size makes its name readable, divides the
-labour the way axiom 5 asks: the shape carries the structure at any zoom, and a name is read on demand rather
+labour the way axiom 6 asks: the shape carries the structure at any zoom, and a name is read on demand rather
 than shrunk past legibility. One constraint would keep it safe, and it is worth writing down now because it is
 easy to violate later: the magnification must be a paint-time transform and never a layout input, since a hover
 that changed a card's measured height would send `buildRowGrid` reflowing the plan under the pointer. Three
@@ -441,7 +444,7 @@ is a title, a status, a cursor, or a flag, so it cannot be searched for by name 
 note on a terminus is found by walking to the scope that owns it.
 
 Bookmarks stay in a sidecar beside the domain file, and every field in one is device-independent, so a bookmark
-travels with the data as axiom 8 permits a named view to do:
+travels with the data as axiom 9 permits a named view to do:
 
 ```json
 {
@@ -464,8 +467,8 @@ All of it is settled unless listed as open below, and the whole of it is schedul
 
 ### Structure
 
-- Every branch returns to the trunk it left. Axiom 2 is replaced by the two axioms in section 2, and the three
-  doc sites are amended together.
+- Every branch returns to the trunk it left. Axiom 2 was replaced by the two axioms in section 2 on 2026-07-26,
+  and the three doc sites were amended with it.
 - Three node kinds, a TerminusNode for every ProjectNode, and a plan bounded by a base ProjectNode and its
   TerminusNode. Two productions, `Plan` and `Body`, generate the skeleton; a sub-project is a Plan inside a
   Body, a branch's trunk is a Body, and a Body may be empty.

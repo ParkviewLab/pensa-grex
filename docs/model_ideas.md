@@ -10,6 +10,14 @@ held in a chat log. A notebook that feeds the eventual `docs/northstar.md` and
 the data model, not a spec. Where something is settled it says so; open
 questions are marked.
 
+This notebook describes the model the running app implements, which is schema 2.
+Model v3 supersedes its mental model and several of its entities; the record of
+that design is [`model_v3_ideas.md`](model_v3_ideas.md), and `northstar.md` has
+already been amended to it. Where this file and the northstar disagree the
+northstar governs, and each passage v3 replaces is marked below rather than
+rewritten, so that what was decided when stays legible. The layout and
+interaction rules here are untouched by v3 except where marked.
+
 ## The mental model
 
 The model is stack-and-fork. A branch is a **stack**: tasks are **pushed** onto
@@ -18,14 +26,26 @@ creates parallel stacks that diverge from a point on an existing stack. This is
 decisive for the data model: the primary edit operations are push and pop at a
 tip, and fork at a point.
 
+*Superseded by model v3.* The stack verbs go with it. A TerminusNode closes every
+trunk, so no tip is free and nothing is pushed: every addition is an insertion at
+an edge, and every branch rejoins the trunk it left. The triad becomes Projects,
+Tasks, Branches, and the three verbs are insert a task at an edge, wrap a run as a
+project, and open a branch. See `model_v3_ideas.md`, sections 2 and 12.
+
 ## Entities (draft)
 
 - **Forest** — the set of trees for one **domain** (e.g. HomeLab, Work). Persisted
   as one JSON5 file per domain, in a directory that also holds the per-task note
-  files. Switching domains switches forests.
+  files. Switching domains switches forests. *Superseded by model v3:* the
+  container is a **Domain** in code as well as in speech, its file is plain JSON,
+  and the one word "forest" splits into the file, the DomainRecord, and the
+  DomainModel.
 - **Tree** — a strict tree of tasks (forks split, branches never rejoin). Root at
   the base; growth rises. **A tree carries its own name** (decided), distinct from
-  its root task, shown beneath the root station.
+  its root task, shown beneath the root station. *Superseded by model v3:* a tree
+  becomes a **ProjectPlan**, bounded below by its base ProjectNode and above by its
+  TerminusNode, and forks rejoin the trunk they left; the plan's name is the base
+  ProjectNode's own title rather than a separate field.
 - **Task** — id, title, status, timestamps, a markdown **note** (its own file), and
   its outgoing structure: an optional **main-line successor** (the next task up the
   same stack) plus zero or more **branch children** (forked stacks). See Editing for
@@ -83,6 +103,12 @@ from nothing (an empty domain, or after the last tree was deleted).
 Mapping to the mental model: add-task is a push on the stack (the main line);
 add-branch is a fork; delete is a pop or subtree removal. Whether a child is the
 main line or a branch is decided by the action that created it, not by ordering.
+
+*Superseded by model v3 in its verbs, not in its principle.* Add-task becomes an
+insertion at an edge and add-branch an opening that carries its own return line,
+and a fourth entry appears, wrapping a run of tasks as a project. That the
+creating action decides the structure and ordering decides nothing survives
+unchanged as axiom 1.
 
 ## Notes (markdown, edited the conception-space way)
 

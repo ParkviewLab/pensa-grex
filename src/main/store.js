@@ -24,7 +24,7 @@ import {
 import { isValidDomainName, isValidNoteFile, resolveUnder } from './pathsafe.js'
 
 const FOREST_FILE = 'forest.json5'
-// Bookmarks are a saved, named view (northstar axiom 8): shared WITH the domain
+// Bookmarks are a saved, named view (northstar axiom 9): shared WITH the domain
 // data, so they live in the domain directory alongside forest.json5 (the live,
 // client-local collapse view stays in the userData sidecar, kept out of here).
 const BOOKMARKS_FILE = 'bookmarks.json'
@@ -157,7 +157,7 @@ function viewStatePath() {
 
 // Client-local view state (which project nodes are collapsed), keyed by domain
 // name. Disposable: a corrupt or missing file falls back to {} (unlike
-// settings.json, which we refuse to clobber). See docs/northstar.md axiom 8:
+// settings.json, which we refuse to clobber). See docs/northstar.md axiom 9:
 // the view is the client's, kept out of the shared forest data.
 function readViewStateFile() {
   try {

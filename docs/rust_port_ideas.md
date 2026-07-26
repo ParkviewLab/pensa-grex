@@ -58,17 +58,25 @@ discards the renderer, not only the `src/main` backend.
   and, being in the same process as the authority, calls the mutation functions
   directly rather than across a language boundary.
 
-### The JSON5 round-trip caveat (binds every Rust option, on axiom 6)
+### The JSON5 round-trip caveat (binds every Rust option, on axiom 7)
 
-Axiom 6 says the forest file is the user's: plain JSON5, portable, hand-editable.
-The popular Rust `json5` crate is unmaintained (RUSTSEC-2025-0120). The maintained
-alternatives (`serde_json5`, `jsonc-parser`) are serde-based, and serde
-reconstructs its output from the data model, so it does not by default preserve
-comments or hand-formatting on write. A naive Rust `store` would therefore quietly
-strip a user's comments and layout from `forest.json5` on the next save, which is a
-direct violation of axiom 6. Any Rust store must use a format-preserving write path
-(a concrete-syntax-tree editor rather than a plain serde round-trip) and this must
-be verified, not assumed. It is a small, bounded task, but it is a real one.
+*Narrowed by model v3.* The axiom moved from 6 to 7 when the northstar was amended,
+and it now names plain JSON rather than JSON5. A plain-JSON file has no comments to
+strip, so what a serde round trip can still lose is key order and hand-formatting,
+which is a preference rather than content. The analysis below was written against
+JSON5 and is kept because it is what would bind the choice again if the file ever
+carried comments.
+
+The axiom then read that the forest file is the user's: plain JSON5, portable,
+hand-editable. The popular Rust `json5` crate is unmaintained (RUSTSEC-2025-0120).
+The maintained alternatives (`serde_json5`, `jsonc-parser`) are serde-based, and
+serde reconstructs its output from the data model, so it does not by default
+preserve comments or hand-formatting on write. A naive Rust `store` would therefore
+quietly strip a user's comments and layout from `forest.json5` on the next save,
+which is a direct violation of it. Any Rust store must use a format-preserving
+write path (a concrete-syntax-tree editor rather than a plain serde round-trip) and
+this must be verified, not assumed. It is a small, bounded task, but it is a real
+one.
 
 ## The model re-homing decision (the real center of a hybrid)
 
@@ -165,7 +173,7 @@ The model re-homing question disappears here. Because egui and iced are
 single-process with no webview, the model has exactly one home, a workspace `core`
 crate imported by both the store/MCP authority and the GUI layout code; there is no
 bridge, no IPC serialization of task operations, and no risk of divergence. View
-state (camera, zoom, collapse; axiom 8) stays in the GUI layer and is never written
+state (camera, zoom, collapse; axiom 9) stays in the GUI layer and is never written
 to the forest file, which egui's `Scene` state or an iced `Canvas` transform keep
 client-side naturally. Nothing ports at the code level (JS to Rust is a rewrite);
 the largest single piece of work is not the model but reproducing the Googie skin,
@@ -353,7 +361,7 @@ reproducing the bespoke subway renderer and rehousing the loopback MCP server.
   renderer and model port almost verbatim, but it collides with the northstar:
   browser file access is either the File System Access API (Chromium-desktop only)
   or OPFS (a sandboxed virtual store, not user-visible JSON5 and markdown files),
-  and a browser tab cannot host the loopback MCP server, so it breaks axiom 6 and
+  and a browser tab cannot host the loopback MCP server, so it breaks axiom 7 and
   the live-AI surface. Rejected.
 - Trim Electron (MIT; zero rewrite). Harden and prune the current app: context
   isolation, CSP, dependency pruning, asar, v8 snapshots. Real and cheap, but it
@@ -390,11 +398,11 @@ rewrite is merely a natural moment to consider it. The org already ships jonobon
 a Joplin-sync daemon, as prior art.
 
 The northstar tension is the first thing to settle, and it resolves favourably if
-the design is disciplined. Axiom 6 says local, no account, no cloud, no lock-in. An
+the design is disciplined. Axiom 7 says local, no account, no cloud, no lock-in. An
 optional, off-by-default, additive sync layer honours that as long as the local
 files stay the complete and authoritative source of truth on every device and the
 server holds only opaque replicas. Two tempting variants must be rejected because
-they invert axiom 6: making a "LAN box the authority" (it forfeits offline use and
+they invert axiom 7: making a "LAN box the authority" (it forfeits offline use and
 the no-cloud property), and storing CRDT causal metadata either inside
 `forest.json5` (which destroys its plain, grep-able character) or in a sidecar that
 demotes the JSON5 to a derived projection (which inverts "the file is the source of
@@ -403,7 +411,7 @@ and is out.
 
 Encouragingly, the sync boundary is already implemented in `store.js`:
 `bookmarks.json` is deliberately shared with the data, while view state (camera,
-zoom, collapse) sits in a `userData` sidecar and is excluded per axiom 8. So "what
+zoom, collapse) sits in a `userData` sidecar and is excluded per axiom 9. So "what
 to sync versus what to keep local" is a solved question. The on-disk format is
 already the sync unit (an id-keyed `forest.json5` per domain, per-task markdown
 notes, `bookmarks.json`), the atomic write path and single authority are exactly
@@ -620,8 +628,8 @@ history, and a harder cutover than swapping a branch.
   Tauri is a possible interim, not the target. Python stays at the service wire, not
   inside the app (Design C's in-app shapes rejected on packaging and licensing
   grounds). The model must be re-homed to a single Rust crate and its correctness
-  preserved against the existing test suite; the JSON5 write path must preserve
-  comments and formatting to honour axiom 6. A Joplin-style sync server is a
+  preserved against the existing test suite; the write path must preserve the file
+  as the user's, to honour what is now axiom 7. A Joplin-style sync server is a
   separate, optional, off-by-default capability that can pair with any design.
   Captured as an in-flight idea for exploration, not yet a plan.
 - 2026-07-21 — RaTeX dependency stance (agreed): if Design B proceeds and RaTeX is
@@ -640,3 +648,14 @@ history, and a harder cutover than swapping a branch.
   `dev-release-electron.yml`. Two prerequisites: a `Cargo.toml` kind in dev-tools
   `_sot.sh`, and a handbook rust-desktop profile. Recommended, not executed; gated on the
   rewrite being green-lit.
+- 2026-07-26 — Model v3 lands in the northstar, and three things here move with it.
+  The axioms were renumbered (6 becomes 7, 8 becomes 9) and axiom 7 now names plain
+  JSON, which narrows the round-trip caveat above from comments to formatting. The
+  model this study proposes re-homing is no longer a strict tree: schema 3 adds a
+  terminus closing every scope and a merge returning every branch, so the Rust `core`
+  crate would own the three merge clauses, the bracket-matching enclosing-scope walk,
+  and a longest-path row layering in place of today's depth-first walk, which is more
+  model to port and a harder layout engine than the estimate above assumed. And the
+  repo-strategy section reserves 3.0.0 for the Rust cutover, which model v3 has now
+  taken; a cutover release would be 4.0.0. None of this changes the recommendation,
+  only its size.

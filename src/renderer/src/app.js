@@ -42,7 +42,7 @@ let currentRaw = null
 let currentDomainPath = null
 let currentDomainName = null
 // Ids of collapsed project nodes: client-local view state, kept apart from the
-// forest data (see docs/northstar.md axiom 8) and loaded per domain.
+// forest data (see docs/northstar.md axiom 9) and loaded per domain.
 let collapsedSet = new Set()
 // The in-session clipboard: a snapshot of a copied project (its subtree records
 // and note contents), taken at copy time so it is independent of later edits and
@@ -50,7 +50,7 @@ let collapsedSet = new Set()
 // outlive the app, and never touches the forest data.
 let clipboard = null
 // The domain's saved bookmarks (a named view: collapse set, zoom, node-anchored
-// camera). Shared with the domain data (northstar axiom 8), loaded per domain.
+// camera). Shared with the domain data (northstar axiom 9), loaded per domain.
 let bookmarks = []
 
 // The note editor records a task's note filename on its first non-empty save, so
@@ -126,7 +126,7 @@ document.getElementById('zout').addEventListener('click', () => {
 })
 
 // "Show only flagged" read-only view: a client-local toggle (never written to the
-// forest, per northstar axiom 8). The class on the content element hides everything
+// forest, per northstar axiom 9). The class on the content element hides everything
 // but flagged cards and makes cards non-interactive (which also disables drag, since
 // drag.js resolves its source from the pointer's DOM target); the context menu is
 // gated separately so no canvas-level edit (e.g. Paste as new tree) is reachable.
@@ -438,7 +438,7 @@ function subtreeIdsOf(raw, startId) {
 
 // A view-only copy of raw with each collapsed project node kept as a leaf: its
 // subtree removed and the node marked so the render draws it folded (its shadow).
-// Collapse is client-local (docs/northstar.md axiom 8), so this never touches
+// Collapse is client-local (docs/northstar.md axiom 9), so this never touches
 // currentRaw or the saved forest; a collapsed id that is now a task is ignored.
 function pruneCollapsed(raw, collapsed) {
   const ids = [...collapsed].filter((id) => raw.tasks[id] && raw.tasks[id].kind === 'project')
@@ -833,7 +833,7 @@ async function boot() {
 
 // ---- live updates from another writer (the in-app MCP server) ----
 // An agent edited the open domain: re-read and re-render in place, holding the
-// camera, zoom, and collapse state (northstar axiom 8 — the view is the client's).
+// camera, zoom, and collapse state (northstar axiom 9 — the view is the client's).
 // A burst of edits coalesces into one render per animation frame; no changed-node
 // highlight. The renderer applies its OWN edits from their IPC result, and main
 // pushes only for external edits, so nothing renders twice.
