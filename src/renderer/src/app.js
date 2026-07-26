@@ -13,7 +13,7 @@ import { initTheme } from './theme/theme.js'
 import { createViewport } from './interaction/viewport.js'
 import { mountLayout } from './render/scene.js'
 import { buildModel } from '../../shared/model/model.js'
-import { branchChildrenOf, isPlanClose } from '../../shared/model/validate.js'
+import { branchChildrenOf, isPlanClose, branchesIn, indexRecord, mergeErrors } from '../../shared/model/validate.js'
 import { measureDomain } from './layout/measure.js'
 import { computeDomainLayout } from './layout/layout.js'
 import { createApi } from './bridge/api.js'
@@ -350,8 +350,11 @@ function resolveDropIntent(sourceId, clientX, clientY) {
     wx >= s.x - s.cardW / 2 && wx <= s.x + s.cardW / 2 && wy >= s.cardTop && wy <= s.cardTop + s.cardH)
   if (onCard) {
     if (onCard.id === sourceId || sub.has(onCard.id)) return { kind: 'none' }
-    // A fork hangs on the edge rising from its target, and a plan's close has none.
-    if (isPlanClose(currentRecord, onCard.id)) return { kind: 'none' }
+    // A fork hangs on the edge rising from its target, and two positions have no such
+    // edge: a plan's close, and the top of a branch trunk, whose upper neighbour is that
+    // branch's own return line rather than a trunk edge. Both are the same rule, that a
+    // node with nothing above it on its trunk cannot host a branch.
+    if (isPlanClose(currentRecord, onCard.id) || !currentRecord.nodes[onCard.id].next) return { kind: 'none' }
     return { kind: 'fork', targetId: onCard.id }
   }
 
@@ -595,6 +598,22 @@ async function addBranchFlow(dir, taskId) {
   applyOp(dir === 'above' ? 'addBranchAbove' : 'addBranchBelow', taskId, title)
 }
 
+// The branches that could legally rejoin the trunk at the edge above `taskId`, as a menu
+// of their feet. A branch's return is stored on the branch, so moving one takes two things
+// to be named, the branch and the target; there being no selection mechanism, the click
+// names the target and the submenu names the branch. This is how a merge fabricated by the
+// migration is put right, and the only way a return moves.
+function mergeCandidates(taskId) {
+  const ix = indexRecord(currentRecord)
+  return branchesIn(currentRecord)
+    .filter((b) => b.mergePoint !== taskId)
+    .filter((b) => !mergeErrors(currentRecord, { ...b, mergePoint: taskId }, ix).length)
+    .map((b) => ({
+      label: currentRecord.nodes[b.footId].title || b.footId,
+      onClick: () => applyOp('setMergePoint', b.footId, taskId),
+    }))
+}
+
 async function deleteTaskFlow(taskId) {
   const task = currentRecord.nodes[taskId]
   const isRoot = isRootId(currentRecord, taskId)
@@ -647,6 +666,8 @@ function openTaskMenu(x, y, taskId) {
     if (isPlanClose(currentRecord, taskId)) return
     items.push({ label: 'Add task above', onClick: () => addTaskFlow('above', taskId) })
     items.push({ label: 'Add branch above', onClick: () => addBranchFlow('above', taskId) })
+    const closeMerges = mergeCandidates(taskId)
+    if (closeMerges.length) items.push({ label: 'Merge a branch here', submenu: closeMerges })
     openContextMenu(x, y, items)
     return
   }
@@ -697,6 +718,8 @@ function openTaskMenu(x, y, taskId) {
   if (!isRoot) items.push({ label: 'Add task below', onClick: () => addTaskFlow('below', taskId) })
   items.push({ label: 'Add branch above', onClick: () => addBranchFlow('above', taskId) })
   if (!isRoot) items.push({ label: 'Add branch below', onClick: () => addBranchFlow('below', taskId) })
+  const merges = mergeCandidates(taskId)
+  if (merges.length) items.push({ label: 'Merge a branch here', submenu: merges })
   items.push({ separator: true })
   items.push({ label: 'Edit note…', onClick: () => openNote(taskId) })
   items.push({ separator: true })

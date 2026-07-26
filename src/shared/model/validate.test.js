@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import JSON5 from 'json5'
 import fixtureRaw from './fixtures/homelab.record.json?raw'
-import { validateRecord, pairScopes, trunksOf } from './validate.js'
+import { validateRecord, pairScopes, trunksOf, indexRecord, enclosingScopeOpen } from './validate.js'
 
 // A task node with sensible defaults.
 function task(overrides) {
@@ -44,6 +44,12 @@ function terminus(overrides) {
 // dangling .next), the base is closed immediately, which is a legal empty plan, and
 // the fragment under test hangs off the base's one edge; that keeps every record
 // wrong in exactly the one way its test names. No assertion changed meaning.
+
+// Returns: every branch now rejoins the trunk it left, so each branch in a record that
+// is meant to be valid carries a mergePoint on its tip. In the two fixtures where a
+// branch already existed for another reason, the only landing available is the branch's
+// own edge, because the node above the branch point is the plan's close and nothing may
+// join above that; both therefore merge as bubbles. Again no assertion changed meaning.
 
 describe('validateRecord — the HomeLab fixture', () => {
   it('is valid as shipped', () => {
@@ -207,13 +213,15 @@ describe('validateRecord — invariants', () => {
   })
 
   it('allows one "here" per branch, several across a forked tree', () => {
+    // Returns: the fork off b can only bubble back onto the edge it left, since the
+    // one node above b is the plan's close and nothing may join above that.
     const record = {
       schemaVersion: 3, id: 'd_test000000', title: 'D', planOrder: ['p'],
       nodes: {
         p: project({ id: 'p', next: 'a' }),
         a: task({ id: 'a', next: 'b' }),
         b: task({ id: 'b', here: true, leftBranches: ['c'], next: 't' }),
-        c: task({ id: 'c', here: true }), // a different branch — allowed
+        c: task({ id: 'c', here: true, mergePoint: 'b' }), // a different branch, so allowed
         t: terminus({ id: 't' }),
       },
     }
@@ -347,17 +355,263 @@ describe('validateRecord — scopes and their closes', () => {
   })
 
   it('splits a branch onto its own trunk, base to top', () => {
+    // Returns: the merge point sits on c, the top of the branch trunk, because that is
+    // the end the return line leaves from; a bubble back onto a's own edge is the only
+    // landing this trunk offers, the node above a being the plan's close.
     const record = {
       schemaVersion: 3, id: 'd_test000000', title: 'D', planOrder: ['p'],
       nodes: {
         p: project({ id: 'p', next: 'a' }),
         a: task({ id: 'a', next: 't', leftBranches: ['b'] }),
         b: task({ id: 'b', next: 'c' }),
-        c: task({ id: 'c' }),
+        c: task({ id: 'c', mergePoint: 'a' }),
         t: terminus({ id: 't' }),
       },
     }
     expect(validateRecord(record)).toEqual({ ok: true, errors: [] })
     expect(trunksOf(record).map((trunk) => trunk.join('>')).sort()).toEqual(['b>c', 'p>a>t'])
+  })
+})
+
+describe('validateRecord — branches and their returns', () => {
+  // The trunk from the diagram in section 8: a branch opened below a sub-project, on a
+  // trunk running p, a, q, b, t_q, c, t_p from the base upward. Where the return lands
+  // is the parameter, since it is the only thing the records below disagree about.
+  function straddle(mergePoint) {
+    return {
+      schemaVersion: 3, id: 'd_test000000', title: 'D', planOrder: ['p'],
+      nodes: {
+        p: project({ id: 'p', next: 'a' }),
+        a: task({ id: 'a', next: 'q', leftBranches: ['x'] }),
+        q: project({ id: 'q', title: 'Sub', next: 'b' }),
+        b: task({ id: 'b', next: 't_q' }),
+        t_q: terminus({ id: 't_q', next: 'c' }),
+        c: task({ id: 'c', next: 't_p' }),
+        t_p: terminus({ id: 't_p' }),
+        x: task({ id: 'x', mergePoint }),
+      },
+    }
+  }
+
+  it('rejects a branch with no merge point', () => {
+    const record = {
+      schemaVersion: 3, id: 'd_test000000', title: 'D', planOrder: ['p'],
+      nodes: {
+        p: project({ id: 'p', next: 'a' }),
+        a: task({ id: 'a', next: 'b', leftBranches: ['x'] }),
+        b: task({ id: 'b', next: 't' }),
+        t: terminus({ id: 't' }),
+        x: task({ id: 'x' }), // the tip of the branch, carrying no return
+      },
+    }
+    const { ok, errors } = validateRecord(record)
+    expect(ok).toBe(false)
+    expect(errors.some((e) => e.includes('the branch at "x" has no merge point'))).toBe(true)
+  })
+
+  it('rejects a merge point on a trunk the branch never left', () => {
+    // x hangs off a and names y, which is the whole of another branch's trunk. The
+    // second branch is a legal bubble, so the record's one fault is x's return.
+    const record = {
+      schemaVersion: 3, id: 'd_test000000', title: 'D', planOrder: ['p'],
+      nodes: {
+        p: project({ id: 'p', next: 'a' }),
+        a: task({ id: 'a', next: 'b', leftBranches: ['x'] }),
+        b: task({ id: 'b', next: 't', leftBranches: ['y'] }),
+        t: terminus({ id: 't' }),
+        x: task({ id: 'x', mergePoint: 'y' }),
+        y: task({ id: 'y', mergePoint: 'b' }),
+      },
+    }
+    const { ok, errors } = validateRecord(record)
+    expect(ok).toBe(false)
+    expect(errors.some((e) => e.includes('the branch at "x" merges at "y", which is not on the trunk it left'))).toBe(true)
+  })
+
+  it('rejects a merge below the branch point, which is a loop and not a return', () => {
+    // The trunk flows up from the join to the branch point and the return flows back
+    // down into it, so this record is faulted twice over, as a loop and as a cycle; the
+    // downward merge is the fault under test, and the cycle is the subject of the last
+    // test in this block.
+    const record = {
+      schemaVersion: 3, id: 'd_test000000', title: 'D', planOrder: ['p'],
+      nodes: {
+        p: project({ id: 'p', next: 'a' }),
+        a: task({ id: 'a', next: 'b' }),
+        b: task({ id: 'b', next: 't', leftBranches: ['x'] }),
+        t: terminus({ id: 't' }),
+        x: task({ id: 'x', mergePoint: 'a' }), // a sits below x's own branch point
+      },
+    }
+    const { ok, errors } = validateRecord(record)
+    expect(ok).toBe(false)
+    expect(errors.some((e) => e.includes('merges below its own branch point'))).toBe(true)
+  })
+
+  it("rejects a merge at the plan's close, which has no edge above it", () => {
+    // A node can receive a merge exactly when a trunk edge rises from it, and a plan's
+    // close has nothing above it, so it is the one position on a trunk that no return
+    // can name.
+    const record = {
+      schemaVersion: 3, id: 'd_test000000', title: 'D', planOrder: ['p'],
+      nodes: {
+        p: project({ id: 'p', next: 'a' }),
+        a: task({ id: 'a', next: 't', leftBranches: ['x'] }),
+        t: terminus({ id: 't' }),
+        x: task({ id: 'x', mergePoint: 't' }),
+      },
+    }
+    const { ok, errors } = validateRecord(record)
+    expect(ok).toBe(false)
+    expect(errors.some((e) => e.includes('merges above "t", which has no edge above it'))).toBe(true)
+  })
+
+  it('accepts a bubble, the smallest legal branch', () => {
+    // On a trunk running p, a, t there is no node strictly between a and its close, so
+    // a fork off a can only return to the edge it left. Without the bubble the topmost
+    // forkable position on every trunk would be unforkable.
+    const record = {
+      schemaVersion: 3, id: 'd_test000000', title: 'D', planOrder: ['p'],
+      nodes: {
+        p: project({ id: 'p', next: 'a' }),
+        a: task({ id: 'a', next: 't', leftBranches: ['x'] }),
+        t: terminus({ id: 't' }),
+        x: task({ id: 'x', mergePoint: 'a' }),
+      },
+    }
+    expect(validateRecord(record)).toEqual({ ok: true, errors: [] })
+  })
+
+  it('accepts two branches sharing one merge point, which is an n-way join', () => {
+    // Returns arrive at the node above the join edge, and they are not counted among
+    // its incoming edges, so t takes one trunk predecessor and two returns without
+    // tripping the one-incoming-edge rule.
+    const record = {
+      schemaVersion: 3, id: 'd_test000000', title: 'D', planOrder: ['p'],
+      nodes: {
+        p: project({ id: 'p', next: 'a' }),
+        a: task({ id: 'a', next: 'b', leftBranches: ['x'] }),
+        b: task({ id: 'b', next: 'c', rightBranches: ['y'] }),
+        c: task({ id: 'c', next: 't' }),
+        t: terminus({ id: 't' }),
+        x: task({ id: 'x', mergePoint: 'c' }),
+        y: task({ id: 'y', mergePoint: 'c' }),
+      },
+    }
+    expect(validateRecord(record)).toEqual({ ok: true, errors: [] })
+  })
+
+  it('rejects a branch that escapes the scope it was opened in', () => {
+    // x forks off a, which is inside "Sub", and names b, which sits above the close of
+    // "Sub". Collapsing that scope would leave the return line with nowhere to land.
+    const record = {
+      schemaVersion: 3, id: 'd_test000000', title: 'D', planOrder: ['p'],
+      nodes: {
+        p: project({ id: 'p', next: 'q' }),
+        q: project({ id: 'q', title: 'Sub', next: 'a' }),
+        a: task({ id: 'a', next: 't_q', leftBranches: ['x'] }),
+        t_q: terminus({ id: 't_q', next: 'b' }),
+        b: task({ id: 'b', next: 't_p' }),
+        t_p: terminus({ id: 't_p' }),
+        x: task({ id: 'x', mergePoint: 'b' }),
+      },
+    }
+    const { ok, errors } = validateRecord(record)
+    expect(ok).toBe(false)
+    expect(errors.some((e) => e.includes('merges past the close of "Sub", the scope it was opened in'))).toBe(true)
+  })
+
+  it('rejects a branch that merges inside a scope it was opened outside', () => {
+    // The mirror of the clause above, and the same collapse it protects. The refusal has
+    // to name the two legal alternatives in the same breath, or the author is told only
+    // that the shape is wrong.
+    const { ok, errors } = validateRecord(straddle('b'))
+    expect(ok).toBe(false)
+    const message = errors.find((e) => e.includes('a scope it was opened outside'))
+    expect(message).toBeDefined()
+    expect(message).toContain('merges inside "Sub"')
+    expect(message).toContain('merge below where "Sub" opens')
+    expect(message).toContain('above where it closes')
+  })
+
+  it('accepts both of the alternatives the refusal names', () => {
+    // Below where "Sub" opens is a bubble on a's own edge; above where it closes is the
+    // span that contains the whole scope, which is the legal half of section 8's diagram.
+    expect(validateRecord(straddle('a'))).toEqual({ ok: true, errors: [] })
+    expect(validateRecord(straddle('t_q'))).toEqual({ ok: true, errors: [] })
+  })
+
+  it('rejects a merge point on a node that is not a branch tip', () => {
+    // A return leaves a branch at its top, so a merge stored on the foot of a two-node
+    // branch is wrong twice over: the foot may not carry one, and the tip that should
+    // is left without.
+    const record = {
+      schemaVersion: 3, id: 'd_test000000', title: 'D', planOrder: ['p'],
+      nodes: {
+        p: project({ id: 'p', next: 'a' }),
+        a: task({ id: 'a', next: 'b', leftBranches: ['x'] }),
+        b: task({ id: 'b', next: 't' }),
+        t: terminus({ id: 't' }),
+        x: task({ id: 'x', next: 'y', mergePoint: 'a' }),
+        y: task({ id: 'y' }),
+      },
+    }
+    const { ok, errors } = validateRecord(record)
+    expect(ok).toBe(false)
+    expect(errors.some((e) => e.includes('node "x" holds a merge point but is not the top of a branch trunk'))).toBe(true)
+    expect(errors.some((e) => e.includes('the branch at "x" has no merge point'))).toBe(true)
+  })
+
+  it('reports a cycle reached through a return edge', () => {
+    // A return is an edge like any other, so the cycle walk follows it from the tip to
+    // whatever sits above the merge point. A legal return makes a diamond; one that
+    // reaches downward makes the loop this catches, which is why the record is faulted
+    // both as a cycle and as a merge below the branch point.
+    const record = {
+      schemaVersion: 3, id: 'd_test000000', title: 'D', planOrder: ['p'],
+      nodes: {
+        p: project({ id: 'p', next: 'a' }),
+        a: task({ id: 'a', next: 'b' }),
+        b: task({ id: 'b', next: 'c' }),
+        c: task({ id: 'c', next: 't', leftBranches: ['x'] }),
+        t: terminus({ id: 't' }),
+        x: task({ id: 'x', next: 'y' }),
+        y: task({ id: 'y', mergePoint: 'a' }),
+      },
+    }
+    const { ok, errors } = validateRecord(record)
+    expect(ok).toBe(false)
+    expect(errors.some((e) => e.includes('cycle detected') && e.includes('y -> b'))).toBe(true)
+  })
+})
+
+describe('enclosingScopeOpen — the bound a branch may not reach past', () => {
+  it('matches brackets down the trunk rather than taking the nearest project node', () => {
+    // The trunk from section 4: p, a, p2, b, t2, c, t_p from the base upward. The
+    // nearest project node below c is p2, whose close t2 sits below c, so taking it
+    // would ask a branch off c to merge above c and below t2 at once, which nothing
+    // satisfies. Matching brackets skips the pair that closed below us and answers with
+    // the plan's own scope.
+    const record = {
+      schemaVersion: 3, id: 'd_test000000', title: 'D', planOrder: ['p'],
+      nodes: {
+        p: project({ id: 'p', next: 'a' }),
+        a: task({ id: 'a', next: 'p2' }),
+        p2: project({ id: 'p2', title: 'Sub', next: 'b' }),
+        b: task({ id: 'b', next: 't2' }),
+        t2: terminus({ id: 't2', next: 'c' }),
+        c: task({ id: 'c', next: 't_p', leftBranches: ['x'] }),
+        t_p: terminus({ id: 't_p' }),
+        x: task({ id: 'x', mergePoint: 'c' }),
+      },
+    }
+    const ix = indexRecord(record)
+    expect(enclosingScopeOpen(record, 'c', ix)).toBe('p')
+    expect(enclosingScopeOpen(record, 'b', ix)).toBe('p2')
+    // At the foot of a branch trunk the walk hops to the parent trunk at that branch's
+    // own node, so a node on the branch answers with the scope its branch point sits in.
+    expect(enclosingScopeOpen(record, 'x', ix)).toBe('p')
+    // And the branch the bound permits is accepted: a bubble on c's own edge.
+    expect(validateRecord(record)).toEqual({ ok: true, errors: [] })
   })
 })

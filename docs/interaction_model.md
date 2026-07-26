@@ -29,6 +29,11 @@ and both keep the "nothing before the root" rule (northstar axiom 2): a fork can
 added to any node and never sits below it, and a gap only ever sits *above* a node,
 so neither can put anything below a root.
 
+*Model v3 adds one thing to a graft.* Every branch rejoins the trunk it left, so a
+fork made by a drop is given the smallest legal return, rejoining at the very edge it
+leaves; the author moves it afterwards with "Merge a branch here" on the node below
+the edge it should join, which lists the branches that could legally land there.
+
 The dragged node's kind and the drop location pick one of these pure moves:
 
 - **moveTaskNode** — a task dropped onto a card moves *alone*. Its children are

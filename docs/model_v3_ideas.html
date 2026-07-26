@@ -270,8 +270,15 @@ and readable in any editor. Section&nbsp;12 sets out the operations that replace
 
 <p>Edges are not objects in the file; there is nothing to point at. So both kinds of lateral attachment name
 their edge by a neighbouring node, and they must choose the same neighbour or every mutation has to remember
-which way each field reads. Branches already name the node below their edge, so <code>merge_point</code>
+which way each field reads. Branches already name the node below their edge, so <code>mergePoint</code>
 does too: it holds the id of the node below the edge into which the return line joins.</p>
+
+<p>Which node carries the field is a separate question, and the answer is the top of the branch's own trunk,
+because that is the end the return leaves from: it is an outgoing edge, as <code>next</code> is, and putting it
+there lets a merge be read off the node the line departs. A ProjectNode therefore never carries one, since it
+always has its own close above it and so is never a trunk's top. What that costs is a relocation whenever an
+edit puts a new node on top of a branch, which one pass repairs for every branch at once rather than each
+operation remembering to.</p>
 
 <p>Stated once, that gives a single rule of availability: a node can host a branch, or receive a merge,
 exactly when a trunk edge rises from it. Two positions have no such edge, and both are unavailable for the
@@ -280,7 +287,7 @@ branch trunk has its own return line above it, which is not a trunk edge.</p>
 
 <figure>
 <div class="frame">
-<svg viewBox="0 0 820 250" role="img" aria-label="Left: merge_point names the node below the join edge, and the node above that edge is the one that gains a second incoming edge. Right: the two positions with no trunk edge above them cannot host a branch or receive a merge.">
+<svg viewBox="0 0 820 250" role="img" aria-label="Left: mergePoint names the node below the join edge, and the node above that edge is the one that gains a second incoming edge. Right: the two positions with no trunk edge above them cannot host a branch or receive a merge.">
 <defs><marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#1f8f8a"/></marker></defs>
 
 <text class="tt" x="30" y="30">the convention</text>
@@ -293,7 +300,7 @@ branch trunk has its own return line above it, which is not a trunk edge.</p>
 <path class="jnr" d="M150,133 l6,6 l-6,6 l-6,-6 z"/>
 <rect class="st" x="275" y="190" width="110" height="26" rx="2.5"/>
 <text class="t" x="330" y="207" text-anchor="middle">branch tip</text>
-<text class="tr" x="215" y="157">merge_point: 'X'</text>
+<text class="tr" x="215" y="157">mergePoint: 'X'</text>
 <text class="tm" x="215" y="112">Y gains a second</text>
 <text class="tm" x="215" y="125">incoming edge</text>
 <text class="tm" x="88" y="202" text-anchor="end">the node that</text>
@@ -317,7 +324,7 @@ branch trunk has its own return line above it, which is not a trunk edge.</p>
 <text class="tb" x="672" y="200">its line above is a return</text>
 </svg>
 </div>
-<figcaption>Left: <code>merge_point</code> holds X, the node below the join edge, and it is Y, the node
+<figcaption>Left: <code>mergePoint</code> holds X, the node below the join edge, and it is Y, the node
 above it, that acquires one trunk predecessor plus one return predecessor for every branch merging there. Two
 branches may share a merge point, which gives an n-way join at no cost in the schema. Right: the two
 positions with nothing above them.</figcaption>
@@ -344,7 +351,7 @@ card.</p>
 <p>Three clauses, and each rules out a distinct failure.</p>
 
 <ol class="rules">
-<li><code>merge_point</code> is on the trunk the branch left. Its own trunk, or another, would not be a
+<li><code>mergePoint</code> is on the trunk the branch left. Its own trunk, or another, would not be a
 return at all.</li>
 <li>It is at or above the branch's own node. Below it is a genuine cycle: the trunk flows up from the join
 to the branch point, and the return flows back down into it. Equal is the smallest legal branch, treated in
@@ -411,7 +418,7 @@ closes.</figcaption>
 </figure>
 
 <p>Two consequences fall out rather than needing rules. A root TerminusNode can never be a
-<code>merge_point</code>, because it is either the bound itself, which clause&nbsp;3 excludes, or above the
+<code>mergePoint</code>, because it is either the bound itself, which clause&nbsp;3 excludes, or above the
 bound, which clause&nbsp;3 also excludes. And naming a non-enclosing TerminusNode is perfectly legal: a
 branch opened below a sub-project may merge at the edge above that sub-project's close, which is the shape
 of parallel work running alongside a whole sub-project.</p>
@@ -424,7 +431,7 @@ intervals on one trunk, which is what lets a single geometric idea govern both.<
 
 <h2>6 &nbsp;The smallest branch</h2>
 
-<p>Clause&nbsp;2 allows <code>merge_point</code> to name the branch's own node, so a branch leaves an edge
+<p>Clause&nbsp;2 allows <code>mergePoint</code> to name the branch's own node, so a branch leaves an edge
 and returns to that same edge. Without it, the topmost forkable position on every trunk would be unforkable:
 on a trunk running P, a, T there is no node strictly between a and T, so a fork off a would have nowhere
 legal to land, and the user would have to add a task purely to make room. That is the tool imposing its
@@ -454,7 +461,7 @@ bookkeeping on the work.</p>
 <text class="tm" x="152" y="243" text-anchor="end">the node below</text>
 <text class="tr" x="152" y="118" text-anchor="end">merge point, against</text>
 <text class="tr" x="152" y="131" text-anchor="end">the node above</text>
-<text class="tm" x="510" y="160">merge_point names a:</text>
+<text class="tm" x="510" y="160">mergePoint names a:</text>
 <text class="tm" x="510" y="174">one edge, entered and left</text>
 </svg>
 </div>
@@ -523,6 +530,17 @@ keep the picture planar.</p>
 where a lateral line reaches past a trunk nearer the spine than its own lane, which makes the crossing relation
 a strict order and therefore acyclic: the outer line hops the inner trunk, never the reverse.</figcaption>
 </figure>
+
+<p>Order is stored per node, so one thing has to be settled that the arrays do not say: how two branches
+leaving different nodes of one trunk compare. The rule is that the higher branch point is the inner one, so a
+side's lane order is the trunk read from the top down, each node's array in its stored order. That keeps the old
+default where it was harmless, since a branch leaving higher is the one whose span is likelier to nest inside a
+lower one's, and it leaves the author's per-node order meaning exactly what it says.</p>
+
+<p>The consequence is worth stating plainly, because it bounds what "the author's order" buys: reordering is
+available within one node's array, and between nodes the branch point decides, since that is all the arrays can
+express. Making a lower branch inner than a higher one would need a rank stored per branch, and nothing so far
+has asked for it.</p>
 
 <p>What the superseded rule was is worth recording, because it shows the layout engine loses less than one
 might expect. <code>assignLanes</code> has two rules. The first, ordering by attach height so that a branch
@@ -909,9 +927,10 @@ the bookmark was saved, and any client computes its own framing from where those
 scale and a minimum padding. Deleted ids are filtered out and the survivors framed, so a bookmark degrades
 rather than breaking, and only an empty set is broken.</p>
 
-<p>A TerminusNode keeps <code>next</code>, the branch arrays, and <code>merge_point</code>, because a
+<p>A TerminusNode keeps <code>next</code>, the branch arrays, and <code>mergePoint</code>, because a
 sub-project's close has an edge above it and can therefore host a branch, receive a merge, and even be a branch
-trunk's own tip. It keeps <code>note</code> as well, decided in discussion: a scope's close is exactly where one
+trunk's own tip, which is the node that holds the field (section&nbsp;3). It keeps <code>note</code> as well,
+decided in discussion: a scope's close is exactly where one
 would record what finishing it took. What it does not carry is a title, a status, a cursor, or a flag, so it
 cannot be searched for by name or swept up by a flag query; a note on a terminus is found by walking to the
 scope that owns it.</p>
@@ -951,6 +970,11 @@ default because a single-edge span costs no crossings there. Which side a branch
 its edge, unconditionally, measured from the label shape rather than from a bare dot.</li>
 <li>Row assignment becomes a longest-path layering, which cannot fail because the merge clauses keep the
 constraint graph acyclic. The height that crossings and corridors add is accepted as a cost.</li>
+<li>The 12-degree branch tilt and the per-line lift that carried a branch's cards up along it are retired,
+since the lift moved cards off the shared row grid and it is that grid which makes a clearance band empty at
+every lane at once. Cards are aligned to their row and a lateral line is a horizontal run in the band plus a
+vertical riser, which is what makes "no crossing in a node's space" hold rather than merely be hoped for.
+See <code>tree-layout.md</code>.</li>
 </ul>
 
 <h3>Vocabulary and file</h3>
@@ -986,6 +1010,11 @@ Deferred by decision to its own investigation; see section&nbsp;10.</li>
 
 <li>Whether the app reports how many crossings an ordering costs, now that the order is the author's to
 change.</li>
+
+<li>Whether two unrelated lateral runs wanting one band on one side of a trunk are given a band each, at the
+cost of a row, as section&nbsp;9 says they should be. Left open on evidence: across the nine live domains every
+overlapping pair of runs, all 137, is a pair leaving the same junction, where the shared segment says something
+true, and no unrelated pair occurs at all.</li>
 </ul>
 
 <p class="status" style="margin-top:2.6rem;border-bottom:none;border-top:1px solid var(--rule);padding-top:1.4rem;">

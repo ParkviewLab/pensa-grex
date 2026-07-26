@@ -3,7 +3,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { migrateRecord } from './migrate.js'
-import { validateRecord, pairScopes, trunksOf } from './validate.js'
+import { validateRecord, pairScopes, trunksOf, branchesIn } from './validate.js'
 
 function v1() {
   return {
@@ -53,6 +53,104 @@ function v2() {
       m1: { id: 'm1', title: 'M1', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, flagged: false, here: false, next: null, branches: [] },
       r0: { id: 'r0', title: 'R0', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, flagged: false, here: false, next: null, branches: [] },
       r1: { id: 'r1', title: 'R1', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, flagged: false, here: false, next: null, branches: [] },
+    },
+  }
+}
+
+// Returns: the records below each pose one question about what the pass does structurally,
+// so each is shaped to its question and nothing else, and the schema-2 node shape is
+// written once here rather than in every one of them. A schema-2 task carries its own
+// status fields; a project node carries none.
+function v2Task(id, title, rest = {}) {
+  return { id, title, kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, flagged: false, here: false, next: null, branches: [], ...rest }
+}
+
+function v2Project(id, title, rest = {}) {
+  return { id, title, kind: 'project', createdAt: 'x', note: null, flagged: false, next: null, branches: [], ...rest }
+}
+
+// A plain trunk and a two-node fork, with room above it on both counts, so the height the
+// pass picks can be read with no clamp anywhere near it: the trunk is Plan, A, B, C, D, and
+// the fork off A carries X1 and X2, whose top therefore sits level with C.
+function v2Level() {
+  return {
+    schema: 2, domain: 'D', rootOrder: ['p'],
+    tasks: {
+      p: v2Project('p', 'Plan', { next: 'a' }),
+      a: v2Task('a', 'A', { next: 'b', branches: [{ child: 'x1', side: 'right', at: 'above' }] }),
+      b: v2Task('b', 'B', { next: 'c' }),
+      c: v2Task('c', 'C', { next: 'd' }),
+      d: v2Task('d', 'D'),
+      x1: v2Task('x1', 'X1', { next: 'x2' }),
+      x2: v2Task('x2', 'X2'),
+    },
+  }
+}
+
+// A fork hung on the top of a branch, which schema 2 allowed and schema 3 cannot say: the
+// trunk is Plan, A, B, C, the fork off A carries X1 and X2, and Y1 hangs on X2, the top of
+// that branch. X1 sits below X2 on the same trunk, so the move has somewhere to go.
+function v2Nested() {
+  return {
+    schema: 2, domain: 'D', rootOrder: ['p'],
+    tasks: {
+      p: v2Project('p', 'Plan', { next: 'a' }),
+      a: v2Task('a', 'A', { next: 'b', branches: [{ child: 'x1', side: 'right', at: 'above' }] }),
+      b: v2Task('b', 'B', { next: 'c' }),
+      c: v2Task('c', 'C'),
+      x1: v2Task('x1', 'X1', { next: 'x2' }),
+      x2: v2Task('x2', 'X2', { branches: [{ child: 'y1', side: 'right', at: 'above' }] }),
+      y1: v2Task('y1', 'Y1'),
+    },
+  }
+}
+
+// A branch taller than what is left of the trunk above its branch point: the trunk is
+// Plan, A, B, and the fork off A carries three nodes, so the row its top wants is off the
+// end of the trunk.
+function v2Tall() {
+  return {
+    schema: 2, domain: 'D', rootOrder: ['p'],
+    tasks: {
+      p: v2Project('p', 'Plan', { next: 'a' }),
+      a: v2Task('a', 'A', { next: 'b', branches: [{ child: 'x1', side: 'right', at: 'above' }] }),
+      b: v2Task('b', 'B'),
+      x1: v2Task('x1', 'X1', { next: 'x2' }),
+      x2: v2Task('x2', 'X2', { next: 'x3' }),
+      x3: v2Task('x3', 'X3'),
+    },
+  }
+}
+
+// A branch opened inside a sub-project's scope: the trunk is Plan, A, Sub, B, C, and the
+// fork off B carries two nodes, so the row its top wants is the row the close of Sub takes
+// once the pass adds it. A schema-2 scope is everything above its project node, so both
+// closes land above C, Sub's below the plan's.
+function v2Scoped() {
+  return {
+    schema: 2, domain: 'D', rootOrder: ['p'],
+    tasks: {
+      p: v2Project('p', 'Plan', { next: 'a' }),
+      a: v2Task('a', 'A', { next: 's' }),
+      s: v2Project('s', 'Sub', { next: 'b' }),
+      b: v2Task('b', 'B', { next: 'c', branches: [{ child: 'x1', side: 'right', at: 'above' }] }),
+      c: v2Task('c', 'C'),
+      x1: v2Task('x1', 'X1', { next: 'x2' }),
+      x2: v2Task('x2', 'X2'),
+    },
+  }
+}
+
+// A branch leaving the topmost forkable position: the trunk is Plan and A, so once the
+// plan's close is added there is no node strictly above A at all. This is the shape
+// section 6 of the record argues the bubble for.
+function v2Bubble() {
+  return {
+    schema: 2, domain: 'D', rootOrder: ['p'],
+    tasks: {
+      p: v2Project('p', 'Plan', { next: 'a' }),
+      a: v2Task('a', 'A', { branches: [{ child: 'x1', side: 'right', at: 'above' }] }),
+      x1: v2Task('x1', 'X1'),
     },
   }
 }
@@ -202,7 +300,13 @@ describe('migrateRecord — schema 2 to 3', () => {
 
     // `at: 'above'` already named the edge rising from its holder, so both of A's
     // left forks stay on A, in the order schema 2 stored them.
-    expect(byTitle(record, 'A').leftBranches).toEqual([id('L1'), id('M1')])
+    //
+    // Returns: L2 is on this array too, behind them. It hung on L1, which is the whole of
+    // its own branch and therefore has a return line above it rather than a trunk edge, so
+    // the nearest edge schema 3 can express is the one L1 itself leaves, which is A's. A
+    // re-homed fork is appended, so the two forks schema 2 stored on A keep their order at
+    // the front and the author's order is disturbed only by the arrival.
+    expect(byTitle(record, 'A').leftBranches).toEqual([id('L1'), id('M1'), id('L2')])
 
     // `at: 'below'` on B named the edge whose upper node is B, which rises from B's
     // main-line predecessor A — so it moves to A, and B keeps no fork of its own.
@@ -214,9 +318,12 @@ describe('migrateRecord — schema 2 to 3', () => {
     // the one above and it stays where it was.
     expect(byTitle(record, 'Plan').rightBranches).toEqual([id('R0')])
 
-    // Same at the foot of a branch trunk, whose lower neighbour is its own branch
-    // line rather than a trunk edge: the fork stays on L1, on the side it had.
-    expect(byTitle(record, 'L1').leftBranches).toEqual([id('L2')])
+    // Returns: the below-fork at the foot of a branch trunk does not stay there any more.
+    // Its holder L1 is that branch's top as well as its foot, so the fork would name a
+    // return line rather than an edge, and it goes down to A keeping the side it had. What
+    // this array can still say is that L1 ends up holding nothing at all.
+    expect(byTitle(record, 'L1').leftBranches).toEqual([])
+    expect(byTitle(record, 'L1').rightBranches).toEqual([])
 
     // Schema 3: `at` is gone, so nothing about a fork's geometry is stored beyond
     // its side and its position in that side's array. The assertion that a
@@ -228,6 +335,155 @@ describe('migrateRecord — schema 2 to 3', () => {
       expect(Array.isArray(node.rightBranches)).toBe(true)
       expect(node.branches).toBeUndefined()
     }
+  })
+
+  // Returns: schema 2 let a fork hang anywhere, the top of a branch included, and schema 3
+  // has no edge there to hang it from: what rises from a branch's top is that branch's own
+  // return line. So the pass moves those forks to the nearest position it can express,
+  // before it invents any merge; the three tests below are the two places one lands and the
+  // case that only looks like it needs moving.
+  it('moves a fork hung on the top of a branch one node down that branch', () => {
+    const { record } = migrateRecord(v2Nested())
+    const x1 = byTitle(record, 'X1')
+    const y1 = byTitle(record, 'Y1')
+
+    // Y1 hung on X2, the top of the branch X1 leads, so it comes down to X1: the same move
+    // the below-fork translation makes, one gap lower on the same trunk and the same side.
+    expect(byTitle(record, 'X2').rightBranches).toEqual([])
+    expect(x1.rightBranches).toEqual([y1.id])
+
+    // Both branches then have somewhere legal to return to, which is the point of moving it
+    // before the merges are fabricated rather than after.
+    expect(byTitle(record, 'X2').mergePoint).toBe(byTitle(record, 'C').id)
+    expect(y1.mergePoint).toBe(x1.id)
+    expect(validateRecord(record).ok).toBe(true)
+  })
+
+  it('moves a fork hung on a one-node branch onto that branch\'s own branch point', () => {
+    const { record } = migrateRecord(v2())
+    const l1 = byTitle(record, 'L1')
+    const l2 = byTitle(record, 'L2')
+
+    // L1 is one node, so it is the foot and the top of its branch at once and there is no
+    // node below it on its own trunk to come down to. What is below its foot is the edge the
+    // branch itself leaves, A's, so L2 lands there and becomes L1's sibling rather than its
+    // child. The two are then drawn side by side off one edge, which is as close to the old
+    // picture as schema 3 can come.
+    expect(l1.leftBranches).toEqual([])
+    expect(byTitle(record, 'A').leftBranches).toEqual([l1.id, byTitle(record, 'M1').id, l2.id])
+
+    // And it merges as any other fork off A does, one row up.
+    expect(l2.mergePoint).toBe(byTitle(record, 'B').id)
+    expect(l1.mergePoint).toBe(byTitle(record, 'B').id)
+    expect(validateRecord(record).ok).toBe(true)
+  })
+
+  it('leaves a fork on a trunk top that gained a terminus where it was', () => {
+    const { record } = migrateRecord(v2Bubble())
+
+    // A held a fork and had nothing above it in schema 2, but every scope is closed before
+    // anything is moved, so by then the plan's close rises from A and the fork names a real
+    // trunk edge. Nothing moves, and the order of the two passes is what decides it.
+    expect(byTitle(record, 'A').rightBranches).toEqual([byTitle(record, 'X1').id])
+    expect(validateRecord(record).ok).toBe(true)
+  })
+
+  // Returns: schema 2 could not say where a branch rejoins, because in schema 2 no branch
+  // did. The pass therefore invents a merge for every branch rather than translating one,
+  // and these five tests are the invention: that it happens at all, the height it picks,
+  // the two things that clamp that height, and the floor it clamps to.
+  it('gives every branch a return, stored on the top of the branch', () => {
+    const { record } = migrateRecord(v2())
+    const branches = branchesIn(record)
+    expect(branches).toHaveLength(5) // R0 and R1, L1 and M1, and L2 once it has moved to A
+
+    for (const branch of branches) {
+      // A return leaves the branch at its top, so that is the end it is stored on. Reading
+      // it anywhere else would be reading a copy of it.
+      expect(branch.mergePoint).toBeTruthy()
+      expect(record.nodes[branch.tipId].mergePoint).toBe(branch.mergePoint)
+      expect(record.nodes[branch.mergePoint]).toBeDefined()
+    }
+
+    // A project node always has its own close above it, so it is never a trunk's top and
+    // never carries the field at all.
+    expect(byTitle(record, 'Plan').mergePoint).toBeUndefined()
+
+    expect(validateRecord(record).ok).toBe(true)
+  })
+
+  it('merges each branch at the edge level with its own top', () => {
+    const { record } = migrateRecord(v2())
+
+    // R1 is one node, and a branch's foot sits one row above its branch point, so R1's top
+    // is level with B and the return joins the edge rising from B. R0 leaves the plan's
+    // base, the first edge on the trunk, so its one node is level with A.
+    expect(byTitle(record, 'R1').mergePoint).toBe(byTitle(record, 'B').id)
+    expect(byTitle(record, 'R0').mergePoint).toBe(byTitle(record, 'A').id)
+
+    // A taller branch, on a trunk with room above it, shows that the height is the branch's
+    // own and not a constant: X1 and X2 put the top two rows above the branch point A, level
+    // with C, and the trunk carries on above C, so nothing clamped the choice. That is the
+    // whole of the claim the pass makes; the drawing keeps the geometry schema 2 gave it and
+    // gains a short return line at the top of the branch.
+    const level = migrateRecord(v2Level()).record
+    expect(byTitle(level, 'X2').mergePoint).toBe(byTitle(level, 'C').id)
+    expect(byTitle(level, 'C').next).toBe(byTitle(level, 'D').id)
+    expect(byTitle(level, 'X1').mergePoint).toBeNull() // not the top, so it holds nothing
+    expect(validateRecord(level).ok).toBe(true)
+  })
+
+  it('clamps the merge down where that level runs past the top of the trunk', () => {
+    const { record } = migrateRecord(v2Tall())
+    const close = closeOf(record, byTitle(record, 'Plan').id)
+
+    // The fork off A is three nodes tall and A has one node above it, so the row its top
+    // wants is past the end of the trunk. The highest edge the trunk has is the one rising
+    // from B into the plan's close, and that is where the return lands.
+    expect(byTitle(record, 'X3').mergePoint).toBe(byTitle(record, 'B').id)
+    expect(byTitle(record, 'B').next).toBe(close.id)
+
+    // Nothing higher was available to clamp to: a plan ends at its close, so no edge rises
+    // from it and no return can join there.
+    expect(close.next).toBe(null)
+
+    expect(validateRecord(record).ok).toBe(true)
+  })
+
+  it('clamps the merge down where that level would cross the close of the enclosing scope', () => {
+    const { record } = migrateRecord(v2Scoped())
+    const subClose = closeOf(record, byTitle(record, 'Sub').id)
+
+    // The fork off B is two nodes tall, so the row its top wants is the row the close of
+    // Sub takes. B was opened inside Sub, and a branch cannot reach out of the scope it was
+    // opened in, so the return lands one edge lower, on the last edge that scope owns: the
+    // one rising from C into the close.
+    expect(byTitle(record, 'X2').mergePoint).toBe(byTitle(record, 'C').id)
+    expect(byTitle(record, 'C').next).toBe(subClose.id)
+
+    // The scope is the only bar here, which is what makes this case distinct from the one
+    // above: Sub's close does have an edge above it, rising into the plan's own close, so
+    // the height was refused for reaching out of a scope and not for having nowhere to land.
+    expect(subClose.next).toBe(closeOf(record, byTitle(record, 'Plan').id).id)
+
+    expect(validateRecord(record).ok).toBe(true)
+  })
+
+  it('gives a branch whose only legal merge is its own edge that bubble', () => {
+    const { record } = migrateRecord(v2Bubble())
+
+    // On a trunk of Plan, A and the plan's close there is no node strictly above A, so the
+    // only edge the branch can return to is the one it left. A bubble is legal wherever a
+    // trunk edge rises at all, which is what gives the clamp a floor to reach.
+    expect(byTitle(record, 'X1').mergePoint).toBe(byTitle(record, 'A').id)
+    expect(validateRecord(record).ok).toBe(true)
+
+    // Returns: the same floor takes a branch hanging off another branch, at the position
+    // re-homing leaves it in. Y1 sits on X1, and the one node above X1 on that branch's own
+    // trunk is X2, its top, whose rising line is a return rather than a trunk edge. So no
+    // higher edge is offered and Y1 bubbles, one branch trunk out from the plan's.
+    const { record: nested } = migrateRecord(v2Nested())
+    expect(byTitle(nested, 'Y1').mergePoint).toBe(byTitle(nested, 'X1').id)
   })
 
   it('reports the note-file rename a reminted id implies', () => {

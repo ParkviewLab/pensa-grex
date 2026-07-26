@@ -31,7 +31,7 @@ import * as M from './model/mutations.js'
 // deliberately not exposed.
 const DOMAIN_OPS = new Set([
   'addTree', 'insertTask', 'addTaskAbove', 'addTaskBelow', 'addBranchAbove', 'addBranchBelow',
-  'wrapRun', 'unwrapProject',
+  'openBranch', 'setMergePoint', 'wrapRun', 'unwrapProject',
   'setTitle', 'setNote', 'setStatus', 'cycleStatus', 'convertKind', 'toggleFlag',
   'makeHere', 'clearHere', 'deleteTask',
   'moveTaskNode', 'moveSubtree', 'detachToTree', 'reorderRoot', 'moveIntoLine',
