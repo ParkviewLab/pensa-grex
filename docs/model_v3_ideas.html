@@ -82,6 +82,8 @@ svg .hull,svg .term,svg .jn{ fill:#141412; }
 svg .jnr{ fill:#1f8f8a; }
 svg .trunk{ stroke:#141412; stroke-width:2.2; fill:none; }
 svg .ret{ stroke:#1f8f8a; stroke-width:2.2; fill:none; }
+/* the cap at a severed end, parallel to the line passed under and a shade thinner than its own */
+svg .cap{ stroke:#1f8f8a; stroke-width:1.6; fill:none; }
 svg .bad{ stroke:#d75f2e; stroke-width:2.2; fill:none; stroke-dasharray:5 4; }
 svg .badr{ stroke:#d75f2e; stroke-width:2.2; fill:none; }
 svg .brk{ stroke:#6b6b64; stroke-width:1; fill:none; }
@@ -95,13 +97,14 @@ svg .tb{ fill:#d75f2e; font-size:10.5px; }
 
 <p class="eyebrow">Design record &middot; PensaGrex</p>
 <h1>Model v3: the names, the merge, and the invariants it brings with it</h1>
-<p class="status">A record of one design conversation, not a plan and not a decision. It states what was
-settled in discussion, what follows from it, and what is still open. Nothing here is implemented in code; the
-running app is schema&nbsp;2, in which forks never rejoin. The amendment it asks of
-<code>docs/northstar.md</code> is set out below and landed on 2026-07-26, so axiom numbers on this page are
-the amended ones: single entry and single exit is axiom&nbsp;2, every fork returns is axiom&nbsp;3, and what
-were axioms 3 through 8 are now 4 through 9. Section&nbsp;2 keeps the pre-amendment numbers where it quotes
-what changed.</p>
+<p class="status">A record of one design conversation. It states what was settled in discussion, what follows
+from it, and what is still open. All of it shipped as v3.0.0 on 2026-07-26 and the running app is schema&nbsp;3;
+where v3.1.0 changed how a domain is drawn, the paragraph or bullet is marked <span class="tag">amended
+v3.1.0</span> and says what it replaced, since superseded reasoning is part of a record. The amendment this
+design asked of <code>docs/northstar.md</code> is set out below and landed on 2026-07-26, so axiom numbers on
+this page are the amended ones: single entry and single exit is axiom&nbsp;2, every fork returns is
+axiom&nbsp;3, and what were axioms 3 through 8 are now 4 through 9. Section&nbsp;2 keeps the pre-amendment
+numbers where it quotes what changed.</p>
 
 <div class="legend">
   <span><i class="k1"></i> trunk and branch lines, existing structure</span>
@@ -411,7 +414,7 @@ unsatisfiable.</p>
 <text class="tm" x="180" y="482" text-anchor="end">and below T</text>
 </svg>
 </div>
-<figcaption>The walk descends the trunk and, at the foot of a branch trunk, hops to the parent trunk at its
+<figcaption>The walk descends the trunk and, at the foot of a branch trunk, steps across to the parent trunk at its
 branch point, so the plan's base ProjectNode always terminates the search and every position has exactly one
 innermost enclosing scope. Each TerminusNode passed on the way down means skipping the ProjectNode it
 closes.</figcaption>
@@ -489,7 +492,7 @@ keep the picture planar.</p>
 
 <figure>
 <div class="frame">
-<svg viewBox="0 0 820 340" role="img" aria-label="Three span relations, all legal. Nested and disjoint spans draw without crossings; partially overlapping spans on one side cross, and the outer return line hops the inner trunk.">
+<svg viewBox="0 0 820 340" role="img" aria-label="Three span relations, all legal. Nested and disjoint spans draw without crossings; partially overlapping spans on one side cross, and the outer return line passes behind the inner trunk.">
 <defs><marker id="a4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#1f8f8a"/></marker></defs>
 
 <!-- panel 1: nested -->
@@ -514,21 +517,23 @@ keep the picture planar.</p>
 <text class="tm" x="445" y="196">they may share</text>
 <text class="tm" x="445" y="209">one lane</text>
 
-<!-- panel 3: partial overlap, drawn with a hop -->
+<!-- panel 3: partial overlap, drawn with an underpass -->
 <text class="tt" x="600" y="28">partial overlap</text>
 <path class="trunk" d="M660,300 V60"/>
 <circle class="jn" cx="660" cy="270" r="3.5"/><circle class="jn" cx="660" cy="230" r="3.5"/>
 <circle class="jn" cx="660" cy="190" r="3.5"/><circle class="jn" cx="660" cy="150" r="3.5"/>
 <circle class="jn" cx="660" cy="110" r="3.5"/>
 <path class="trunk" d="M660,250 H750 V170"/>
-<path class="ret" d="M750,170 H718 Q710,154 702,170 H666" marker-end="url(#a4)"/>
+<path class="ret" d="M750,170 H714"/><path class="ret" d="M706,170 H666" marker-end="url(#a4)"/>
+<path class="cap" d="M714,165.6 V174.4"/><path class="cap" d="M706,165.6 V174.4"/>
 <path class="trunk" d="M660,210 H710 V130"/><path class="ret" d="M710,130 H666" marker-end="url(#a4)"/>
-<text class="tm" x="600" y="322">the outer return hops the inner trunk</text>
+<text class="tm" x="600" y="322">the outer return passes behind the inner trunk</text>
 </svg>
 </div>
 <figcaption>Nodes are drawn as dots, since only the spans matter. All three are legal. A crossing arises only
-where a lateral line reaches past a trunk nearer the spine than its own lane, which makes the crossing relation
-a strict order and therefore acyclic: the outer line hops the inner trunk, never the reverse.</figcaption>
+where a lateral line reaches past a line nearer the spine than its own lane, which makes the crossing relation
+a strict order and therefore acyclic: the outer line passes behind the inner one, never the
+reverse.</figcaption>
 </figure>
 
 <p>Order is stored per node, so one thing has to be settled that the arrays do not say: how two branches
@@ -558,6 +563,12 @@ That is a use for an order that is authorial rather than derived.</p>
 <p>One geometric rule replaces the structural invariant: no crossing may fall in a node's space, meaning
 between the top of a node's dot and the bottom of its label shape. Section&nbsp;9 is why that is always
 achievable, and section&nbsp;10 is how a crossing is drawn so that it cannot be read as a junction.</p>
+
+<p><span class="tag">amended v3.1.0</span> Under the shared row grid this rule held by construction, and there
+was nothing to check; without the grid it is checked after the solve and repaired by lifting, and a residual is
+reported rather than drawn in silence. The rule is unchanged; its standing is now empirical rather than
+provable. Section&nbsp;9 records what was traded for what, and <code>tree-layout.md</code> carries the
+mechanism.</p>
 
 <h2>8 &nbsp;The one nesting rule that stays</h2>
 
@@ -608,30 +619,31 @@ freely as the author likes.</figcaption>
 <p>This rule survives the decision in section&nbsp;7 because it was never about crossings; a branch line runs
 beside a scope without touching it. It is about the promise axiom&nbsp;3 makes, that a scope can be
 collapsed as a single block, and a return line landing inside a collapsed scope has nowhere to land. The two
-nesting rules had two different justifications, and only this one turns on something a hop cannot repair. It
+nesting rules had two different justifications, and only this one turns on something no drawing convention can
+repair. It
 also holds on both sides of the trunk, since collapsibility has nothing to do with which half-plane a branch
 occupies.</p>
 
 <p>It follows that one reshaping still has to be refused rather than drawn. Extending a branch's merge point
-past a same-side neighbour is now legal and merely costs a hop, so the question of what to do about that
+past a same-side neighbour is now legal and merely costs a crossing, so the question of what to do about that
 dissolves. Extending it across the close of a scope the branch was opened outside does not: it breaks collapse.
 The honest handling is the one that was going to be offered for the other case, to refuse the move and name the
 two legal alternatives in the same breath, either merging below where that scope opens or above where it
 closes.</p>
 
-<h2>9 &nbsp;What the layout engine would owe</h2>
+<h2>9 &nbsp;What the layout engine owes</h2>
 
-<p>Today a branch costs the trunk nothing vertically. <code>buildRowGrid</code> sets each row's pitch from
-the tallest measured card in that row plus a fixed gap, plus a fixed extra where a fork junction sits below
-it, and <code>assignRows</code> is a plain depth-first walk: a branch occupies its own rows in its own lane
-while the trunk carries on up the same grid, and no two paths ever have to be reconciled.</p>
+<p>Before v3 a branch cost the trunk nothing vertically. Each row's pitch came from the tallest measured card in
+that row plus a fixed gap, plus a fixed extra where a fork junction sat below it, and row assignment was a plain
+depth-first walk: a branch occupied its own rows in its own lane while the trunk carried on up the same grid, and
+no two paths ever had to be reconciled.</p>
 
-<p>A merge ends that. A branch trunk of five nodes that leaves one edge and returns two rows higher either
-needs its return line to fall three rows, or needs the trunk to acquire room between the branch point and the
-merge point. Row assignment stops being a walk and becomes a constraint: a vertical band reserved on the
-parent for each branch spanning it, sized to that branch's height. The algorithmic shape is not new, since
+<p>A merge ends that. A branch trunk of five nodes that leaves one edge and returns just above it either needs
+its return line to fall, which it may not, or needs the trunk to acquire room between the branch point and the
+merge point. Row assignment stops being a walk and becomes a constraint: space reserved on the parent for each
+branch spanning it, sized to that branch's height. The algorithmic shape is not new, since
 <code>assignLanes</code> already reserves a contiguous band of lanes wide enough for each branch's whole
-subtree and packs bands first-fit against the row ranges already placed; it is the same idea turned through
+subtree and packs bands first-fit against the extents already placed; it is the same idea turned through
 ninety degrees.</p>
 
 <figure>
@@ -680,39 +692,56 @@ ninety degrees.</p>
 </div>
 <figcaption>The pitch between the two trunk nodes grows to the branch's height, and the junctions sit where
 they always sit, against the nodes bounding the gap, so the required length of a stretched edge is a plain
-sum: clearance, the branch's height, clearance.</figcaption>
+sum: clearance, the branch's height, clearance. The figure is schematic in one respect: it draws the lateral
+lines flat, as v3.0.0 did, where they now climb at twelve degrees.</figcaption>
 </figure>
 
-<p>Two further pieces, and the shared row grid makes both cheap. Row assignment becomes a longest-path
-computation: give every node an integer row subject to the "strictly above" constraints, which are a trunk's
-own order, a branch's foot above its branch point, and the parent node above a merge point above that branch's
-tip. Because the merge clauses forbid a merge below its own branch point, that constraint graph is acyclic, so
-the computation cannot fail; and edge lengths have no upper bound, so any clearance the drawing needs can be
-created. Infeasibility is not a risk here. Height is the only cost.</p>
+<p>Assignment becomes a longest-path computation: give every node a height subject to the "strictly above"
+constraints, which are a trunk's own order, a branch's foot above its branch point, and the node above a merge
+point above that branch's tip. Because the merge clauses forbid a merge below its own branch point, that
+constraint graph is acyclic, so the computation cannot fail; and no constraint puts a ceiling on an edge, so any
+clearance the drawing needs can be created. Infeasibility is not a risk here. Height is the only cost.</p>
 
-<p>Crossing avoidance then comes almost for free, which is the answer to whether the engine can always keep a
-crossing out of a node's space. <code>buildRowGrid</code> gives one y per row for every lane, so cards are
-aligned across trunks, and between two adjacent rows there is a clearance band free on every trunk at once; a
-lateral run placed in that band crosses trunk lines and nothing else, wherever it goes. Three details keep the
-guarantee. A run must be anchored to the row's band rather than to its own card's height, since a merge hanging
-under a short card would otherwise run at a height where a taller card in the same row still sits. Two runs
-wanting the same band on the same side of a trunk would lie on top of each other, which reads worse than a
-crossing, so they need separate bands, and that means one more row. And the band must be at least as tall as a
-hop, which puts a floor under <code>rowGap</code>.</p>
+<p><span class="tag">amended v3.1.0</span> The layering survived. The shared row grid it layered onto did not,
+and the paragraph that stood here defended that grid, so what it argued is worth keeping in view: one y per row
+for every lane leaves a clearance band free on every trunk at once, so a lateral run placed in that band crosses
+trunk lines and nothing else, wherever it goes. Crossing avoidance came free, which is what made the geometric
+rule in section&nbsp;7 provable. What it cost was the twelve-degree lateral, since a line that climbs cannot
+stay inside a band, and it cost the tight vertical packing with it: a row is as tall as the tallest card
+anywhere across it, and cards in unrelated plans were pinned to a shared y for no reason the author could
+see.</p>
 
-<h2>10 &nbsp;The hop, and the height it costs</h2>
+<p>Gary chose the angle over the guarantee, and on the evidence the exchange is favourable. The nine live
+domains and the two committed fixtures are shorter drawn in pixels than they were on the grid, 10,883 pixels of
+height against 11,096; every lateral leaves and
+arrives at exactly twelve degrees; and the invariant the grid guaranteed is met everywhere after a repair pass
+that closed every conflict it found. The unknown per node is now a real number of pixels rather than an integer
+row shared across lanes, a branch's return supplies a genuine inequality whose slack is the trunk drawn above
+the branch's last card, and the clearance an edge needs is derived from the angle rather than fixed.
+<code>tree-layout.md</code> carries the constraints, the derivation, and the repair.</p>
+
+<h2>10 &nbsp;The underpass, and the height it costs</h2>
 
 <p>A crossing must not be mistakable for a junction. A junction is marked in the gap between two stations, so
 a lateral line passing unmarked through that same band would still read as lines meeting, and the drawing would
-assert a join that does not exist. The remedy is the line hop, a small arc where the crossing line jumps the
-trunk, standard in subway and circuit drawing alike and cheap in SVG. The convention worth fixing now is which
-line hops: always the lateral one, so that a trunk runs unbroken from base to close and the eye can follow a
-spine without checking whether it has been interrupted. That is always well defined, since a lateral line
-crosses only trunks nearer the spine than its own lane; the outer line hops and the inner trunk carries on.</p>
+assert a join that does not exist. The convention worth fixing is which line yields: always the lateral one, so
+that a trunk runs unbroken from base to close and the eye can follow a spine without checking whether it has
+been interrupted. That is always well defined, since a lateral line crosses only lines nearer the spine than its
+own lane; the outer line yields and the inner one carries on.</p>
+
+<p><span class="tag">amended v3.1.0</span> The mark itself was first specified as a line hop, a small arc where
+the crossing line jumps the other, standard in subway and circuit drawing alike and cheap in SVG. It is an
+underpass instead. The lateral is cut where it crosses, and each severed end carries a cap lying parallel to the
+line being passed under, so that the lateral reads as passing behind rather than as stopping. A lateral yields
+to a return as well as to a trunk, which is the commoner case: the live library has ten branch-crosses-return
+pairs against two branch-crosses-trunk. The hop was drawn as a quadratic hump and was gated on a flat segment,
+which a twelve-degree lateral never presents; an underpass works at any angle. Where the two lines meet
+shallowly the cut is made by clipping the lateral with a strip along the line it passes under, so the visible
+end is parallel to what runs on rather than square to the lateral's own direction.</p>
 
 <figure>
 <div class="frame">
-<svg viewBox="0 0 820 400" role="img" aria-label="Left: branch A spans a to c and branch B is a bubble at b nested inside it. Right: B's merge point moved up to d, so the spans overlap partially and A's return line hops B's trunk.">
+<svg viewBox="0 0 820 400" role="img" aria-label="Left: branch A spans a to c and branch B is a bubble at b nested inside it. Right: B's merge point moved up to d, so the spans overlap partially and A's return line passes behind B's trunk.">
 <defs><marker id="a9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#1f8f8a"/></marker></defs>
 
 <text class="tt" x="20" y="28">B nests inside A</text>
@@ -728,7 +757,7 @@ crosses only trunks nearer the spine than its own lane; the outer line hops and 
 <path class="trunk" d="M120,232 H190 V218"/><path class="ret" d="M190,218 H126" marker-end="url(#a9)"/>
 <text class="tm" x="202" y="228">B</text>
 
-<text class="tt" x="470" y="28">B extends past A: one hop</text>
+<text class="tt" x="470" y="28">B extends past A: one underpass</text>
 <path class="trunk" d="M560,350 V80"/>
 <rect class="hull" x="542" y="346" width="36" height="8" rx="4"/>
 <circle class="jn" cx="560" cy="300" r="3.5"/><text class="tm" x="544" y="304" text-anchor="end">a</text>
@@ -737,19 +766,20 @@ crosses only trunks nearer the spine than its own lane; the outer line hops and 
 <circle class="jn" cx="560" cy="150" r="3.5"/><text class="tm" x="544" y="154" text-anchor="end">d</text>
 <rect class="term" x="542" y="96" width="36" height="8" rx="4"/><text class="tm" x="586" y="108">T</text>
 <path class="trunk" d="M560,275 H690 V175"/>
-<path class="ret" d="M690,175 H638 Q630,159 622,175 H566" marker-end="url(#a9)"/>
+<path class="ret" d="M690,175 H634"/><path class="ret" d="M626,175 H566" marker-end="url(#a9)"/>
+<path class="cap" d="M634,170.6 V179.4"/><path class="cap" d="M626,170.6 V179.4"/>
 <text class="tm" x="702" y="228">A</text>
 <path class="trunk" d="M560,225 H630 V125"/><path class="ret" d="M630,125 H566" marker-end="url(#a9)"/>
 <text class="tm" x="642" y="140">B</text>
-<text class="tm" x="470" y="372">B's merge moved to d; A's return hops B's trunk</text>
+<text class="tm" x="470" y="372">B's merge moved to d; A's return passes behind B's trunk</text>
 </svg>
 </div>
 <figcaption>Branch A spans a to c; branch B, opened at b, was a bubble nested inside it. Extending B's merge
 to d makes the spans overlap partially, which is now simply a shape with one crossing in it: A's return line,
-being the outer of the two, hops B's trunk.</figcaption>
+being the outer of the two, passes behind B's trunk.</figcaption>
 </figure>
 
-<p>The second cost of crossings is height. Corridors and merge constraints each add rows, so a plan carrying
+<p>The second cost of crossings is height. Corridors and merge constraints each add height, so a plan carrying
 much parallel work is read zoomed out, where a 138-pixel card's title is illegible. That cost is real and is
 accepted; the remedy for it is deferred, and the two paragraphs below record the thinking rather than commit to
 anything.</p>
@@ -759,7 +789,7 @@ readable, divides the labour the way axiom&nbsp;6 asks: the shape carries the st
 is read on demand rather than shrunk past legibility. One constraint would keep it safe, and it is worth
 writing down now because it is easy to violate later: the magnification must be a paint-time transform and
 never a layout input, since a hover that changed a card's measured height would send
-<code>buildRowGrid</code> reflowing the plan under the pointer. Three limits go with it. Magnification is a
+the height solve reflowing the plan under the pointer. Three limits go with it. Magnification is a
 probe rather than a survey, and a reader zoomed out usually wants to know what three parallel strands are, which
 hover answers one at a time. It is mouse-only, so selection would have to magnify identically for anyone
 driving from the keyboard. And at low zoom the magnified card is large relative to the drawing, so it occludes
@@ -937,7 +967,9 @@ scope that owns it.</p>
 
 <h2>15 &nbsp;Where this stands</h2>
 
-<p>All of it is settled unless listed as open below, and the whole of it is scheduled as v3.0.0.</p>
+<p>All of it is settled unless listed as open below. Everything here shipped as v3.0.0, except where a bullet is
+marked <span class="tag">amended v3.1.0</span>, which changed how a domain is drawn and touched neither the record
+nor the model.</p>
 
 <h3>Structure</h3>
 <ul class="log">
@@ -961,20 +993,28 @@ it with one task inside.</li>
 
 <h3>Drawing</h3>
 <ul class="log">
-<li>Branch and return lines may cross trunk lines. A crossing is drawn as a line hop in which the lateral
-line hops and the trunk runs unbroken; no crossing may fall in a node's space, so lateral runs go in the
-clearance band between rows.</li>
+<li>Branch and return lines may cross trunk lines, and each other. The line nearer the spine runs unbroken and
+the lateral yields. <span class="tag">amended v3.1.0</span> The yield is drawn as an underpass, the lateral cut
+with a cap parallel to the line it passes under, rather than as a hop over it; and a lateral yields to a return
+as well as to a trunk.</li>
+<li>No crossing may fall in a node's space, meaning between the top of a node's dot and the bottom of its label
+shape. <span class="tag">amended v3.1.0</span> The rule stands, but without the shared row grid it is checked
+after the solve and repaired by lifting rather than guaranteed by construction, with any residual reported on
+the layout.</li>
 <li>Lateral order is the author's and is stored, innermost first, with a new branch landing innermost by
 default because a single-edge span costs no crossings there. Which side a branch hangs on stays stored.</li>
 <li>A branch point is drawn just above the node below its edge and a merge point just below the node above
 its edge, unconditionally, measured from the label shape rather than from a bare dot.</li>
-<li>Row assignment becomes a longest-path layering, which cannot fail because the merge clauses keep the
+<li>Height assignment is a longest-path layering, which cannot fail because the merge clauses keep the
 constraint graph acyclic. The height that crossings and corridors add is accepted as a cost.</li>
-<li>The 12-degree branch tilt and the per-line lift that carried a branch's cards up along it are retired,
-since the lift moved cards off the shared row grid and it is that grid which makes a clearance band empty at
-every lane at once. Cards are aligned to their row and a lateral line is a horizontal run in the band plus a
-vertical riser, which is what makes "no crossing in a node's space" hold rather than merely be hoped for.
-See <code>tree-layout.md</code>.</li>
+<li><span class="tag">amended v3.1.0</span> v3.0.0 retired the 12-degree branch tilt in favour of a shared row
+grid, on which a lateral line was a horizontal run in a clearance band plus a vertical riser. Gary reversed
+that: the angle is back at both ends of every lateral and the grid is gone. A node's height is solved in pixels,
+so nothing is aligned across lanes and consecutive cards sit at their minimum, 25 pixels from a card's bottom
+edge to the centre of the circle beneath it, wherever nothing forces them apart; a lateral departs a fixed clearance above a circle and arrives a fixed clearance below a card's
+bottom edge; and over a span wider than one lane it is a ramp, a flat run, and a ramp, so every lateral in the
+drawing climbs the same total and a one-lane branch is a single straight diagonal. Section&nbsp;9 records what
+was traded; <code>tree-layout.md</code> carries the mechanism.</li>
 </ul>
 
 <h3>Vocabulary and file</h3>
