@@ -47,7 +47,7 @@ export function computeDomainLayout(model, sizes, opts = {}) {
   o.junctionExtra = Math.max(o.junctionExtra, 2 * o.junctionInset + 2 * o.hopRadius + nodeClear - o.rowGap)
 
   if (model.trees.length === 0) {
-    return { stations: [], dots: [], cursors: [], tracks: [], junctions: [], bounds: { w: o.margin * 2, h: o.margin * 2 } }
+    return { stations: [], dots: [], cursors: [], tracks: [], junctions: [], bounds: { w: o.margin * 2, h: o.margin * 2 }, metrics: o }
   }
 
   const row = assignRows(model)
@@ -265,5 +265,8 @@ export function computeDomainLayout(model, sizes, opts = {}) {
 
   const bounds = { w: maxX - minX + 2 * o.margin, h: maxY - minY + 2 * o.margin }
 
-  return { stations, dots, cursors, tracks, junctions, bounds }
+  // The resolved constants ride along with the drawing, so that a consumer (a test, a
+  // measurement, a future overlay) reads the numbers the engine actually used rather than
+  // restating them and drifting from them.
+  return { stations, dots, cursors, tracks, junctions, bounds, metrics: o }
 }

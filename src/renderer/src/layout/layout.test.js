@@ -16,10 +16,13 @@ import * as M from '../../../shared/model/mutations.js'
 function syntheticSizes(model) {
   const sizes = new Map()
   for (const [id, node] of model.nodes) {
-    // A terminus carries no title, so there is no text to wrap: it renders as a
-    // short bar (style.css .card.terminus{width:64px;height:10px}).
+    // A terminus carries no title, so there is no text to wrap, but it is drawn as the
+    // project hull turned upside down and so takes the project card's width and its minimum
+    // height (style.css: .card{width:188px}, .card.terminus{min-height:58px}). It was a short
+    // bar before stage 5 and this fixture still said so, which hid every clearance question a
+    // full-width close asks.
     if (node.kind === 'terminus') {
-      sizes.set(id, { cardW: 64, cardH: 10 })
+      sizes.set(id, { cardW: 188, cardH: 58 })
       continue
     }
     const lines = node.here ? 3 : node.title.length > 18 ? 2 : 2
@@ -42,17 +45,22 @@ function overlaps(a, b) {
   return !(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top)
 }
 
-// --- the row grid, the clearance bands, and the lateral runs in them ----------
+// --- the row grid, the clearance bands, and the lateral lines in them ----------
 
-// Half a station dot. layout.js reads it from style.css (.dot{width:11px}) and a station does
-// not report it, so the one number has to be spelled again here: a node's space begins at the
-// top of its dot, and so does the clearance band running above that node's row.
-const DOT_RADIUS = 6
-
-// A node's space, which no lateral run may enter: the top of its dot down to the bottom of
-// its label shape (docs/model_v3_ideas.md, section 7).
-function nodeSpace(station) {
-  return { top: station.anchorY - DOT_RADIUS, bottom: station.cardTop + station.cardH }
+// A node's space, which no lateral line may enter: from the top of its dot down to the bottom
+// of its label shape, across the card's own width (docs/model_v3_ideas.md, section 7). A
+// rectangle rather than a pair of heights, because a lateral line need not be horizontal: a
+// height comparison alone would say a diagonal enters every node at that height, in every lane.
+//
+// The dot's radius comes from the drawing itself (`layout.metrics`) rather than being restated
+// here, so a test can never be measuring against a number the engine has stopped using.
+function nodeRect(station, metrics) {
+  return {
+    left: station.x - station.cardW / 2,
+    right: station.x + station.cardW / 2,
+    top: station.anchorY - metrics.dotRadius,
+    bottom: station.cardTop + station.cardH,
+  }
 }
 
 // The rows the drawing reveals, base first. Every station on one row shares that row's card
@@ -76,7 +84,7 @@ function bandsOf(layout) {
   const rows = rowsOf(layout)
   const bands = []
   for (let i = 0; i + 1 < rows.length; i++) {
-    bands.push({ low: rows[i].anchorY - DOT_RADIUS, high: rows[i + 1].cardTop + rows[i + 1].tallest })
+    bands.push({ low: rows[i].anchorY - layout.metrics.dotRadius, high: rows[i + 1].cardTop + rows[i + 1].tallest })
   }
   return bands
 }
@@ -110,15 +118,42 @@ function verticalsOf(layout) {
   return verticals
 }
 
-// Which lateral runs fall in a node's space, named rather than counted so that a failure says
-// which run, at what height, and whose station it has walked into.
-function runsInNodeSpace(layout, label) {
+// Every segment of a lateral line that is not vertical: the flat leg of a branch or a return
+// today, a twelve-degree climb once the engine draws one. The vertical riser into a card is
+// excluded because a spine is meant to pass behind its own label.
+function lateralSegments(layout) {
+  const segs = []
+  for (const t of layout.tracks) {
+    if (t.kind !== 'branch' && t.kind !== 'return') continue
+    for (let i = 1; i < t.points.length; i++) {
+      const [x1, y1] = t.points[i - 1]
+      const [x2, y2] = t.points[i]
+      if (x1 !== x2) segs.push({ kind: t.kind, x1, y1, x2, y2, hops: t.hops || [] })
+    }
+  }
+  return segs
+}
+
+// Whether a segment meets a rectangle: the segment clipped to the rectangle's x-range, then its
+// y compared at the two clipped ends. Sound for any straight segment, which is what lets the
+// same sweep serve a flat run and a diagonal.
+function segmentMeetsRect(seg, rect) {
+  const lo = Math.max(Math.min(seg.x1, seg.x2), rect.left)
+  const hi = Math.min(Math.max(seg.x1, seg.x2), rect.right)
+  if (lo > hi) return false
+  const yAt = (x) => (seg.x1 === seg.x2 ? seg.y1 : seg.y1 + ((x - seg.x1) * (seg.y2 - seg.y1)) / (seg.x2 - seg.x1))
+  const [a, b] = [yAt(lo), yAt(hi)]
+  return Math.max(a, b) >= rect.top && Math.min(a, b) <= rect.bottom
+}
+
+// Which lateral lines walk into a node's space, named rather than counted so that a failure says
+// which line, where, and whose station it has walked into.
+function linesInNodeSpace(layout, label) {
   const found = []
-  for (const run of lateralRuns(layout)) {
+  for (const seg of lateralSegments(layout)) {
     for (const s of layout.stations) {
-      const space = nodeSpace(s)
-      if (run.y >= space.top && run.y <= space.bottom) {
-        found.push(label + ': a ' + run.kind + ' run at y=' + run.y + ' lies in ' + s.id + "'s space")
+      if (segmentMeetsRect(seg, nodeRect(s, layout.metrics))) {
+        found.push(label + ': a ' + seg.kind + ' line from (' + seg.x1 + ',' + seg.y1 + ') to (' + seg.x2 + ',' + seg.y2 + ') meets ' + s.id + "'s space")
       }
     }
   }
@@ -489,7 +524,7 @@ describe('computeDomainLayout — after drag-and-drop moves', () => {
     expect(countCrossings(layout)).toBe(0)
     // A move relocates whole branches, and with them the returns they now carry, so the rule
     // that survived the loss of the nesting invariant has to hold after each one too.
-    expect(runsInNodeSpace(layout, 'after the move')).toEqual([])
+    expect(linesInNodeSpace(layout, 'after the move')).toEqual([])
     const rects = layout.stations.map(rectOf)
     for (let i = 0; i < rects.length; i++) {
       for (let j = i + 1; j < rects.length; j++) expect(overlaps(rects[i], rects[j])).toBe(false)
@@ -584,7 +619,7 @@ describe('computeDomainLayout — the bubble, and junctions anchored to a line',
     const [fork, merge] = [...layout.junctions].sort((p, q) => q.y - p.y)
     expect(fork.y).toBeGreaterThan(merge.y) // the fork is the lower of the two
     // and both sit on the one edge Beta -> Omega, clear of the node bounding each end
-    expect(fork.y).toBeLessThan(beta.anchorY - DOT_RADIUS)
+    expect(fork.y).toBeLessThan(beta.anchorY - layout.metrics.dotRadius)
     expect(merge.y).toBeGreaterThan(omega.cardTop + omega.cardH)
     // the bubble itself runs alongside that edge, in its own lane between the two junctions
     expect(gamma.x).not.toBe(beta.x)
@@ -705,7 +740,7 @@ describe('computeDomainLayout — the band, and the flat run in it', () => {
     expect(runs).toHaveLength(2)
     for (const run of runs) {
       expect(run.y).toBeGreaterThan(firewall.cardTop + firewall.cardH)
-      expect(run.y).toBeLessThan(migrate.anchorY - DOT_RADIUS)
+      expect(run.y).toBeLessThan(migrate.anchorY - layout.metrics.dotRadius)
     }
   })
 })
@@ -795,9 +830,102 @@ describe("computeDomainLayout — no lateral run in a node's space", () => {
       expect(validateRecord(record)).toEqual({ ok: true, errors: [] })
       const model = buildModel(record)
       const layout = computeDomainLayout(model, syntheticSizes(model).sizes)
-      expect(lateralRuns(layout).length).toBeGreaterThan(0) // the sweep has something to sweep
-      offenders.push(...runsInNodeSpace(layout, name))
+      expect(lateralSegments(layout).length).toBeGreaterThan(0) // the sweep has something to sweep
+      offenders.push(...linesInNodeSpace(layout, name))
     }
     expect(offenders).toEqual([])
+  })
+})
+
+// Three properties that hold whatever the engine draws, asserted here so that a rewrite of the
+// vertical half has something to be measured against. None of them names a coordinate.
+describe('computeDomainLayout — properties of any drawing', () => {
+  it('reports the constants it drew with, and honours an override of one', () => {
+    const { layout } = loadFixtureLayout()
+    expect(layout.metrics.dotRadius).toBeGreaterThan(0)
+    expect(layout.metrics.anchorGap).toBeGreaterThan(0)
+
+    // A test that reads layout.metrics is only trustworthy if metrics is what the drawing was
+    // made with, so move one and watch the drawing move with it.
+    const record = JSON5.parse(fixtureRaw)
+    const model = buildModel(record)
+    const { sizes } = syntheticSizes(model)
+    const wide = computeDomainLayout(model, sizes, { anchorGap: 40 })
+    expect(wide.metrics.anchorGap).toBe(40)
+    const base = computeDomainLayout(model, sizes)
+    const id = base.stations[0].id
+    const gapOf = (l) => {
+      const s = l.stations.find((st) => st.id === id)
+      return s.cardTop - s.anchorY
+    }
+    expect(gapOf(base)).toBe(base.metrics.anchorGap)
+    expect(gapOf(wide)).toBe(40)
+  })
+
+  it('draws the same domain identically whatever order its nodes are written in', () => {
+    // Object key order reaches the drawing through Map iteration, which drives lane packing and
+    // any later repair sweep, so a record's spelling must not change its picture.
+    const record = JSON5.parse(fixtureRaw)
+    const reversed = { ...record, nodes: Object.fromEntries(Object.entries(record.nodes).reverse()) }
+    expect(validateRecord(reversed)).toEqual({ ok: true, errors: [] })
+
+    const one = layoutOf(record)
+    const other = layoutOf(reversed)
+    const key = (l) => JSON.stringify({
+      stations: [...l.stations].sort((a, b) => (a.id < b.id ? -1 : 1)).map((s) => [s.id, s.x, s.cardTop]),
+      tracks: [...l.tracks].map((t) => [t.kind, t.points]).sort(),
+      junctions: [...l.junctions].map((j) => [j.x, j.y]).sort(),
+      bounds: l.bounds,
+    })
+    expect(key(other)).toBe(key(one))
+  })
+
+  it('keeps every mark it draws inside the bounds it reports', () => {
+    const { layout } = loadFixtureLayout()
+    const inside = (x, y) => x >= 0 && y >= 0 && x <= layout.bounds.w && y <= layout.bounds.h
+    const outside = []
+    for (const t of layout.tracks) {
+      for (const [x, y] of t.points) if (!inside(x, y)) outside.push('a ' + t.kind + ' point at ' + x + ',' + y)
+    }
+    for (const j of layout.junctions) if (!inside(j.x, j.y)) outside.push('a junction at ' + j.x + ',' + j.y)
+    for (const d of [...layout.dots, ...layout.cursors]) if (!inside(d.x, d.y)) outside.push('a dot at ' + d.x + ',' + d.y)
+    for (const s of layout.stations) {
+      if (!inside(s.x - s.cardW / 2, s.cardTop) || !inside(s.x + s.cardW / 2, s.cardTop + s.cardH)) {
+        outside.push('the card of ' + s.id)
+      }
+    }
+    expect(outside).toEqual([])
+  })
+
+  it('grows a plan upward when a branch gains a card, and moves nothing below the branch point', () => {
+    // The property a reader relies on: adding to a strand does not disturb the work beneath it.
+    // Positions are compared relative to the plan's base, since the whole drawing is shifted to
+    // sit inside its margin and adding a card moves that shift.
+    const base = {
+      schemaVersion: 3, id: 'd_x', title: 'T', planOrder: ['p'],
+      nodes: {
+        p: mkProject('p', { next: 'a' }),
+        a: mkTask('a', { next: 'b', leftBranches: ['f1'] }),
+        b: mkTask('b', { next: 't' }),
+        t: mkTerminus('t'),
+        f1: mkTask('f1', { mergePoint: 'a' }),
+      },
+    }
+    const grown = structuredClone(base)
+    grown.nodes.f1.next = 'f2'
+    grown.nodes.f2 = mkTask('f2', { mergePoint: 'a' })
+    grown.nodes.f1.mergePoint = null
+
+    const before = layoutOf(base)
+    const after = layoutOf(grown)
+    const relative = (l) => {
+      const origin = l.stations.find((s) => s.id === 'p').cardTop
+      return new Map(l.stations.map((s) => [s.id, origin - s.cardTop]))
+    }
+    const [was, now] = [relative(before), relative(after)]
+    expect(now.get('a')).toBe(was.get('a')) // the branch point itself does not move
+    expect(now.get('f1')).toBe(was.get('f1')) // nor does the branch's own foot
+    for (const id of ['b', 't']) expect(now.get(id)).toBeGreaterThanOrEqual(was.get(id))
+    expect(after.bounds.h).toBeGreaterThan(before.bounds.h)
   })
 })
