@@ -11,7 +11,7 @@
 // engine) run over the standard American-English patterns (text/hyphen-en-us.js).
 // This is a self-contained, offline computation, and it is deterministic across
 // platforms, unlike the browser's own `hyphens: auto`, which Chromium supports
-// unevenly by OS. Applied only to the drawn label, so the forest data keeps its
+// unevenly by OS. Applied only to the drawn label, so the record keeps its
 // clean titles; used by render/card.js for both measurement and render, so the
 // two always agree. See docs/node-visual-system.md.
 

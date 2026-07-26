@@ -1,0 +1,155 @@
+{
+  "schemaVersion": 3,
+  "id": "d_work000000",
+  "title": "Work",
+  "planOrder": [
+    "p_road",
+    "p_hire"
+  ],
+  "nodes": {
+    "p_road": {
+      "id": "p_road",
+      "title": "Q3 roadmap",
+      "kind": "project",
+      "createdAt": "2026-06-20T08:00:00Z",
+      "note": null,
+      "flagged": false,
+      "next": "k_roadmap",
+      "rightBranches": [],
+      "leftBranches": []
+    },
+    "k_roadmap": {
+      "id": "k_roadmap",
+      "title": "Agree Q3 goals",
+      "kind": "task",
+      "createdAt": "2026-06-20T09:00:00Z",
+      "note": null,
+      "flagged": false,
+      "next": "k_specs",
+      "rightBranches": [],
+      "leftBranches": [],
+      "status": "completed",
+      "completedAt": "2026-06-22T17:00:00Z",
+      "here": false
+    },
+    "k_specs": {
+      "id": "k_specs",
+      "title": "Write specs",
+      "kind": "task",
+      "createdAt": "2026-06-22T17:05:00Z",
+      "note": null,
+      "flagged": false,
+      "next": "k_ship",
+      "rightBranches": [
+        "k_review"
+      ],
+      "leftBranches": [],
+      "status": "in-progress",
+      "completedAt": null,
+      "here": true
+    },
+    "k_ship": {
+      "id": "k_ship",
+      "title": "Ship v1",
+      "kind": "task",
+      "createdAt": "2026-06-22T17:06:00Z",
+      "note": null,
+      "flagged": false,
+      "next": "t_road",
+      "rightBranches": [],
+      "leftBranches": [],
+      "status": "todo",
+      "completedAt": null,
+      "here": false
+    },
+    "k_review": {
+      "id": "k_review",
+      "title": "Design review",
+      "kind": "task",
+      "createdAt": "2026-06-23T10:00:00Z",
+      "note": null,
+      "flagged": false,
+      "next": null,
+      "mergePoint": "k_ship",
+      "rightBranches": [],
+      "leftBranches": [],
+      "status": "todo",
+      "completedAt": null,
+      "here": false
+    },
+    "p_hire": {
+      "id": "p_hire",
+      "title": "Hiring",
+      "kind": "project",
+      "createdAt": "2026-06-15T08:00:00Z",
+      "note": null,
+      "flagged": false,
+      "next": "k_hiring",
+      "rightBranches": [],
+      "leftBranches": []
+    },
+    "k_hiring": {
+      "id": "k_hiring",
+      "title": "Open two roles",
+      "kind": "task",
+      "createdAt": "2026-06-15T09:00:00Z",
+      "note": null,
+      "flagged": false,
+      "next": "k_interview",
+      "rightBranches": [],
+      "leftBranches": [
+        "k_jd"
+      ],
+      "status": "in-progress",
+      "completedAt": null,
+      "here": true
+    },
+    "k_interview": {
+      "id": "k_interview",
+      "title": "Interview loop",
+      "kind": "task",
+      "createdAt": "2026-06-16T09:00:00Z",
+      "note": null,
+      "flagged": false,
+      "next": "t_hire",
+      "rightBranches": [],
+      "leftBranches": [],
+      "status": "todo",
+      "completedAt": null,
+      "here": false
+    },
+    "k_jd": {
+      "id": "k_jd",
+      "title": "Draft job descriptions",
+      "kind": "task",
+      "createdAt": "2026-06-16T09:05:00Z",
+      "note": null,
+      "flagged": false,
+      "next": null,
+      "mergePoint": "k_interview",
+      "rightBranches": [],
+      "leftBranches": [],
+      "status": "cancelled",
+      "completedAt": null,
+      "here": false
+    },
+    "t_road": {
+      "id": "t_road",
+      "kind": "terminus",
+      "createdAt": "2026-06-22T17:06:00Z",
+      "note": null,
+      "next": null,
+      "rightBranches": [],
+      "leftBranches": []
+    },
+    "t_hire": {
+      "id": "t_hire",
+      "kind": "terminus",
+      "createdAt": "2026-06-16T09:00:00Z",
+      "note": null,
+      "next": null,
+      "rightBranches": [],
+      "leftBranches": []
+    }
+  }
+}

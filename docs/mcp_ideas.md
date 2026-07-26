@@ -143,7 +143,7 @@ Rules:
 
 - The user always controls the camera. A live update never moves the camera and
   never changes pan or zoom; new nodes appear in place. Collapse state is
-  preserved likewise; both are client view state, per northstar axiom 8.
+  preserved likewise; both are client view state, per northstar axiom 9.
 - No changed-node highlight; the update is silent.
 - A burst of agent edits coalesces into one render per frame, so the map stays
   smooth without losing the live feel.
@@ -165,7 +165,7 @@ scope tiers. Full functionality: every mutation in `mutations.js` is exposed. A
 node is addressed by its id and a domain by name or path, defaulting to the open
 domain; every write returns the affected id and the re-rendered outline, and a
 write that would violate an invariant returns the mutation's descriptive error,
-since each write is mutation, then `validateForest`, then atomic write.
+since each write is mutation, then `validateRecord`, then atomic write.
 
 Read-only tier:
 
@@ -184,18 +184,24 @@ Read-only tier:
   that project or sub-project's subtree.
 - `read_note(node_id, domain?)` returns a node's markdown note.
 - `copy_project(node_id, domain?)` returns a serializable clip for
-  `paste_as_tree`.
+  `paste_as_plan`.
 
-Read-write tier (on by default):
+Read-write tier (on by default). *Amended for model v3:* the names follow the new
+vocabulary, since a domain holds plans rather than trees, and the three verbs of
+`model_v3_ideas.md` section 12 each have a tool of their own. `add_task` lost its
+`mode`, an insertion now always naming its edge, and opening a branch being its own
+verb because a branch is three things at once.
 
-- `create_domain(name)`, `create_project(name, domain?)`.
-- `add_task(target_id, position, mode, title, side?, domain?)`, position above or
-  below, mode continue or branch, side for a branch.
+- `create_domain(name)`, `create_plan(name, domain?)`.
+- `add_task(target_id, position, title, domain?)`, position above or below.
+- `open_branch(edge_id, title, side?, domain?)`,
+  `set_merge_point(branch_id, merge_point_id, domain?)`.
+- `wrap_run(from_id, to_id?, title, domain?)`, `unwrap_project(project_id, domain?)`.
 - `set_title`, `set_status`, `cycle_status`, `set_note`, `delete_note`.
 - `make_here`, `clear_here`, `toggle_flag`, `convert_kind`.
-- `paste_as_tree(clip, domain?)`.
-- `move_node`, `move_subtree`, `move_into_line`, `detach_to_project`,
-  `reorder_project`, `move_up`, `move_down`.
+- `paste_as_plan(clip, domain?)`.
+- `move_node`, `move_subtree`, `move_into_line`, `detach_to_plan`,
+  `reorder_plan`, `move_up`, `move_down`.
 
 Destructive tier (off unless enabled at startup):
 

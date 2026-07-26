@@ -2,91 +2,141 @@
 // SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 
 import { describe, it, expect } from 'vitest'
-import { validateForest } from './validate.js'
+import { validateRecord, pairScopes, trunksOf } from './validate.js'
 import {
   setTitle, uniqueTitle, setNote, toggleFlag, setStatus, cycleStatus, makeHere, clearHere, addTree, convertKind,
-  addTaskAbove, addTaskBelow, addBranchAbove, addBranchBelow, deleteTask, pasteAsTree,
+  addTaskAbove, addTaskBelow, addBranchAbove, addBranchBelow, openBranch, setMergePoint, deleteTask, pasteAsTree,
   moveTaskNode, moveSubtree, detachToTree, reorderRoot, moveIntoLine, moveUp, moveDown,
+  wrapRun, unwrapProject,
 } from './mutations.js'
 
-// A small valid forest: project root r -> m1(here) -> m2, with a fork b1 -> b2 off m1.
+// A small valid record: project root r -> m1(here) -> m2 -> z, with a fork b1 -> b2
+// off m1.
+//
+// Termini: z is the terminus that closes r, and every project node must have one
+// above it on its own trunk, so the plan's trunk now ends at z rather than at m2.
+// Since r is a root, z is the PLAN's close: nothing may sit above it (its .next is
+// null and it holds no branch).
+//
+// Returns: every branch rejoins the trunk it left, so the fork carries a merge point,
+// stored on b2, the top of its own trunk, because that is the end the return line
+// leaves from. It names m1, the branch's own edge, which is the smallest legal branch
+// and what opening a branch creates. m2 is the highest legal alternative, since z closes
+// the plan and no edge rises from it; the tests that want a span wider than one edge
+// ask for it with setMergePoint.
 function base() {
   const t = (id, over = {}) => ({
     id, title: id, kind: 'task', status: 'todo', createdAt: '2026-01-01T00:00:00Z', completedAt: null,
-    note: null, here: false, next: null, branches: [], ...over,
+    note: null, here: false, next: null, leftBranches: [], rightBranches: [], ...over,
   })
   const p = (id, over = {}) => ({
-    id, title: id, kind: 'project', createdAt: '2026-01-01T00:00:00Z', note: null, next: null, branches: [], ...over,
+    id, title: id, kind: 'project', createdAt: '2026-01-01T00:00:00Z', note: null, next: null,
+    leftBranches: [], rightBranches: [], ...over,
+  })
+  // Termini: a close says nothing of its own — no title, no status, no flag, no
+  // "here" — and keeps only a note, so the builder offers only what the node has.
+  const terminus = (id, over = {}) => ({
+    id, kind: 'terminus', createdAt: '2026-01-01T00:00:00Z', note: null, next: null,
+    leftBranches: [], rightBranches: [], ...over,
   })
   return {
-    schema: 2,
-    domain: 'T',
-    rootOrder: ['r'],
-    tasks: {
+    schemaVersion: 3,
+    id: 'd_test000000',
+    title: 'T',
+    planOrder: ['r'],
+    nodes: {
       r: p('r', { next: 'm1' }),
-      m1: t('m1', { here: true, next: 'm2', branches: [{ child: 'b1', side: 'left', at: 'above' }] }),
-      m2: t('m2'),
+      m1: t('m1', { here: true, next: 'm2', leftBranches: ['b1'] }),
+      m2: t('m2', { next: 'z' }),
+      z: terminus('z'),
       b1: t('b1', { next: 'b2' }),
-      b2: t('b2'),
+      b2: t('b2', { mergePoint: 'm1' }),
     },
   }
 }
 
-const valid = (raw) => expect(validateForest(raw)).toEqual({ ok: true, errors: [] })
-const ids = (raw) => Object.keys(raw.tasks).sort()
-const newId = (before, after) => ids(after).find((id) => !before.tasks[id])
+const valid = (record) => expect(validateRecord(record)).toEqual({ ok: true, errors: [] })
+const ids = (record) => Object.keys(record.nodes).sort()
+const newId = (before, after) => ids(after).find((id) => !before.nodes[id])
+const created = (before, after) => ids(after).filter((id) => !before.nodes[id])
+
+// A record node's forks live in two ordered arrays of child ids (each naming the
+// edge that RISES from the node holding it), so this reads them back as the flat
+// left-then-right list of { child, side } the assertions below speak in terms of.
+const forks = (node) => [
+  ...(node.leftBranches || []).map((child) => ({ child, side: 'left' })),
+  ...(node.rightBranches || []).map((child) => ({ child, side: 'right' })),
+]
 
 describe('setTitle / setStatus', () => {
   it('renames without touching anything else', () => {
     const out = setTitle(base(), 'm2', 'Renamed')
-    expect(out.tasks.m2.title).toBe('Renamed')
+    expect(out.nodes.m2.title).toBe('Renamed')
     valid(out)
   })
 
   it('records and clears a note filename', () => {
     const withNote = setNote(base(), 'm2', 'm2.md')
-    expect(withNote.tasks.m2.note).toBe('m2.md')
+    expect(withNote.nodes.m2.note).toBe('m2.md')
     valid(withNote)
     const cleared = setNote(withNote, 'm2', null)
-    expect(cleared.tasks.m2.note).toBeNull()
+    expect(cleared.nodes.m2.note).toBeNull()
     valid(cleared)
   })
 
   it('stamps completedAt on completion and clears it on leaving completed', () => {
     const done = setStatus(base(), 'm2', 'completed')
-    expect(done.tasks.m2.status).toBe('completed')
-    expect(done.tasks.m2.completedAt).toBeTruthy()
+    expect(done.nodes.m2.status).toBe('completed')
+    expect(done.nodes.m2.completedAt).toBeTruthy()
     valid(done)
     const undone = setStatus(done, 'm2', 'in-progress')
-    expect(undone.tasks.m2.completedAt).toBeNull()
+    expect(undone.nodes.m2.completedAt).toBeNull()
     valid(undone)
   })
 
   it('rejects an invalid status and never mutates the input', () => {
     const input = base()
     expect(() => setStatus(input, 'm2', 'bogus')).toThrow()
-    expect(input.tasks.m2.status).toBe('todo')
+    expect(input.nodes.m2.status).toBe('todo')
   })
 
   it('refuses to set a status on a project node', () => {
     expect(() => setStatus(base(), 'r', 'todo')).toThrow()
+    // Termini: only a task has a status, and a close is not a task.
+    expect(() => setStatus(base(), 'z', 'todo')).toThrow()
+  })
+
+  it('refuses to title a terminus', () => {
+    // Termini: a close carries no title, so it cannot be searched for by name; its
+    // paired project node is the scope's handle.
+    expect(() => setTitle(base(), 'z', 'Named')).toThrow()
+  })
+
+  it('records a note on a terminus, the one thing a close says', () => {
+    // Termini: a note is a terminus's only expressive field — what closing the
+    // scope took — so setNote must reach it like any other node.
+    const out = setNote(base(), 'z', 'z.md')
+    expect(out.nodes.z.note).toBe('z.md')
+    valid(out)
   })
 })
 
 describe('cycleStatus', () => {
   it('advances one step and wraps cancelled -> todo', () => {
-    let raw = base() // m2 is a todo task
-    raw = cycleStatus(raw, 'm2'); expect(raw.tasks.m2.status).toBe('in-progress')
-    raw = cycleStatus(raw, 'm2'); expect(raw.tasks.m2.status).toBe('completed')
-    expect(raw.tasks.m2.completedAt).not.toBeNull() // completion stamps
-    raw = cycleStatus(raw, 'm2'); expect(raw.tasks.m2.status).toBe('cancelled')
-    expect(raw.tasks.m2.completedAt).toBeNull() // leaving completed clears
-    raw = cycleStatus(raw, 'm2'); expect(raw.tasks.m2.status).toBe('todo') // wraps
-    valid(raw)
+    let record = base() // m2 is a todo task
+    record = cycleStatus(record, 'm2'); expect(record.nodes.m2.status).toBe('in-progress')
+    record = cycleStatus(record, 'm2'); expect(record.nodes.m2.status).toBe('completed')
+    expect(record.nodes.m2.completedAt).not.toBeNull() // completion stamps
+    record = cycleStatus(record, 'm2'); expect(record.nodes.m2.status).toBe('cancelled')
+    expect(record.nodes.m2.completedAt).toBeNull() // leaving completed clears
+    record = cycleStatus(record, 'm2'); expect(record.nodes.m2.status).toBe('todo') // wraps
+    valid(record)
   })
 
   it('refuses to cycle a project node', () => {
     expect(() => cycleStatus(base(), 'r')).toThrow()
+    // Termini: nor a close, which has no status to cycle.
+    expect(() => cycleStatus(base(), 'z')).toThrow()
   })
 })
 
@@ -96,115 +146,172 @@ describe('uniqueTitle — unique node titles within a domain', () => {
   })
 
   it('appends -1 on a bare collision and increments from there', () => {
-    // base() titles equal ids: r, m1, m2, b1, b2.
+    // base() titles equal ids: r, m1, m2, b1, b2 (the terminus z has no title).
     expect(uniqueTitle(base(), 'b1', null)).toBe('b1-1')
     const f = setTitle(base(), 'm2', 'b1') // m2 -> 'b1-1'
-    expect(f.tasks.m2.title).toBe('b1-1')
+    expect(f.nodes.m2.title).toBe('b1-1')
     expect(uniqueTitle(f, 'b1', null)).toBe('b1-2') // 'b1' and 'b1-1' both taken
   })
 
   it('renumbers from the base, stripping an existing -N rather than stacking', () => {
     const f = setTitle(base(), 'm2', 'b1') // 'b1' taken -> 'b1-1'
     const out = setTitle(f, 'b2', 'b1-1') // 'b1-1' taken; base 'b1' -> 'b1-2'
-    expect(out.tasks.b2.title).toBe('b1-2')
+    expect(out.nodes.b2.title).toBe('b1-2')
     valid(out)
   })
 
   it('does not count the renamed node itself as a collision', () => {
     const out = setTitle(base(), 'm2', 'm2') // renaming m2 to its own title
-    expect(out.tasks.m2.title).toBe('m2')
+    expect(out.nodes.m2.title).toBe('m2')
   })
 })
 
 describe('toggleFlag', () => {
   it('toggles a node between flagged and not (defaulting from unset)', () => {
     const on = toggleFlag(base(), 'm2')
-    expect(on.tasks.m2.flagged).toBe(true)
+    expect(on.nodes.m2.flagged).toBe(true)
     const off = toggleFlag(on, 'm2')
-    expect(off.tasks.m2.flagged).toBe(false)
+    expect(off.nodes.m2.flagged).toBe(false)
     valid(on); valid(off)
   })
 
-  it('flags a project node too — any node is flaggable', () => {
+  it('flags a project node too, but refuses a terminus', () => {
+    // Termini: "any node is flaggable" no longer holds. A project node still is,
+    // exactly as a task is; a close is not, since a flag query must not sweep one
+    // up — its paired project node is the scope's handle.
     const out = toggleFlag(base(), 'r')
-    expect(out.tasks.r.flagged).toBe(true)
+    expect(out.nodes.r.flagged).toBe(true)
     valid(out)
+    expect(() => toggleFlag(base(), 'z')).toThrow()
   })
 
   it('survives a kind conversion in both directions', () => {
     const flagged = toggleFlag(base(), 'm2') // task, flagged
     const asProject = convertKind(flagged, 'm2')
-    expect(asProject.tasks.m2.flagged).toBe(true)
+    expect(asProject.nodes.m2.flagged).toBe(true)
     const backToTask = convertKind(asProject, 'm2')
-    expect(backToTask.tasks.m2.flagged).toBe(true)
+    expect(backToTask.nodes.m2.flagged).toBe(true)
     valid(asProject); valid(backToTask)
   })
 })
 
 describe('convertKind', () => {
   it('turns a task into a project node, discarding status and cursor', () => {
-    const out = convertKind(base(), 'm1') // m1 is a task, and is "here"
-    expect(out.tasks.m1.kind).toBe('project')
-    expect(out.tasks.m1.status).toBeUndefined()
-    expect(out.tasks.m1.here).toBeUndefined()
-    expect(out.tasks.m1.next).toBe('m2') // keeps its edges and children
+    const before = base()
+    const out = convertKind(before, 'm1') // m1 is a task, and is "here"
+    expect(out.nodes.m1.kind).toBe('project')
+    expect(out.nodes.m1.status).toBeUndefined()
+    expect(out.nodes.m1.here).toBeUndefined()
+    expect(out.nodes.m1.next).toBe('m2') // keeps its edges and children
+    // Termini: a project has a scope, so the conversion opens one and mints a close
+    // for it. The new scope gets the extent schema 2 always meant — everything
+    // above m1 on its trunk, here m2 — and since closes stack in reverse order of
+    // opening, the trunk reads r, m1(project), m2, z (now closing m1), then the
+    // fresh close on top for the plan itself. Which physical terminus closes which
+    // scope is read back through pairScopes, since a close carries no identity of
+    // its own beyond its note.
+    const close = newId(before, out)
+    expect(out.nodes[close].kind).toBe('terminus')
+    const { pairs } = pairScopes(out, trunksOf(out))
+    expect(pairs.get('m1')).toBe('z') // the new scope covers m2, and no more
+    expect(pairs.get('r')).toBe(close)
+    expect(out.nodes.z.next).toBe(close)
+    expect(out.nodes[close].next).toBeNull() // the plan still ends at its close
     valid(out)
   })
 
   it('turns a project node back into a task, resetting to todo (lossy round-trip)', () => {
     const toProject = convertKind(base(), 'm2')
     const back = convertKind(toProject, 'm2')
-    expect(back.tasks.m2.kind).toBe('task')
-    expect(back.tasks.m2.status).toBe('todo')
+    expect(back.nodes.m2.kind).toBe('task')
+    expect(back.nodes.m2.status).toBe('todo')
+    // Termini: giving up the project gives up its close, so the round-trip returns
+    // to a record of the same size with the plan closed exactly once. It counts
+    // nodes and re-derives the pairing rather than naming ids, because the pair is
+    // anonymous: the terminus that survives is whichever one the bracket-matching
+    // left holding the plan's scope.
+    expect(Object.keys(back.nodes)).toHaveLength(Object.keys(base().nodes).length)
+    const { pairs } = pairScopes(back, trunksOf(back))
+    expect(pairs.size).toBe(1)
+    expect(back.nodes[pairs.get('r')].kind).toBe('terminus')
+    expect(back.nodes.m2.next).toBe(pairs.get('r')) // the close still tops the trunk
     valid(back)
   })
 
   it('refuses to change the kind of a root node', () => {
     expect(() => convertKind(base(), 'r')).toThrow()
   })
+
+  it('refuses to change the kind of a terminus', () => {
+    // Termini: a close is one half of a pair, not an independent node; the way to
+    // be rid of it is to unwrap its project.
+    expect(() => convertKind(base(), 'z')).toThrow()
+  })
+
+  it('refuses a conversion whose new scope would straddle a branch span', () => {
+    // A node becoming a project takes the trunk above it as its scope, so a scope
+    // around m2 would open between the fork's branch point and its merge point and
+    // close above it. The return would then land inside a scope the branch was opened
+    // outside, which is what collapsing that scope could not survive, and the refusal
+    // names the two legal merges rather than moving a return unasked.
+    const wide = setMergePoint(base(), 'b1', 'm2')
+    expect(() => convertKind(wide, 'm2'))
+      .toThrow(/this node cannot become a sub-project: .*merge below where "m2" opens, or above where it closes/)
+    // The same conversion one node lower is legal, since that scope contains the span
+    // rather than cutting into it.
+    valid(convertKind(wide, 'm1'))
+  })
 })
 
 describe('makeHere / clearHere', () => {
   it('moves the cursor within a line, clearing the previous one', () => {
     const out = makeHere(base(), 'm2')
-    expect(out.tasks.m1.here).toBe(false)
-    expect(out.tasks.m2.here).toBe(true)
+    expect(out.nodes.m1.here).toBe(false)
+    expect(out.nodes.m2.here).toBe(true)
     valid(out)
   })
 
   it('allows a second cursor on a different line (fork)', () => {
     const out = makeHere(base(), 'b2')
-    expect(out.tasks.m1.here).toBe(true) // main-line cursor untouched
-    expect(out.tasks.b2.here).toBe(true)
+    expect(out.nodes.m1.here).toBe(true) // main-line cursor untouched
+    expect(out.nodes.b2.here).toBe(true)
     valid(out)
   })
 
   it('clears a line cursor', () => {
     const out = clearHere(base(), 'm1')
-    expect(out.tasks.m1.here).toBe(false)
+    expect(out.nodes.m1.here).toBe(false)
     valid(out)
   })
 
   it('refuses to set "here" on a project node', () => {
     expect(() => makeHere(base(), 'r')).toThrow()
+    // Termini: nor on a close — only a task can hold the cursor.
+    expect(() => makeHere(base(), 'z')).toThrow()
   })
 })
 
 describe('addTree', () => {
-  it('starts a new project with its own project-node root, and works from an empty forest', () => {
-    const empty = { schema: 2, domain: 'T', rootOrder: [], tasks: {} }
+  it('starts a new project with its own project-node root, and works from an empty record', () => {
+    const empty = { schemaVersion: 3, id: 'd_test000000', title: 'T', planOrder: [], nodes: {} }
     const out = addTree(empty, 'Fresh')
-    expect(out.rootOrder).toHaveLength(1)
-    const rootId = out.rootOrder[0]
-    expect(out.tasks[rootId].title).toBe('Fresh')
-    expect(out.tasks[rootId].kind).toBe('project')
+    expect(out.planOrder).toHaveLength(1)
+    const rootId = out.planOrder[0]
+    expect(out.nodes[rootId].title).toBe('Fresh')
+    expect(out.nodes[rootId].kind).toBe('project')
+    // Termini: a plan is bounded, so beginning one mints TWO nodes — the base and
+    // the close directly above it. That empty plan is a legal resting state.
+    expect(Object.keys(out.nodes)).toHaveLength(2)
+    const closeId = out.nodes[rootId].next
+    expect(out.nodes[closeId].kind).toBe('terminus')
+    expect(out.nodes[closeId].next).toBeNull()
     valid(out)
   })
 
   it('makes a colliding tree name unique', () => {
     const out = addTree(base(), 'm2') // base() already has a node titled 'm2'
-    const rootId = out.rootOrder[out.rootOrder.length - 1]
-    expect(out.tasks[rootId].title).toBe('m2-1')
+    const rootId = out.planOrder[out.planOrder.length - 1]
+    expect(out.nodes[rootId].title).toBe('m2-1')
     valid(out)
   })
 })
@@ -214,8 +321,8 @@ describe('addTask', () => {
     const before = base()
     const out = addTaskAbove(before, 'm1', 'N')
     const n = newId(before, out)
-    expect(out.tasks.m1.next).toBe(n)
-    expect(out.tasks[n].next).toBe('m2')
+    expect(out.nodes.m1.next).toBe(n)
+    expect(out.nodes[n].next).toBe('m2')
     valid(out)
   })
 
@@ -223,8 +330,8 @@ describe('addTask', () => {
     const before = base()
     const out = addTaskBelow(before, 'm1', 'N')
     const n = newId(before, out)
-    expect(out.tasks.r.next).toBe(n)
-    expect(out.tasks[n].next).toBe('m1')
+    expect(out.nodes.r.next).toBe(n)
+    expect(out.nodes[n].next).toBe('m1')
     valid(out)
   })
 
@@ -232,12 +339,28 @@ describe('addTask', () => {
     expect(() => addTaskBelow(base(), 'r', 'N')).toThrow()
   })
 
+  it('above the top task inserts into the edge below the plan\'s close', () => {
+    // Termini: the highest edge inside a plan is the one rising from its top task
+    // into its close, so a task added there lands under z, not above it.
+    const before = base()
+    const out = addTaskAbove(before, 'm2', 'N')
+    const n = newId(before, out)
+    expect(out.nodes.m2.next).toBe(n)
+    expect(out.nodes[n].next).toBe('z')
+    valid(out)
+  })
+
+  it('refuses to add a task above a plan\'s closing terminus', () => {
+    // Termini: a plan ends at its close, so there is no edge above it to insert into.
+    expect(() => addTaskAbove(base(), 'z', 'N')).toThrow()
+  })
+
   it('below a branch child stays on that branch', () => {
     const before = base()
     const out = addTaskBelow(before, 'b1', 'N')
     const n = newId(before, out)
-    expect(out.tasks.m1.branches[0].child).toBe(n)
-    expect(out.tasks[n].next).toBe('b1')
+    expect(out.nodes.m1.leftBranches[0]).toBe(n) // the fork now starts at the new task
+    expect(out.nodes[n].next).toBe('b1')
     valid(out)
   })
 
@@ -245,7 +368,7 @@ describe('addTask', () => {
     const before = base() // titles r, m1, m2, b1, b2
     const out = addTaskAbove(before, 'm1', 'b1')
     const n = newId(before, out)
-    expect(out.tasks[n].title).toBe('b1-1')
+    expect(out.nodes[n].title).toBe('b1-1')
     valid(out)
   })
 
@@ -253,10 +376,10 @@ describe('addTask', () => {
     const before = base()
     const one = addTaskAbove(before, 'm1') // no title -> 'New task'
     const nOne = newId(before, one)
-    expect(one.tasks[nOne].title).toBe('New task')
+    expect(one.nodes[nOne].title).toBe('New task')
     const two = addTaskAbove(one, 'm1') // -> 'New task-1'
     const nTwo = newId(one, two)
-    expect(two.tasks[nTwo].title).toBe('New task-1')
+    expect(two.nodes[nTwo].title).toBe('New task-1')
     valid(two)
   })
 })
@@ -266,18 +389,28 @@ describe('addBranch', () => {
     const before = base()
     const one = addBranchAbove(before, 'm2', 'A') // m2 has no branch yet -> left
     const nA = newId(before, one)
-    expect(one.tasks.m2.branches[0]).toMatchObject({ child: nA, side: 'left', at: 'above' })
+    // Schema 3: there is no `at` to assert any more — an array names the edge
+    // that rises from its holder, so a fork above m2 is simply an entry in one of
+    // m2's own arrays, and which array it is *is* the side.
+    expect(one.nodes.m2.leftBranches).toEqual([nA])
+    expect(one.nodes.m2.rightBranches).toEqual([])
     valid(one)
 
     const two = addBranchAbove(one, 'm2', 'B') // second -> right
-    expect(two.tasks.m2.branches[1].side).toBe('right')
+    const nB = newId(one, two)
+    expect(two.nodes.m2.rightBranches).toEqual([nB])
     valid(two)
   })
 
-  it('honours an explicit side and supports at:below', () => {
+  it('honours an explicit side, and a fork below a node lands on its predecessor', () => {
+    // Schema 3: a below-fork has no separate storage. The gap below m2 is the
+    // edge that rises from m2's main-line predecessor (m1), so the fork is held
+    // there — the old assertion's `at: 'below'` becomes "on m1, not on m2".
     const before = base()
     const out = addBranchBelow(before, 'm2', 'A', 'right')
-    expect(out.tasks.m2.branches[0]).toMatchObject({ side: 'right', at: 'below' })
+    const n = newId(before, out)
+    expect(out.nodes.m1.rightBranches).toEqual([n]) // explicit side honoured
+    expect(forks(out.nodes.m2)).toEqual([]) // nothing stored on m2 itself
     valid(out)
   })
 
@@ -285,33 +418,275 @@ describe('addBranch', () => {
     expect(() => addBranchBelow(base(), 'r', 'A')).toThrow()
   })
 
+  it('refuses to add a branch below the first node of a branch', () => {
+    // Schema 3: b1 has no main-line predecessor, so the gap below it is not an
+    // edge any array can name; the mutation refuses rather than inventing one.
+    expect(() => addBranchBelow(base(), 'b1', 'A')).toThrow()
+  })
+
   it('makes a colliding branch title unique', () => {
     const before = base()
     const out = addBranchAbove(before, 'm2', 'b1') // 'b1' already exists
     const n = newId(before, out)
-    expect(out.tasks[n].title).toBe('b1-1')
+    expect(out.nodes[n].title).toBe('b1-1')
     valid(out)
   })
 })
 
+describe('openBranch', () => {
+  it('creates the attachment, one task inside it, and its return line', () => {
+    const before = base()
+    const out = openBranch(before, 'm2', 'A')
+    const n = newId(before, out)
+    expect(out.nodes.m2.leftBranches).toEqual([n]) // the attachment names the edge above m2
+    expect(out.nodes[n].kind).toBe('task') // never empty: a branch carries no title, so an empty one asserts nothing
+    expect(out.nodes[n].mergePoint).toBe('m2') // the return, on the edge the branch left
+    valid(out)
+  })
+
+  it('defaults to the smallest legal branch, a bubble on its own edge', () => {
+    // A bubble says that this strand runs alongside that one gap and nothing else. It
+    // is a diamond rather than a loop, since branch and trunk both flow into the node
+    // above the shared edge, and it is what keeps the topmost forkable edge forkable.
+    const out = openBranch(base(), 'm2', 'A')
+    const n = newId(base(), out)
+    expect(out.nodes[n].mergePoint).toBe('m2')
+    expect(out.nodes.m2.next).toBe('z') // the edge the branch leaves and rejoins
+    valid(out)
+  })
+
+  it('lands a new branch innermost, nearest the spine', () => {
+    // A side array is ordered innermost first, and that order is the author's. A new
+    // branch goes to the front because its span is a single edge, which nests inside
+    // every span containing that edge and so costs no crossings there.
+    const one = openBranch(base(), 'm2', 'A', 'left')
+    const first = newId(base(), one)
+    const two = openBranch(one, 'm2', 'B', 'left')
+    const second = newId(one, two)
+    expect(two.nodes.m2.leftBranches).toEqual([second, first])
+    valid(two)
+  })
+
+  it('refuses a plan\'s closing terminus, which has no edge above it to leave', () => {
+    expect(() => openBranch(base(), 'z', 'A')).toThrow(/no edge above it/)
+  })
+
+  it('refuses the top of a branch trunk, whose only line above is its own return', () => {
+    // One rule of availability: a node hosts a branch, or receives a merge, exactly
+    // when a trunk edge rises from it. A tip's return line is not a trunk edge, so a
+    // branch opened there would have nowhere legal to rejoin.
+    expect(() => openBranch(base(), 'b2', 'A')).toThrow(/nothing rises from "b2"/)
+  })
+
+  it('is what the menu\'s "add branch above" and "add branch below" both do', () => {
+    // Above names the edge rising from the node clicked; below names the one rising
+    // from its main-line predecessor. Each opens a bubble on the edge it named.
+    const above = addBranchAbove(base(), 'm2', 'A')
+    expect(above.nodes[newId(base(), above)].mergePoint).toBe('m2')
+    const below = addBranchBelow(base(), 'm2', 'A', 'right')
+    expect(below.nodes[newId(base(), below)].mergePoint).toBe('m1')
+    valid(above); valid(below)
+  })
+})
+
+describe('setMergePoint', () => {
+  it('moves the return line to a higher edge on the trunk the branch left', () => {
+    const out = setMergePoint(base(), 'b1', 'm2')
+    expect(out.nodes.b2.mergePoint).toBe('m2') // stored on the tip, where the return leaves
+    expect(out.nodes.b1.mergePoint).toBeUndefined() // the foot holds none; the return leaves the top
+    valid(out)
+  })
+
+  it('refuses an edge that does not exist, and a target below the branch point', () => {
+    // z closes the plan, so no edge rises from it for a return to join; r sits below
+    // the branch point, so a return landing there would flow back down into the trunk
+    // the branch had just left.
+    expect(() => setMergePoint(base(), 'b1', 'z')).toThrow(/no edge above it/)
+    expect(() => setMergePoint(base(), 'b1', 'r')).toThrow(/loop rather than a return/)
+  })
+
+  it('refuses a straddle, naming both legal alternatives', () => {
+    // nested() runs r -> a -> SP -> s1 -> zs -> zr, and the branch is opened on the
+    // edge above a, outside SP. Rejoining at s1 would put the return inside a scope the
+    // branch was opened outside, and a return has nowhere to land once that scope is
+    // collapsed, so the move is refused rather than drawn.
+    const withBranch = openBranch(nested(), 'a', 'B')
+    const foot = newId(nested(), withBranch)
+    expect(() => setMergePoint(withBranch, foot, 's1'))
+      .toThrow(/merge below where "SP" opens, or above where it closes/)
+    // The alternative it names is real: the edge above zs is outside SP, so the span
+    // contains the whole sub-project instead of cutting into it.
+    const out = setMergePoint(withBranch, foot, 'zs')
+    expect(out.nodes[foot].mergePoint).toBe('zs')
+    valid(out)
+  })
+
+  it('refuses a node that is not the foot of a branch', () => {
+    // A branch is named by its foot, the entry a side array holds. b2 is its tip, which
+    // is where the merge point is stored but not what names the branch, and m2 is on
+    // the trunk the branch left.
+    expect(() => setMergePoint(base(), 'b2', 'm2')).toThrow(/not the foot of a branch/)
+    expect(() => setMergePoint(base(), 'm2', 'm2')).toThrow(/not the foot of a branch/)
+  })
+})
+
+// Every structural edit ends by putting each return line back on the top of its own
+// branch, since that is where it is stored and an edit can move the top. A span the
+// author chose therefore survives the edits around it, and is only shortened where the
+// edge it named has gone.
+describe('returns: where a structural edit leaves a merge point', () => {
+  // A span wider than base()'s bubble, so a relocation has something to show: the fork
+  // off m1 rejoins at the edge above m2, the highest legal merge on that trunk.
+  const wide = () => setMergePoint(base(), 'b1', 'm2')
+
+  it('carries the return up to the new tip when a task is inserted above it', () => {
+    const before = wide()
+    const out = addTaskAbove(before, 'b2', 'N')
+    const n = newId(before, out)
+    expect(out.nodes[n].mergePoint).toBe('m2') // the claim travels as the branch grows
+    expect(out.nodes.b2.mergePoint).toBeNull() // and only the tip holds one
+    valid(out)
+  })
+
+  it('carries the return to the new close when a whole branch is wrapped', () => {
+    const before = wide()
+    const out = wrapRun(before, 'b1', 'b2', 'Phase')
+    const closeId = created(before, out).find((id) => out.nodes[id].kind === 'terminus')
+    expect(out.nodes[closeId].mergePoint).toBe('m2') // the close is the branch's top now
+    expect(out.nodes.b2.mergePoint).toBeNull()
+    valid(out)
+  })
+
+  it('keeps the branch\'s claim when its tip is deleted', () => {
+    // The stored value dies with b2, so it is recovered from the record as it was
+    // rather than snapped back to a bubble: deleting a node the author never named is
+    // no reason to shorten the span they chose.
+    const out = deleteTask(wide(), 'b2', 'subtree')
+    expect(out.nodes.b1.mergePoint).toBe('m2')
+    valid(out)
+  })
+
+  it('clamps a branch to its own edge when the node its return named is deleted', () => {
+    // Clamping is the only answer available where the named edge has gone with m2, and
+    // the smallest legal branch is the one every branch begins as.
+    const out = deleteTask(wide(), 'm2', 'subtree')
+    expect(out.nodes.b2.mergePoint).toBe('m1') // the branch's own edge, a bubble
+    expect(out.nodes.m1.next).toBe('z') // the plan's close was spared and re-stacked
+    valid(out)
+  })
+
+  it('gives the return up when a branch is detached into a plan of its own', () => {
+    // A plan left no trunk, so it has nothing to rejoin. b1 is made a project node
+    // first, since only a project node can be a root, and that puts a close at the top
+    // of the branch and the return on that close.
+    const asProject = convertKind(base(), 'b1')
+    const closeId = newId(base(), asProject)
+    expect(asProject.nodes[closeId].mergePoint).toBe('m1') // carried up to the new top
+    const out = detachToTree(asProject, 'b1')
+    expect(out.nodes[closeId].mergePoint).toBeNull()
+    expect(out.planOrder).toContain('b1')
+    expect(forks(out.nodes.m1)).toEqual([]) // m1 no longer holds the branch
+    valid(out)
+  })
+
+  it('gives a grafted subtree the smallest legal branch, its own edge', () => {
+    // A subtree arriving from elsewhere has never had a return. Grafting a whole plan
+    // onto a trunk task makes it a branch, and it rejoins the edge it now leaves.
+    const two = base()
+    two.nodes.p2 = { id: 'p2', title: 'p2', kind: 'project', createdAt: 'x', note: null, next: 'q2', leftBranches: [], rightBranches: [] }
+    two.nodes.q2 = { id: 'q2', title: 'q2', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: 'z2', leftBranches: [], rightBranches: [] }
+    two.nodes.z2 = { id: 'z2', kind: 'terminus', createdAt: 'x', note: null, next: null, leftBranches: [], rightBranches: [] }
+    two.planOrder = ['r', 'p2']
+    valid(two)
+    const out = moveSubtree(two, 'p2', 'm2')
+    expect(out.nodes.z2.mergePoint).toBe('m2') // a bubble on the edge above m2
+    expect(out.planOrder).toEqual(['r']) // p2 is a branch now, not a plan
+    valid(out)
+  })
+})
+
+// Termini: a nested scope on one trunk, the shape the grammar makes of
+// "P1, a, P2, b, T2, T1" — r(project) -> a -> SP(project) -> s1 -> zs(closes SP)
+// -> zr(closes r). Closes stack in reverse order of opening.
+function nested() {
+  const t = (id, over = {}) => ({
+    id, title: id, kind: 'task', status: 'todo', createdAt: '2026-01-01T00:00:00Z', completedAt: null,
+    note: null, here: false, next: null, leftBranches: [], rightBranches: [], ...over,
+  })
+  const p = (id, over = {}) => ({
+    id, title: id, kind: 'project', createdAt: '2026-01-01T00:00:00Z', note: null, next: null,
+    leftBranches: [], rightBranches: [], ...over,
+  })
+  const terminus = (id, over = {}) => ({
+    id, kind: 'terminus', createdAt: '2026-01-01T00:00:00Z', note: null, next: null,
+    leftBranches: [], rightBranches: [], ...over,
+  })
+  return {
+    schemaVersion: 3, id: 'd_test000000', title: 'T', planOrder: ['r'],
+    nodes: {
+      r: p('r', { next: 'a' }),
+      a: t('a', { next: 'SP' }),
+      SP: p('SP', { next: 's1' }),
+      s1: t('s1', { next: 'zs' }),
+      zs: terminus('zs', { next: 'zr' }),
+      zr: terminus('zr'),
+    },
+  }
+}
+
 describe('deleteTask — subtree', () => {
   it('removes the task and everything growing from it', () => {
     const out = deleteTask(base(), 'm1', 'subtree')
-    expect(ids(out)).toEqual(['r']) // m1, m2, b1, b2 all gone
-    expect(out.tasks.r.next).toBeNull()
+    // Termini: m1, m2, b1 and b2 all go, but the plan's close is above m1 and its
+    // project (the root r) survives, so the close is spared and re-stacked on r —
+    // the plan is emptied, not left unclosed.
+    expect(ids(out)).toEqual(['r', 'z'])
+    expect(out.nodes.r.next).toBe('z')
+    for (const id of ['m1', 'm2', 'b1', 'b2']) expect(out.nodes[id]).toBeUndefined()
+    valid(out)
+  })
+
+  it('spares a doomed terminus with its note intact', () => {
+    // Termini: a spared close is MOVED, not re-minted, because it carries a note —
+    // the record of what closing the scope took.
+    const withNote = setNote(base(), 'z', 'z.md')
+    const out = deleteTask(withNote, 'm1', 'subtree')
+    expect(out.nodes.z.note).toBe('z.md')
+    expect(out.nodes.r.next).toBe('z')
+    valid(out)
+  })
+
+  it('re-stacks several spared closes in trunk order, innermost first', () => {
+    // Termini: deleting s1 dooms both closes above it, and both scopes survive, so
+    // both are spared and re-stacked above s1's predecessor in trunk order: SP's
+    // close still closes before the plan's.
+    const out = deleteTask(nested(), 's1', 'subtree')
+    expect(out.nodes.s1).toBeUndefined()
+    expect(out.nodes.SP.next).toBe('zs')
+    expect(out.nodes.zs.next).toBe('zr')
+    expect(out.nodes.zr.next).toBeNull()
+    valid(out)
+  })
+
+  it('drops the close of a scope that dies with the deleted subtree', () => {
+    // Termini: SP goes with the deleted node, so its close has nothing to close and
+    // goes too; only the plan's own close is spared.
+    const out = deleteTask(nested(), 'a', 'subtree')
+    expect(ids(out)).toEqual(['r', 'zr'])
+    expect(out.nodes.r.next).toBe('zr')
     valid(out)
   })
 
   it('removes just a fork subtree, leaving the trunk', () => {
     const out = deleteTask(base(), 'b1', 'subtree')
-    expect(ids(out)).toEqual(['m1', 'm2', 'r'])
-    expect(out.tasks.m1.branches).toEqual([])
+    expect(ids(out)).toEqual(['m1', 'm2', 'r', 'z'])
+    expect(forks(out.nodes.m1)).toEqual([])
     valid(out)
   })
 
   it('removes the whole project when its root is deleted', () => {
     const out = deleteTask(base(), 'r', 'subtree')
-    expect(out.rootOrder).toEqual([])
+    expect(out.planOrder).toEqual([])
     expect(ids(out)).toEqual([])
     valid(out)
   })
@@ -320,9 +695,16 @@ describe('deleteTask — subtree', () => {
 describe('deleteTask — tip is the same under either mode', () => {
   it('pops a tip', () => {
     for (const mode of ['subtree', 'splice']) {
+      const fork = deleteTask(base(), 'b2', mode)
+      expect(fork.nodes.b1.next).toBeNull()
+      expect(fork.nodes.b2).toBeUndefined()
+      valid(fork)
+      // Termini: m2 is the top TASK but no longer the top of its trunk — the plan's
+      // close sits above it. Subtree mode spares that close and splice mode
+      // reconnects it, so the two modes still agree.
       const out = deleteTask(base(), 'm2', mode)
-      expect(out.tasks.m1.next).toBeNull()
-      expect(out.tasks.m2).toBeUndefined()
+      expect(out.nodes.m1.next).toBe('z')
+      expect(out.nodes.m2).toBeUndefined()
       valid(out)
     }
   })
@@ -331,83 +713,151 @@ describe('deleteTask — tip is the same under either mode', () => {
 describe('deleteTask — splice', () => {
   it('reconnects the successor and reattaches forks to it', () => {
     const out = deleteTask(base(), 'm1', 'splice')
-    expect(out.tasks.m1).toBeUndefined()
-    expect(out.tasks.r.next).toBe('m2') // successor took m1's slot
-    expect(out.tasks.m2.branches).toEqual([{ child: 'b1', side: 'left', at: 'above' }])
+    expect(out.nodes.m1).toBeUndefined()
+    expect(out.nodes.r.next).toBe('m2') // successor took m1's slot
+    expect(forks(out.nodes.m2)).toEqual([{ child: 'b1', side: 'left' }])
     valid(out)
   })
 
   it('reconnects a branch child on its own branch', () => {
     const out = deleteTask(base(), 'b1', 'splice')
-    expect(out.tasks.b1).toBeUndefined()
-    expect(out.tasks.m1.branches[0].child).toBe('b2')
+    expect(out.nodes.b1).toBeUndefined()
+    expect(out.nodes.m1.leftBranches[0]).toBe('b2')
     valid(out)
   })
 
   it('deleting a root removes the whole project, even in splice mode', () => {
     const out = deleteTask(base(), 'r', 'splice')
     expect(ids(out)).toEqual([])
-    expect(out.rootOrder).toEqual([])
+    expect(out.planOrder).toEqual([])
     valid(out)
   })
 
   it('promotes the first fork when the spliced task has no successor', () => {
-    // give m2 (a tip) a fork, then splice m2: the fork is promoted onto the main line
-    const withFork = addBranchAbove(base(), 'm2', 'F')
-    const f = newId(base(), withFork)
-    const out = deleteTask(withFork, 'm2', 'splice')
-    expect(out.tasks.m2).toBeUndefined()
-    expect(out.tasks.m1.next).toBe(f) // fork promoted to succeed m1
+    // Termini: no task on a plan's trunk lacks a successor any more (its close is
+    // always above it), so the successorless node is the fork tip b2: give b2 a
+    // fork, then splice b2 and the fork is promoted onto b1's line.
+    //
+    // Returns: that fork can no longer be put there by any mutation. A successorless
+    // node is either a branch's tip or a plan's close, and neither has a trunk edge
+    // above it to hold a fork, so openBranch and every graft refuse it and no valid
+    // record contains the shape. The path survives in deleteTask, so the shape is
+    // staged by hand instead, invalid as it is, and the splice is shown to leave a
+    // legal return behind it: the promoted fork becomes the branch's tip, and the
+    // return it inherited, naming the departed b2, is clamped to the branch's own edge.
+    const withFork = base()
+    withFork.nodes.b2.leftBranches = ['F']
+    withFork.nodes.F = {
+      id: 'F', title: 'F', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null,
+      note: null, here: false, next: null, mergePoint: 'b2', leftBranches: [], rightBranches: [],
+    }
+    const out = deleteTask(withFork, 'b2', 'splice')
+    expect(out.nodes.b2).toBeUndefined()
+    expect(out.nodes.b1.next).toBe('F') // fork promoted to succeed b1
+    expect(out.nodes.F.mergePoint).toBe('m1') // clamped: the edge it named went with b2
     valid(out)
   })
 
-  it('keeps only the tip-most cursor when a splice merges two cursored lines', () => {
-    // p(project) -> r(here) -> t ; t forks to b0(here). Splice t: b0 is promoted onto
-    // r's line, which would carry two cursors — the tip-most (b0) survives.
-    const raw = {
-      schema: 2, domain: 'T', rootOrder: ['p'],
-      tasks: {
-        p: { id: 'p', title: 'p', kind: 'project', createdAt: 'x', note: null, next: 'r', branches: [] },
-        r: { id: 'r', title: 'r', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: true, next: 't', branches: [] },
-        t: { id: 't', title: 't', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: null, branches: [{ child: 'b0', side: 'left', at: 'above' }] },
-        b0: { id: 'b0', title: 'b0', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: true, next: null, branches: [] },
-      },
-    }
-    valid(raw)
-    const out = deleteTask(raw, 't', 'splice')
-    expect(out.tasks.r.next).toBe('b0')
-    expect(out.tasks.r.here).toBe(false) // cleared
-    expect(out.tasks.b0.here).toBe(true) // kept (tip-most)
+})
+
+describe('wrapRun / unwrapProject', () => {
+  it('names a run of a trunk as a project, bracketing it', () => {
+    // Termini: the run m1..m2 gets a project node below m1 and a close above m2,
+    // and that close continues onto what was above the run (the plan's own close).
+    const before = base()
+    const out = wrapRun(before, 'm1', 'm2', 'Phase')
+    const [openId, closeId] = [
+      created(before, out).find((id) => out.nodes[id].kind === 'project'),
+      created(before, out).find((id) => out.nodes[id].kind === 'terminus'),
+    ]
+    expect(out.nodes[openId].title).toBe('Phase')
+    expect(out.nodes.r.next).toBe(openId)
+    expect(out.nodes[openId].next).toBe('m1')
+    expect(out.nodes.m2.next).toBe(closeId)
+    expect(out.nodes[closeId].next).toBe('z')
+    expect(forks(out.nodes.m1)).toEqual([{ child: 'b1', side: 'left' }]) // nothing inside moved
     valid(out)
+  })
+
+  it('wraps one node when no end is given', () => {
+    const before = base()
+    const out = wrapRun(before, 'm2', undefined, 'Just m2')
+    const openId = created(before, out).find((id) => out.nodes[id].kind === 'project')
+    const closeId = created(before, out).find((id) => out.nodes[id].kind === 'terminus')
+    expect(out.nodes.m1.next).toBe(openId)
+    expect(out.nodes[openId].next).toBe('m2')
+    expect(out.nodes.m2.next).toBe(closeId)
+    expect(out.nodes[closeId].next).toBe('z')
+    valid(out)
+  })
+
+  it('refuses a run whose scope would straddle a branch span', () => {
+    // The fork off m1 rejoins above m2, so naming m2 alone as a project would open a
+    // scope inside that span and close it inside too, leaving the return to land in a
+    // scope the branch was opened outside. Wrapping the whole span instead is legal,
+    // and the span survives it untouched.
+    const wide = setMergePoint(base(), 'b1', 'm2')
+    expect(() => wrapRun(wide, 'm2', undefined, 'Just m2'))
+      .toThrow(/this run cannot be named as a project: .*merge below where "Just m2" opens, or above where it closes/)
+    const out = wrapRun(wide, 'm1', 'm2', 'Phase')
+    expect(out.nodes.b2.mergePoint).toBe('m2')
+    valid(out)
+  })
+
+  it('refuses a run that straddles a scope, reads downward, or leaves one trunk', () => {
+    expect(() => wrapRun(base(), 'm2', 'z', 'Straddle')).toThrow() // z closes the plan, opened below the run
+    expect(() => wrapRun(base(), 'm2', 'm1', 'Backwards')).toThrow()
+    expect(() => wrapRun(base(), 'm1', 'b2', 'Two trunks')).toThrow()
+  })
+
+  it('removes a project node and its paired close, leaving the inside on the trunk', () => {
+    const out = unwrapProject(withSub(), 'SP')
+    expect(out.nodes.SP).toBeUndefined()
+    expect(out.nodes.zs).toBeUndefined() // the close goes with its project
+    expect(out.nodes.f1.next).toBe('s1') // what was inside stays on the trunk
+    expect(out.nodes.s1.next).toBeNull()
+    valid(out)
+  })
+
+  it('refuses a plan\'s base and a node that is not a project', () => {
+    expect(() => unwrapProject(withSub(), 'r')).toThrow() // unwrapping a plan is deleting it
+    expect(() => unwrapProject(withSub(), 's1')).toThrow()
   })
 })
 
 describe('pasteAsTree', () => {
   // A clip mirroring base()'s shape, with one completed task and one carrying a
   // note, so the paste can be checked to keep statuses, clear cursors, and carry
-  // notes by content: r(project) -> m1(here) -> m2(completed); fork b1 -> b2(note).
+  // notes by content: r(project) -> m1(here) -> m2(completed) -> z(r's close);
+  // fork b1 -> b2(note).
+  //
+  // Returns: the fork's merge point rides in the clip like any other field, and it
+  // holds an id, so the paste has to remap it along with .next and the branch arrays.
   const clip = () => ({
     rootId: 'r',
-    tasks: {
-      r:  { id: 'r',  title: 'Proj', kind: 'project', createdAt: 'old', note: null, next: 'm1', branches: [] },
-      m1: { id: 'm1', title: 'm1', kind: 'task', status: 'todo', createdAt: 'old', completedAt: null, note: null, here: true, next: 'm2', branches: [{ child: 'b1', side: 'left', at: 'above' }] },
-      m2: { id: 'm2', title: 'm2', kind: 'task', status: 'completed', createdAt: 'old', completedAt: '2026-02-02T00:00:00Z', note: null, here: false, next: null, branches: [] },
-      b1: { id: 'b1', title: 'b1', kind: 'task', status: 'todo', createdAt: 'old', completedAt: null, note: null, here: false, next: 'b2', branches: [] },
-      b2: { id: 'b2', title: 'b2', kind: 'task', status: 'todo', createdAt: 'old', completedAt: null, note: 'b2.md', here: false, next: null, branches: [] },
+    nodes: {
+      r:  { id: 'r',  title: 'Proj', kind: 'project', createdAt: 'old', note: null, next: 'm1', leftBranches: [], rightBranches: [] },
+      m1: { id: 'm1', title: 'm1', kind: 'task', status: 'todo', createdAt: 'old', completedAt: null, note: null, here: true, next: 'm2', leftBranches: ['b1'], rightBranches: [] },
+      m2: { id: 'm2', title: 'm2', kind: 'task', status: 'completed', createdAt: 'old', completedAt: '2026-02-02T00:00:00Z', note: null, here: false, next: 'z', leftBranches: [], rightBranches: [] },
+      z:  { id: 'z',  kind: 'terminus', createdAt: 'old', note: null, next: null, leftBranches: [], rightBranches: [] },
+      b1: { id: 'b1', title: 'b1', kind: 'task', status: 'todo', createdAt: 'old', completedAt: null, note: null, here: false, next: 'b2', leftBranches: [], rightBranches: [] },
+      b2: { id: 'b2', title: 'b2', kind: 'task', status: 'todo', createdAt: 'old', completedAt: null, note: 'b2.md', here: false, next: null, mergePoint: 'm1', leftBranches: [], rightBranches: [] },
     },
     notes: { b2: '# b2 note\n' },
   })
-  const empty = () => ({ schema: 2, domain: 'T', rootOrder: [], tasks: {} })
-  const byTitle = (raw) => Object.fromEntries(Object.values(raw.tasks).map((t) => [t.title, t]))
+  const empty = () => ({ schemaVersion: 3, id: 'd_test000000', title: 'T', planOrder: [], nodes: {} })
+  const byTitle = (record) => Object.fromEntries(Object.values(record.nodes).map((t) => [t.title, t]))
 
   it('pastes a copied project as a fresh, valid tree with regenerated ids', () => {
     const { next } = pasteAsTree(empty(), clip())
-    expect(Object.keys(next.tasks)).toHaveLength(5)
+    // Termini: the clip carries the close that bounds it, so a copied plan is six
+    // nodes, not five, and pastes back as a closed (valid) plan.
+    expect(Object.keys(next.nodes)).toHaveLength(6)
     // Every id is new (none of the clip's literal ids survive) and the mapped
-    // root is appended to rootOrder as a project node.
-    expect(['r', 'm1', 'm2', 'b1', 'b2'].some((id) => next.tasks[id])).toBe(false)
-    expect(next.rootOrder).toHaveLength(1)
-    expect(next.tasks[next.rootOrder[0]].kind).toBe('project')
+    // root is appended to planOrder as a project node.
+    expect(['r', 'm1', 'm2', 'z', 'b1', 'b2'].some((id) => next.nodes[id])).toBe(false)
+    expect(next.planOrder).toHaveLength(1)
+    expect(next.nodes[next.planOrder[0]].kind).toBe('project')
     valid(next)
   })
 
@@ -425,34 +875,42 @@ describe('pasteAsTree', () => {
     const t = byTitle(next)
     expect(t.Proj.next).toBe(t.m1.id)
     expect(t.m1.next).toBe(t.m2.id)
-    expect(t.m1.branches[0].child).toBe(t.b1.id)
+    expect(t.m1.leftBranches[0]).toBe(t.b1.id)
     expect(t.b1.next).toBe(t.b2.id)
+    // Termini: the close has no title to look it up by, so it is read off the edge
+    // that should now point at its new id.
+    expect(next.nodes[t.m2.next].kind).toBe('terminus')
+    expect(next.nodes[t.m2.next].next).toBeNull()
+    // Returns: the return line is an edge too, and it is remapped with the rest, so
+    // the pasted fork still rejoins the pasted trunk rather than the copied one.
+    expect(t.b2.mergePoint).toBe(t.m1.id)
   })
 
-  it('carries a note by content into a fresh file named for the new id', () => {
+  it('carries a note by content into a fresh file named for the new id and title', () => {
     const { next, notes } = pasteAsTree(empty(), clip())
     const t = byTitle(next)
-    expect(t.b2.note).toBe(t.b2.id + '.md')
-    expect(notes).toEqual([{ file: t.b2.id + '.md', content: '# b2 note\n' }])
+    // The id resolves and the slug is decorative (see model/notes.js).
+    expect(t.b2.note).toBe(t.b2.id + '_b2.md')
+    expect(notes).toEqual([{ file: t.b2.id + '_b2.md', content: '# b2 note\n' }])
   })
 
   it('does not mutate the clip, so the same copy can be pasted again disjointly', () => {
     const c = clip()
     const first = pasteAsTree(empty(), c)
-    expect(c.tasks.m1.here).toBe(true) // clip untouched
+    expect(c.nodes.m1.here).toBe(true) // clip untouched
     const second = pasteAsTree(first.next, c) // paste again into the result
-    expect(second.next.rootOrder).toHaveLength(2)
-    expect(Object.keys(second.next.tasks)).toHaveLength(10) // two disjoint trees
-    expect(second.next.rootOrder[0]).not.toBe(second.next.rootOrder[1])
+    expect(second.next.planOrder).toHaveLength(2)
+    expect(Object.keys(second.next.nodes)).toHaveLength(12) // two disjoint trees, closes and all
+    expect(second.next.planOrder[0]).not.toBe(second.next.planOrder[1])
     valid(second.next)
   })
 
   it('suffixes pasted titles that collide with names already in the domain', () => {
-    // Paste the clip into a forest that already holds its titles (base(): r, m1,
+    // Paste the clip into a record that already holds its titles (base(): r, m1,
     // m2, b1, b2), with the root renamed to 'Proj' so the clip root collides too.
     const dest = setTitle(base(), 'r', 'Proj')
     const { next } = pasteAsTree(dest, clip())
-    const titles = Object.values(next.tasks).map((t) => t.title)
+    const titles = Object.values(next.nodes).map((t) => t.title)
     expect(titles.filter((t) => t === 'Proj')).toHaveLength(1) // original kept
     expect(titles).toContain('Proj-1') // pasted root suffixed
     expect(titles).toContain('m1-1')
@@ -462,76 +920,113 @@ describe('pasteAsTree', () => {
 })
 
 describe('moveTaskNode', () => {
-  it('grafts a leaf task onto the target and leaves its old slot a tip', () => {
-    const out = moveTaskNode(base(), 'm2', 'b1') // m2 is a tip; b1 is on the fork
-    expect(out.tasks.m1.next).toBeNull() // m2 left m1 a tip
-    expect(out.tasks.b1.branches.map((b) => b.child)).toContain('m2')
-    expect(out.tasks.m2.next).toBeNull()
+  it('grafts a single task onto the target, its slot taken by what was above it', () => {
+    // Termini: m2's successor is the plan's close, so splicing m2 out of the trunk
+    // drops that close onto m2's old slot rather than leaving m1 a tip.
+    const out = moveTaskNode(base(), 'm2', 'b1') // m2 is the top task; b1 is on the fork
+    expect(out.nodes.m1.next).toBe('z')
+    expect(forks(out.nodes.b1).map((b) => b.child)).toContain('m2')
+    expect(out.nodes.m2.next).toBeNull()
     valid(out)
   })
 
   it('moves only the node, splicing its children onto its predecessor', () => {
     const out = moveTaskNode(base(), 'm1', 'm2') // m1 has next m2 and fork b1
-    expect(out.tasks.r.next).toBe('m2') // m2 took m1's slot under the root
-    expect(out.tasks.m2.branches.map((b) => b.child).sort()).toEqual(['b1', 'm1'].sort()) // b1 spliced on, m1 grafted
-    expect(out.tasks.m1.next).toBeNull()
-    expect(out.tasks.m1.branches).toEqual([])
+    expect(out.nodes.r.next).toBe('m2') // m2 took m1's slot under the root
+    expect(forks(out.nodes.m2).map((b) => b.child).sort()).toEqual(['b1', 'm1'].sort()) // b1 spliced on, m1 grafted
+    expect(out.nodes.m1.next).toBeNull()
+    expect(forks(out.nodes.m1)).toEqual([])
     valid(out)
   })
 
   it('carries the "here" cursor with the moved node', () => {
-    const out = moveTaskNode(base(), 'm1', 'b2') // m1 is "here"
-    expect(out.tasks.m1.here).toBe(true)
-    expect(out.tasks.b2.branches.map((b) => b.child)).toContain('m1')
+    // Returns: the target was b2, the fork's tip, and a graft there is now refused,
+    // since the only line above a tip is its own return and a fork landing there would
+    // have nowhere legal to rejoin. b1 puts the same cursor question to a node that
+    // does have a trunk edge above it.
+    const out = moveTaskNode(base(), 'm1', 'b1') // m1 is "here"
+    expect(out.nodes.m1.here).toBe(true)
+    expect(forks(out.nodes.b1).map((b) => b.child)).toContain('m1')
     valid(out)
   })
 
-  it('refuses a project node and a drop onto itself', () => {
+  it('refuses a graft onto the top of a branch trunk', () => {
+    // The same rule that refuses opening a branch there: no trunk edge rises from a
+    // tip, so there is no edge to hold the fork this would create.
+    expect(() => moveTaskNode(base(), 'm2', 'b2')).toThrow(/nothing rises from "b2"/)
+  })
+
+  it('refuses a project node, a terminus, and a drop onto itself', () => {
     expect(() => moveTaskNode(base(), 'r', 'm2')).toThrow() // r is a project
+    // Termini: a close is not a task and does not travel on its own; it moves only
+    // as part of its scope.
+    expect(() => moveTaskNode(base(), 'z', 'm2')).toThrow()
     expect(() => moveTaskNode(base(), 'm2', 'm2')).toThrow()
   })
 })
 
-// A forest with an interior sub-project: r -> a -> SP(project) -> s1 ; a forks to f1.
+// A record with an interior sub-project on a fork: r -> a -> zr(the plan's close),
+// and a forks left to f1 -> SP(project) -> s1 -> zs(SP's close).
+//
+// Termini: the sub-project sits on a branch rather than on the plan's own trunk
+// because a scope is an interval on ONE trunk. Anything cut out of the plan's trunk
+// at SP would carry the plan's close away with it (it is above SP on that trunk),
+// leaving both plans unbalanced; a branch-borne scope is closed within its own
+// trunk, so it can be grafted, detached, or spliced whole.
+//
+// Returns: the branch rejoins at a, the node it left, and its merge point is stored on
+// zs, the top of the branch's own trunk, which is a terminus here because the branch
+// ends in the sub-project's close. Nothing higher is legal on that trunk: zr closes the
+// plan, so no edge rises from it.
 function withSub() {
   const t = (id, over = {}) => ({
     id, title: id, kind: 'task', status: 'todo', createdAt: '2026-01-01T00:00:00Z', completedAt: null,
-    note: null, here: false, next: null, branches: [], ...over,
+    note: null, here: false, next: null, leftBranches: [], rightBranches: [], ...over,
   })
   const p = (id, over = {}) => ({
-    id, title: id, kind: 'project', createdAt: '2026-01-01T00:00:00Z', note: null, next: null, branches: [], ...over,
+    id, title: id, kind: 'project', createdAt: '2026-01-01T00:00:00Z', note: null, next: null,
+    leftBranches: [], rightBranches: [], ...over,
+  })
+  const terminus = (id, over = {}) => ({
+    id, kind: 'terminus', createdAt: '2026-01-01T00:00:00Z', note: null, next: null,
+    leftBranches: [], rightBranches: [], ...over,
   })
   return {
-    schema: 2, domain: 'T', rootOrder: ['r'],
-    tasks: {
+    schemaVersion: 3, id: 'd_test000000', title: 'T', planOrder: ['r'],
+    nodes: {
       r: p('r', { next: 'a' }),
-      a: t('a', { next: 'SP', branches: [{ child: 'f1', side: 'left', at: 'above' }] }),
+      a: t('a', { next: 'zr', leftBranches: ['f1'] }),
+      zr: terminus('zr'),
+      f1: t('f1', { next: 'SP' }),
       SP: p('SP', { next: 's1' }),
-      s1: t('s1'),
-      f1: t('f1'),
+      s1: t('s1', { next: 'zs' }),
+      zs: terminus('zs', { mergePoint: 'a' }),
     },
   }
 }
 
 describe('moveSubtree', () => {
   it('grafts a whole subtree onto the target, intact', () => {
-    const out = moveSubtree(withSub(), 'SP', 'f1') // move the SP sub-project onto the fork tip
-    expect(out.tasks.a.next).toBeNull() // SP left a's main line
-    expect(out.tasks.f1.branches.map((b) => b.child)).toContain('SP')
-    expect(out.tasks.SP.next).toBe('s1') // subtree intact
+    const out = moveSubtree(withSub(), 'SP', 'a') // move the SP sub-project onto the trunk task a
+    expect(out.nodes.f1.next).toBeNull() // SP left f1's line
+    expect(forks(out.nodes.a).map((b) => b.child)).toContain('SP')
+    expect(out.nodes.SP.next).toBe('s1') // subtree intact
+    expect(out.nodes.s1.next).toBe('zs') // Termini: its close travelled with it
     valid(out)
   })
 
-  it('drops a whole tree from rootOrder when grafted as a sub-project', () => {
+  it('drops a whole tree from planOrder when grafted as a sub-project', () => {
     // two trees; graft the second root's tree onto a node in the first
     const two = withSub()
-    two.tasks.p2 = { id: 'p2', title: 'p2', kind: 'project', createdAt: '2026-01-02T00:00:00Z', note: null, next: 'q2', branches: [] }
-    two.tasks.q2 = { id: 'q2', title: 'q2', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: null, branches: [] }
-    two.rootOrder = ['r', 'p2']
+    two.nodes.p2 = { id: 'p2', title: 'p2', kind: 'project', createdAt: '2026-01-02T00:00:00Z', note: null, next: 'q2', leftBranches: [], rightBranches: [] }
+    two.nodes.q2 = { id: 'q2', title: 'q2', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: 'z2', leftBranches: [], rightBranches: [] }
+    two.nodes.z2 = { id: 'z2', kind: 'terminus', createdAt: 'x', note: null, next: null, leftBranches: [], rightBranches: [] }
+    two.planOrder = ['r', 'p2']
+    valid(two)
     const out = moveSubtree(two, 'p2', 'a')
-    expect(out.rootOrder).toEqual(['r']) // p2 is no longer a root
-    expect(out.tasks.a.branches.map((b) => b.child)).toContain('p2')
-    expect(out.tasks.p2.next).toBe('q2')
+    expect(out.planOrder).toEqual(['r']) // p2 is no longer a root
+    expect(forks(out.nodes.a).map((b) => b.child)).toContain('p2')
+    expect(out.nodes.p2.next).toBe('q2')
     valid(out)
   })
 
@@ -544,9 +1039,13 @@ describe('moveSubtree', () => {
 describe('detachToTree', () => {
   it('turns a sub-project into its own root, carrying its subtree', () => {
     const out = detachToTree(withSub(), 'SP')
-    expect(out.tasks.a.next).toBeNull() // SP cut from a's main line
-    expect(out.rootOrder).toContain('SP')
-    expect(out.tasks.SP.next).toBe('s1') // subtree intact
+    expect(out.nodes.f1.next).toBeNull() // SP cut from f1's line
+    expect(out.planOrder).toContain('SP')
+    expect(out.nodes.SP.next).toBe('s1') // subtree intact
+    // Termini: the scope's close came with it and is now the new plan's own close,
+    // which is why nothing may sit above it.
+    expect(out.nodes.s1.next).toBe('zs')
+    expect(out.nodes.zs.next).toBeNull()
     valid(out)
   })
 
@@ -554,27 +1053,55 @@ describe('detachToTree', () => {
     expect(() => detachToTree(withSub(), 's1')).toThrow() // s1 is a task
     expect(() => detachToTree(withSub(), 'r')).toThrow() // r is already a root
   })
+
+  // Termini: a scope travels as a pair, so a sub-project with work above it takes its own
+  // close and leaves the rest of the trunk joined across the gap. Getting this wrong is not
+  // subtle: the old trunk keeps the detached scope's close and loses its own, and neither
+  // side is a legal plan afterwards. withSub()'s close happens to be at the top of its
+  // trunk, so only a scope with something above it puts the question.
+  it('takes its own close with it and rejoins the trunk it left', () => {
+    const wrapped = wrapRun(base(), 'm1', 'm1', 'Sub')
+    const subId = ids(wrapped).find((id) => wrapped.nodes[id].title === 'Sub')
+    const closeId = pairScopes(wrapped, trunksOf(wrapped)).pairs.get(subId)
+    valid(wrapped)
+    expect(wrapped.nodes.r.next).toBe(subId)
+    expect(wrapped.nodes[closeId].next).toBe('m2')
+
+    const out = detachToTree(wrapped, subId)
+    expect(out.planOrder).toContain(subId)
+    expect(out.nodes.r.next).toBe('m2') // the old trunk is joined across the gap
+    expect(out.nodes[closeId].next).toBeNull() // the detached plan ends at its own close
+    expect(out.nodes[subId].next).toBe('m1') // and keeps what was inside it
+    valid(out)
+  })
 })
 
 describe('reorderRoot', () => {
-  // three roots, only some listed in rootOrder (the rest are advisory-appended).
+  // three roots, only some listed in planOrder (the rest are advisory-appended).
+  // Termini: each root is a plan, so each is bracketed by its own close.
   function threeRoots() {
-    const p = (id, createdAt) => ({ id, title: id, kind: 'project', createdAt, note: null, next: null, branches: [] })
+    const p = (id, createdAt) => ({ id, title: id, kind: 'project', createdAt, note: null, next: 'z' + id, leftBranches: [], rightBranches: [] })
+    const terminus = (id) => ({ id: 'z' + id, kind: 'terminus', createdAt: 'x', note: null, next: null, leftBranches: [], rightBranches: [] })
     return {
-      schema: 2, domain: 'T', rootOrder: ['A', 'B', 'C'],
-      tasks: { A: p('A', '2026-01-01T00:00:00Z'), B: p('B', '2026-01-02T00:00:00Z'), C: p('C', '2026-01-03T00:00:00Z') },
+      schemaVersion: 3, id: 'd_test000000', title: 'T', planOrder: ['A', 'B', 'C'],
+      nodes: {
+        A: p('A', '2026-01-01T00:00:00Z'), zA: terminus('A'),
+        B: p('B', '2026-01-02T00:00:00Z'), zB: terminus('B'),
+        C: p('C', '2026-01-03T00:00:00Z'), zC: terminus('C'),
+      },
     }
   }
 
   it('moves a root to a new index and clamps out-of-range indices', () => {
-    expect(reorderRoot(threeRoots(), 'C', 0).rootOrder).toEqual(['C', 'A', 'B'])
-    expect(reorderRoot(threeRoots(), 'A', 99).rootOrder).toEqual(['B', 'C', 'A'])
+    valid(threeRoots())
+    expect(reorderRoot(threeRoots(), 'C', 0).planOrder).toEqual(['C', 'A', 'B'])
+    expect(reorderRoot(threeRoots(), 'A', 99).planOrder).toEqual(['B', 'C', 'A'])
   })
 
-  it('canonicalises an incomplete rootOrder to the full root set first', () => {
-    const raw = threeRoots()
-    raw.rootOrder = ['B'] // A and C are roots too, but unlisted (ordered by createdAt: A before C)
-    expect(reorderRoot(raw, 'C', 0).rootOrder).toEqual(['C', 'B', 'A'])
+  it('canonicalises an incomplete planOrder to the full root set first', () => {
+    const record = threeRoots()
+    record.planOrder = ['B'] // A and C are roots too, but unlisted (ordered by createdAt: A before C)
+    expect(reorderRoot(record, 'C', 0).planOrder).toEqual(['C', 'B', 'A'])
   })
 
   it('refuses a non-root node', () => {
@@ -582,49 +1109,57 @@ describe('reorderRoot', () => {
   })
 })
 
-// A straight branchless line: project root r -> a -> b -> c -> d.
+// A straight branchless line: project root r -> a -> b -> c -> d -> z(r's close).
 function line4() {
   const t = (id, over = {}) => ({
     id, title: id, kind: 'task', status: 'todo', createdAt: 'x', completedAt: null,
-    note: null, here: false, next: null, branches: [], ...over,
+    note: null, here: false, next: null, leftBranches: [], rightBranches: [], ...over,
   })
   return {
-    schema: 2, domain: 'T', rootOrder: ['r'],
-    tasks: {
-      r: { id: 'r', title: 'r', kind: 'project', createdAt: 'x', note: null, next: 'a', branches: [] },
-      a: t('a', { next: 'b' }), b: t('b', { next: 'c' }), c: t('c', { next: 'd' }), d: t('d'),
+    schemaVersion: 3, id: 'd_test000000', title: 'T', planOrder: ['r'],
+    nodes: {
+      r: { id: 'r', title: 'r', kind: 'project', createdAt: 'x', note: null, next: 'a', leftBranches: [], rightBranches: [] },
+      a: t('a', { next: 'b' }), b: t('b', { next: 'c' }), c: t('c', { next: 'd' }), d: t('d', { next: 'z' }),
+      z: { id: 'z', kind: 'terminus', createdAt: 'x', note: null, next: null, leftBranches: [], rightBranches: [] },
     },
   }
 }
-const chain = (raw) => { const out = []; let id = raw.tasks.r.next; while (id) { out.push(id); id = raw.tasks[id].next }; return out }
+// The trunk above the root, in order. Termini: it ends at the plan's close, so
+// every ordering below reads '...z' — a reordering that displaced the close would
+// show up here.
+const chain = (record) => { const out = []; let id = record.nodes.r.next; while (id) { out.push(id); id = record.nodes[id].next }; return out }
 
 describe('moveIntoLine', () => {
   it('reorders a task into a gap higher on its line', () => {
     const out = moveIntoLine(line4(), 'b', 'c') // insert b between c and d
-    expect(chain(out)).toEqual(['a', 'c', 'b', 'd'])
+    expect(chain(out)).toEqual(['a', 'c', 'b', 'd', 'z'])
     valid(out)
   })
 
   it('reorders a task into a gap lower on its line', () => {
     const out = moveIntoLine(line4(), 'd', 'a') // insert d between a and b
-    expect(chain(out)).toEqual(['a', 'd', 'b', 'c'])
+    expect(chain(out)).toEqual(['a', 'd', 'b', 'c', 'z'])
     valid(out)
   })
 
   it('moving a task alone leaves its own branches behind on the line', () => {
-    const out = moveIntoLine(base(), 'm1', 'm2') // m1 has fork b1; insert m1 above m2 (tip)
-    expect(out.tasks.r.next).toBe('m2') // m1 spliced out; its branch b1 stayed with the line
-    expect(out.tasks.m2.branches.map((x) => x.child)).toContain('b1')
-    expect(out.tasks.m2.next).toBe('m1') // m1 reinserted above m2
-    expect(out.tasks.m1.branches).toEqual([]) // travelled alone
+    const out = moveIntoLine(base(), 'm1', 'm2') // m1 has fork b1; insert m1 above m2
+    expect(out.nodes.r.next).toBe('m2') // m1 spliced out; its branch b1 stayed with the line
+    expect(forks(out.nodes.m2).map((x) => x.child)).toContain('b1')
+    expect(out.nodes.m2.next).toBe('m1') // m1 reinserted above m2
+    expect(out.nodes.m1.next).toBe('z') // and below the plan's close
+    expect(forks(out.nodes.m1)).toEqual([]) // travelled alone
     valid(out)
   })
 
   it('splices a whole sub-project into a line, its tip continuing the line', () => {
-    const out = moveIntoLine(withSub(), 'SP', 'f1') // SP(project)->s1 grafted above the fork tip f1
-    expect(out.tasks.a.next).toBeNull() // SP left a's main line
-    expect(out.tasks.f1.next).toBe('SP')
-    expect(out.tasks.SP.next).toBe('s1') // subtree intact, tip continues (f1 had no successor)
+    const out = moveIntoLine(withSub(), 'SP', 'a') // SP(project)->s1->zs spliced above a
+    expect(out.nodes.f1.next).toBeNull() // SP left f1's line
+    expect(out.nodes.a.next).toBe('SP')
+    expect(out.nodes.SP.next).toBe('s1') // subtree intact
+    // Termini: the subtree's main-line tip is now its close, and that is what
+    // continues onto what used to be above a — the plan's own close.
+    expect(out.nodes.zs.next).toBe('zr')
     valid(out)
   })
 
@@ -632,28 +1167,48 @@ describe('moveIntoLine', () => {
     expect(() => moveIntoLine(withSub(), 'SP', 's1')).toThrow()
     expect(() => moveIntoLine(line4(), 'b', 'b')).toThrow()
   })
+
+  it('keeps only the tip-most cursor when a move merges two cursored lines', () => {
+    // Returns: this began as a deleteTask 'splice', whose promoted fork merged two
+    // lines, and that staging is no longer a record validateRecord will accept.
+    // Promotion needs a successorless node holding a fork, and the only successorless
+    // nodes are a branch's tip and a plan's close, neither of which has a trunk edge
+    // above it for a fork to hang from. A move merges two lines just as that splice
+    // did: b2 carries its cursor off the fork onto m1's line, which already has one,
+    // and the tip-most survives.
+    const record = base()
+    record.nodes.b2.here = true // a second cursor, legal while b2 is on its own line
+    valid(record)
+    const out = moveIntoLine(record, 'b2', 'm1')
+    expect(out.nodes.m1.next).toBe('b2')
+    expect(out.nodes.m1.here).toBe(false) // cleared
+    expect(out.nodes.b2.here).toBe(true) // kept (tip-most)
+    valid(out)
+  })
 })
 
 describe('moveUp / moveDown', () => {
   it('moves a task one step toward the tip', () => {
-    expect(chain(moveUp(line4(), 'b'))).toEqual(['a', 'c', 'b', 'd'])
+    expect(chain(moveUp(line4(), 'b'))).toEqual(['a', 'c', 'b', 'd', 'z'])
   })
 
   it('moves a task one step toward the root', () => {
-    expect(chain(moveDown(line4(), 'c'))).toEqual(['a', 'c', 'b', 'd'])
+    expect(chain(moveDown(line4(), 'c'))).toEqual(['a', 'c', 'b', 'd', 'z'])
   })
 
   it('keeps the swapped node\'s branches and cursor', () => {
     const out = moveUp(base(), 'm1') // m1 is "here" and forks to b1; swap with m2
-    expect(out.tasks.r.next).toBe('m2')
-    expect(out.tasks.m2.next).toBe('m1')
-    expect(out.tasks.m1.branches.map((x) => x.child)).toContain('b1') // branch preserved
-    expect(out.tasks.m1.here).toBe(true) // cursor preserved
+    expect(out.nodes.r.next).toBe('m2')
+    expect(out.nodes.m2.next).toBe('m1')
+    expect(forks(out.nodes.m1).map((x) => x.child)).toContain('b1') // branch preserved
+    expect(out.nodes.m1.here).toBe(true) // cursor preserved
     valid(out)
   })
 
-  it('refuses moving the tip up, a root up, or below the root', () => {
-    expect(() => moveUp(base(), 'm2')).toThrow() // m2 is the tip
+  it('refuses moving the top of a trunk up, a root up, or below the root', () => {
+    // Termini: the top of the trunk is the plan's close, and it is what has nothing
+    // above it to swap with (m2, the top task, has the close above it).
+    expect(() => moveUp(base(), 'z')).toThrow()
     expect(() => moveUp(base(), 'r')).toThrow() // r is the root
     expect(() => moveDown(base(), 'm1')).toThrow() // m1 sits right above the root
     expect(() => moveDown(base(), 'b1')).toThrow() // b1 is a branch line's start

@@ -49,17 +49,49 @@ export function ensureDefs(svgEl) {
   svgEl.appendChild(defs)
 }
 
-// An 'M..L..' polyline path through pts (an array of [x,y] pairs) — a
-// straight riser is a 2-point polyline, a branch elbow a 3-point one.
-export function trackPath(pts) {
-  return pts.map(([x, y], i) => (i ? 'L' : 'M') + x + ',' + y).join(' ')
+// An 'M..L..' polyline path through pts (an array of [x,y] pairs) — a straight riser is a
+// 2-point polyline, a branch or return elbow a 3-point one — with a small hump wherever
+// the line hops another.
+//
+// A crossing must not be mistakable for a junction: a junction is marked in the gap
+// between two stations, so a lateral line passing unmarked through that same band would
+// still read as two lines meeting, and the drawing would assert a join that does not
+// exist. The remedy is the line hop, standard in subway and circuit drawing alike, and
+// the convention is that the lateral line hops while the trunk runs unbroken
+// (docs/model_v3_ideas.md, section 10). `hops` holds the x positions to hop at, which the
+// layout engine computes; each becomes a quadratic arc, whose control point puts the hump
+// on the upward side without any arc-flag reasoning.
+// `r` must match hopRadius in layout/layout.js, which is what the layout engine reserves
+// clearance from: the hump peaks r above the run, so a wider arc here would poke out of the
+// band that was kept clear for it.
+export function trackPath(pts, hops = [], r = 6) {
+  let d = ''
+  for (let i = 0; i < pts.length; i++) {
+    const [x, y] = pts[i]
+    if (i === 0) {
+      d += 'M' + x + ',' + y
+      continue
+    }
+    const [px, py] = pts[i - 1]
+    const here = py === y && px !== x
+      ? hops.filter((hx) => (hx - px) * (hx - x) < 0).sort((a, b) => (x > px ? a - b : b - a))
+      : []
+    for (const hx of here) {
+      const dir = x > px ? 1 : -1
+      d += ' L' + (hx - dir * r) + ',' + y + ' Q' + hx + ',' + (y - 2 * r) + ' ' + (hx + dir * r) + ',' + y
+    }
+    d += ' L' + x + ',' + y
+  }
+  return d
 }
 
-// A track path. `kind` is 'riser' (the vertical spine between stacked nodes on a
-// line) or 'branch' (a fork connector); the two are weighted differently in CSS,
-// the spine slightly heavier so the main line reads first.
-export function buildTrack(pts, kind) {
-  return el('path', { class: 'track ' + (kind === 'branch' ? 'branch' : 'riser'), d: trackPath(pts) })
+// A track path. `kind` is 'riser' (the vertical spine between stacked nodes on a line),
+// 'branch' (a fork connector) or 'return' (a branch rejoining its trunk); the lateral
+// kinds are weighted the same in CSS and the spine slightly heavier, so the main line
+// reads first.
+export function buildTrack(pts, kind, hops) {
+  const cls = kind === 'branch' || kind === 'return' ? kind : 'riser'
+  return el('path', { class: 'track ' + cls, d: trackPath(pts, hops) })
 }
 
 // The small diamond marking a fork junction, centered at (cx,cy).

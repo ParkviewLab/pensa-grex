@@ -50,12 +50,12 @@ async function fontsReady() {
 // validated to at most one per line by model/validate.js) decides whether it
 // measures as a cursor card — the wider/taller trapezium with its HERE chip. A
 // project node is never a cursor.
-export async function measureForest(forest) {
+export async function measureDomain(model) {
   await fontsReady()
   const container = offscreenContainer()
 
   const cardEls = new Map()
-  for (const [id, task] of forest.tasks) {
+  for (const [id, task] of model.nodes) {
     const card = buildCard(task, { isCursor: task.here })
     container.appendChild(card)
     cardEls.set(id, card)

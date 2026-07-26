@@ -32,6 +32,13 @@ path = ["src/**/*.test.js"]
 SPDX-FileCopyrightText = "2026 Gary Frattarola <garyf@parkviewlab.ai>"
 SPDX-License-Identifier = "AGPL-3.0-or-later"
 
+# Sample domain records — AGPL-3.0-or-later. They were JSON5 and carried an inline
+# header in a comment; plain JSON has no comments, so the assertion moves here.
+[[annotations]]
+path = ["src/shared/model/fixtures/*.record.json"]
+SPDX-FileCopyrightText = "2026 Gary Frattarola <garyf@parkviewlab.ai>"
+SPDX-License-Identifier = "AGPL-3.0-or-later"
+
 # Bundled typefaces — SIL Open Font License 1.1. woff2 are binary and cannot carry
 # an inline SPDX header, so they are annotated here (as the binary/JSON files above
 # are). Copyright lines are taken verbatim from each font's google/fonts METADATA.

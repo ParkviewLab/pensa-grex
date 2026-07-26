@@ -34,6 +34,15 @@ const INSTRUCTIONS = [
   '"the current task", or "the one we discussed" against that fresh read, not against memory.',
   'Every write returns the affected id and the re-rendered outline; treat that returned state as',
   'your new ground truth. Nodes are addressed by id; titles and positions can change under you.',
+  // The model, in the terms the tools use. An assistant that knows a plan is bounded and a
+  // branch returns will read a refusal as a rule rather than as a malfunction.
+  'The model: a domain holds any number of project plans. A plan opens at a project node and',
+  'closes at a terminus, and every node in it sits on the trunk between the two; a sub-project is',
+  'the same pair inside that trunk. A task is one thing to do. A branch leaves the edge rising',
+  'from a node, runs alongside, and rejoins the trunk it left at or above where it left, inside',
+  'the same scopes; it is never left open. A terminus carries no title, status, flag or cursor,',
+  'so a scope is named and found by its project node. Growth is upward: an edge rises from a node',
+  'to the next, and a tool that takes an edge names the node BELOW it.',
 ].join(' ')
 
 // Create the MCP service. `deps` = { taskService, store, version, notify }.
@@ -52,9 +61,9 @@ export function createMcpService({ taskService, store, version, notify }) {
   // taskService, wrapped so a successful write pushes a domain-changed event for
   // the live view. Reads pass through untouched.
   const notifyingTaskService = {
-    readForest: (dir) => taskService.readForest(dir),
-    taskOp: (dir, op, args) => {
-      const res = taskService.taskOp(dir, op, args)
+    readRecord: (dir) => taskService.readRecord(dir),
+    runOp: (dir, op, args) => {
+      const res = taskService.runOp(dir, op, args)
       if (!res.error) emit('pensagrex:domain-changed', { dir })
       return res
     },

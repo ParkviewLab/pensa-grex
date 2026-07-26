@@ -49,47 +49,47 @@ async function connect(scope = 'destructive', notify) {
 }
 
 describe('MCP end to end (real SDK client over loopback HTTP)', () => {
-  it('initializes, lists tools, and a tool call edits the forest on disk', async () => {
-    store.createForest('HomeLab')
+  it('initializes, lists tools, and a tool call edits the record on disk', async () => {
+    store.createDomain('HomeLab')
     store.setLastDomain('HomeLab')
     await connect('destructive')
 
     const names = (await client.listTools()).tools.map((t) => t.name)
     expect(names).toContain('list_domains')
-    expect(names).toContain('create_project')
+    expect(names).toContain('create_plan')
     expect(names).toContain('delete_task') // destructive tier is on
 
-    const res = await client.callTool({ name: 'create_project', arguments: { name: 'Overview' } })
+    const res = await client.callTool({ name: 'create_plan', arguments: { name: 'Overview' } })
     const out = JSON.parse(res.content[0].text)
     expect(out.id).toBeTruthy()
 
     // the write went through the authority to disk
     const dir = store.listDomains()[0].path
-    const raw = taskService.readForest(dir).raw
-    expect(Object.values(raw.tasks).some((t) => t.title === 'Overview' && t.kind === 'project')).toBe(true)
+    const record = taskService.readRecord(dir).record
+    expect(Object.values(record.nodes).some((t) => t.title === 'Overview' && t.kind === 'project')).toBe(true)
   })
 
   it('honours the read-only scope (no write tools are exposed)', async () => {
-    store.createForest('HomeLab')
+    store.createDomain('HomeLab')
     store.setLastDomain('HomeLab')
     await connect('read-only')
     const names = (await client.listTools()).tools.map((t) => t.name)
     expect(names).toContain('read_project')
-    expect(names).not.toContain('create_project')
+    expect(names).not.toContain('create_plan')
     expect(names).not.toContain('delete_domain')
   })
 
   it('pushes domain-changed after an MCP write (the live-update wrapper)', async () => {
-    store.createForest('HomeLab')
+    store.createDomain('HomeLab')
     store.setLastDomain('HomeLab')
     const events = []
     await connect('read-write', (channel, data) => events.push([channel, data]))
-    await client.callTool({ name: 'create_project', arguments: { name: 'Overview' } })
+    await client.callTool({ name: 'create_plan', arguments: { name: 'Overview' } })
     expect(events.some(([c]) => c === 'pensagrex:domain-changed')).toBe(true)
   })
 
   it('advertises the re-read instructions and the work_flagged prompt', async () => {
-    store.createForest('HomeLab')
+    store.createDomain('HomeLab')
     store.setLastDomain('HomeLab')
     await connect('read-only') // instructions + prompt are not scope-gated
     expect(client.getInstructions()).toMatch(/re-read/i)

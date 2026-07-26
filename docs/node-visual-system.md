@@ -8,7 +8,7 @@ SPDX-License-Identifier: CC-BY-4.0
 This documents the card silhouettes and their decorators: the geometry, the
 per-edge variable outline weight that reads as Googie, and the policy that maps a
 node's kind and state to a shape. It exists because the drawing carries the
-structure (northstar axiom 5), so the shape grammar is design, not decoration, and
+structure (northstar axiom 6), so the shape grammar is design, not decoration, and
 is written down rather than left in the code. The implementation is
 [`src/renderer/src/render/shapes.js`](../src/renderer/src/render/shapes.js) (the
 silhouettes and the `orbits` / `shadow` decorators) and

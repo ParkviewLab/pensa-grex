@@ -110,7 +110,9 @@ body{
 /* The vertical spine between stacked nodes is drawn slightly heavier than a fork
    connector, so the main line of a stack reads before its branches. */
 .track.riser{ stroke-width:3; }
-.track.branch{ stroke-width:2.3; }
+/* A branch line leaving a fork and a return line rejoining the trunk are the same
+   kind of lateral line, so they are drawn alike. */
+.track.branch, .track.return{ stroke-width:2.3; }
 .fork{ fill:var(--line); }
 .burst line{ stroke:var(--burst-a); stroke-width:1.4; }
 .burst.b line{ stroke:var(--burst-b); }
@@ -136,6 +138,10 @@ body{
    too short. Reserve two label lines (2 x 15px x 1.2 = 36px) plus the 11px vertical
    padding, and centre the content, so every project card is at least two lines tall. */
 .card.project{ min-height:58px; justify-content:center; }
+/* A scope's close: the project hull upside down (render/shapes.js mirrors the path).
+   It has no content of its own, so it takes the project card's own width and minimum
+   height, which is what makes it an exact reflection of an empty project card. */
+.card.terminus{ min-height:58px; }
 .card > .hd, .card > .tag, .card > .here{ position:relative; z-index:1; }
 .cardbg{ position:absolute; inset:0; width:100%; height:100%; overflow:visible; z-index:0; pointer-events:none; }
 .cardbg .outer{ fill:var(--line); }

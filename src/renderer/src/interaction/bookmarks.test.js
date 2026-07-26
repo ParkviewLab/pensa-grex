@@ -5,13 +5,13 @@ import { describe, it, expect } from 'vitest'
 import { centeredStationId, anchorChain, resolveAnchor } from './bookmarks.js'
 
 // r(project) -> a -> b ; a forks to f
-const raw = {
-  schema: 2, domain: 'T', rootOrder: ['r'],
-  tasks: {
-    r: { id: 'r', title: 'r', kind: 'project', createdAt: 'x', note: null, next: 'a', branches: [] },
-    a: { id: 'a', title: 'a', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: 'b', branches: [{ child: 'f', side: 'left', at: 'above' }] },
-    b: { id: 'b', title: 'b', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: null, branches: [] },
-    f: { id: 'f', title: 'f', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: null, branches: [] },
+const record = {
+  schemaVersion: 3, id: 'd_test0000', title: 'T', planOrder: ['r'],
+  nodes: {
+    r: { id: 'r', title: 'r', kind: 'project', createdAt: 'x', note: null, flagged: false, next: 'a', leftBranches: [], rightBranches: [] },
+    a: { id: 'a', title: 'a', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, flagged: false, here: false, next: 'b', leftBranches: ['f'], rightBranches: [] },
+    b: { id: 'b', title: 'b', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, flagged: false, here: false, next: null, leftBranches: [], rightBranches: [] },
+    f: { id: 'f', title: 'f', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, flagged: false, here: false, next: null, leftBranches: [], rightBranches: [] },
   },
 }
 
@@ -32,13 +32,13 @@ describe('centeredStationId', () => {
 
 describe('anchorChain', () => {
   it('walks a main-line node up to the root', () => {
-    expect(anchorChain(raw, 'b')).toEqual(['b', 'a', 'r'])
+    expect(anchorChain(record, 'b')).toEqual(['b', 'a', 'r'])
   })
   it('walks a fork child up through its parent to the root', () => {
-    expect(anchorChain(raw, 'f')).toEqual(['f', 'a', 'r'])
+    expect(anchorChain(record, 'f')).toEqual(['f', 'a', 'r'])
   })
   it('a root is its own single-element chain', () => {
-    expect(anchorChain(raw, 'r')).toEqual(['r'])
+    expect(anchorChain(record, 'r')).toEqual(['r'])
   })
 })
 

@@ -4,27 +4,27 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 // The renderer's whole view of disk. Every method forwards to a main-process
 // ipcMain.handle (src/main/index.js), which re-derives and bounds-checks the
-// paths against the library root (src/main/store.js). Forest content crosses as
-// raw JSON5 text; the renderer parses and validates it.
+// paths against the library root (src/main/store.js). A domain's content crosses as
+// text; the renderer parses and validates it.
 contextBridge.exposeInMainWorld('pensagrex', {
   getSettings:       ()                  => ipcRenderer.invoke('pensagrex:get-settings'),
   setLastDomain:     (name)              => ipcRenderer.invoke('pensagrex:set-last-domain', name),
   getLibraryRoot:    ()                  => ipcRenderer.invoke('pensagrex:get-library-root'),
   chooseLibraryRoot: ()                  => ipcRenderer.invoke('pensagrex:choose-library-root'),
   listDomains:       ()                  => ipcRenderer.invoke('pensagrex:list-domains'),
-  createForest:      (name)              => ipcRenderer.invoke('pensagrex:create-forest', name),
-  deleteForest:      (dir)               => ipcRenderer.invoke('pensagrex:delete-forest', dir),
-  loadForest:        (dir)               => ipcRenderer.invoke('pensagrex:load-forest', dir),
-  saveForest:        (dir, text)         => ipcRenderer.invoke('pensagrex:save-forest', dir, text),
-  // The task-authority surface: read a forest through the shared model, and apply
+  createDomain:      (name)              => ipcRenderer.invoke('pensagrex:create-domain', name),
+  deleteDomain:      (dir)               => ipcRenderer.invoke('pensagrex:delete-domain', dir),
+  loadDomainFile:    (dir)               => ipcRenderer.invoke('pensagrex:load-domain', dir),
+  saveDomainFile:    (dir, text)         => ipcRenderer.invoke('pensagrex:save-domain', dir, text),
+  // The task-authority surface: read a record through the shared model, and apply
   // one named task operation. These replace load/save for editing; the coarse
   // load/save above stay for seeding and one-time migration writes.
-  readForest:        (dir)               => ipcRenderer.invoke('pensagrex:read-forest', dir),
-  taskOp:            (dir, op, ...args)  => ipcRenderer.invoke('pensagrex:task-op', dir, op, ...args),
+  readRecord:        (dir)               => ipcRenderer.invoke('pensagrex:read-record', dir),
+  runOp:             (dir, op, ...args)  => ipcRenderer.invoke('pensagrex:task-op', dir, op, ...args),
   // The in-app MCP server: read its status (enabled/running/url) and turn it on/off.
   mcpStatus:         ()                  => ipcRenderer.invoke('pensagrex:mcp-status'),
   mcpSetEnabled:     (enabled)           => ipcRenderer.invoke('pensagrex:mcp-set-enabled', enabled),
-  // Live updates: another writer (the MCP server) changed a domain's forest/notes,
+  // Live updates: another writer (the MCP server) changed a domain's record or notes,
   // or the domain list. Each returns an unsubscribe function.
   onDomainChanged:   (cb) => {
     const handler = (_e, data) => cb(data && data.dir)

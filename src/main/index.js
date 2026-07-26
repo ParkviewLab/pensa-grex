@@ -7,12 +7,13 @@ import { pathToFileURL, fileURLToPath } from 'node:url'
 import pkg from '../../package.json'
 import {
   getSettings, setLastDomain, getLibraryRoot, setLibraryRoot,
-  listDomains, createForest, deleteForest, loadForest, saveForest, readNote, writeNote, deleteNote,
+  listDomains, createDomain, deleteDomain, loadDomainFile, saveDomainFile, readNote, writeNote, deleteNote,
   getViewState, setViewState, writeExport, getBookmarks, setBookmarks,
 } from './store.js'
 import * as store from './store.js'
 import * as taskService from './taskService.js'
 import { createMcpService } from './mcp/index.js'
+import { migrateLibraryIfNeeded } from './migrateLibrary.js'
 
 const isDev = !app.isPackaged
 const GITHUB_URL = 'https://github.com/ParkviewLab/pensa-grex'
@@ -114,7 +115,7 @@ function legalDir() {
 const LICENSE_HIGHLIGHTS = [
   { pkg: 'electron', label: 'Electron', role: 'Desktop app runtime (Chromium + Node.js)',
     note: 'MIT · bundles Chromium + Node.js', repo: 'https://github.com/electron/electron' },
-  { pkg: 'json5', label: 'JSON5', role: 'Reads and writes the forest files' },
+  { pkg: 'json5', label: 'JSON5', role: 'Reads a domain file written by an earlier version, and the sample fixtures' },
   { pkg: 'codemirror', label: 'CodeMirror', role: 'The in-app note editor' },
   { pkg: 'marked', label: 'Marked', role: 'Renders note markdown' },
   { pkg: 'katex', label: 'KaTeX', role: 'Math typesetting in notes' },
@@ -262,6 +263,24 @@ app.whenReady().then(() => {
     cb({ responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [csp] } })
   })
 
+  // Bring a schema-2 library across before any window can read the library, so the
+  // user's domains are simply there rather than appearing a moment later. The pass
+  // writes a new library and leaves the old one intact; a domain it has already
+  // migrated is skipped, so this is a no-op on every launch after the first.
+  try {
+    const { migrated, failed, skipped } = migrateLibraryIfNeeded()
+    for (const d of migrated) {
+      console.log(`migrated "${d.title}" to schema 3: ${d.nodes} nodes, ${d.notesCopied} notes, ${d.bookmarks} bookmarks -> ${d.dir}`)
+      if (d.notesMissing.length) console.warn(`  note files not found in the old domain: ${d.notesMissing.join(', ')}`)
+    }
+    for (const f of failed) console.error(`could not migrate "${f.dir}": ${f.error} (its old files are untouched)`)
+    if (skipped) console.log(`${skipped} domain(s) were already migrated`)
+  } catch (e) {
+    // A failure here must not stop the app from opening: the old library is intact
+    // and the new one is simply empty or partial.
+    console.error('the library migration did not run:', (e && e.message) || e)
+  }
+
   mainWindow = createWindow()
   buildMenu()
 
@@ -272,17 +291,17 @@ app.whenReady().then(() => {
   ipcMain.handle('pensagrex:get-library-root', () => getLibraryRoot())
   ipcMain.handle('pensagrex:choose-library-root', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
-      title: 'Choose a forest library folder',
+      title: 'Choose a domain library folder',
       properties: ['openDirectory', 'createDirectory'],
     })
     if (canceled || !filePaths[0]) return { canceled: true }
     return setLibraryRoot(filePaths[0])
   })
   ipcMain.handle('pensagrex:list-domains',  () => listDomains())
-  ipcMain.handle('pensagrex:create-forest', (_e, name) => createForest(name))
-  ipcMain.handle('pensagrex:delete-forest', (_e, dir) => deleteForest(dir))
-  ipcMain.handle('pensagrex:load-forest',   (_e, dir) => loadForest(dir))
-  ipcMain.handle('pensagrex:save-forest',   (_e, dir, text) => saveForest(dir, text))
+  ipcMain.handle('pensagrex:create-domain', (_e, name) => createDomain(name))
+  ipcMain.handle('pensagrex:delete-domain', (_e, dir) => deleteDomain(dir))
+  ipcMain.handle('pensagrex:load-domain',   (_e, dir) => loadDomainFile(dir))
+  ipcMain.handle('pensagrex:save-domain',   (_e, dir, text) => saveDomainFile(dir, text))
   ipcMain.handle('pensagrex:read-note',     (_e, dir, file) => readNote(dir, file))
   ipcMain.handle('pensagrex:write-note',    (_e, dir, file, text) => writeNote(dir, file, text))
   ipcMain.handle('pensagrex:delete-note',   (_e, dir, file) => deleteNote(dir, file))
@@ -310,8 +329,8 @@ app.whenReady().then(() => {
   // calls these in place of the coarse load/save; the in-app MCP server (later)
   // will call the same taskService in this same process. Every op re-validates
   // before it persists, so a bad edit is rejected, not written.
-  ipcMain.handle('pensagrex:read-forest', (_e, dir) => taskService.readForest(dir))
-  ipcMain.handle('pensagrex:task-op', (_e, dir, op, ...args) => taskService.taskOp(dir, op, args))
+  ipcMain.handle('pensagrex:read-record', (_e, dir) => taskService.readRecord(dir))
+  ipcMain.handle('pensagrex:task-op', (_e, dir, op, ...args) => taskService.runOp(dir, op, args))
 
   // The in-app MCP server: start it now (enabled by default) so a local agent can
   // reach the live app on loopback. The renderer's status indicator reads and

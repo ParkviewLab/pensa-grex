@@ -5,17 +5,21 @@ SPDX-License-Identifier: CC-BY-4.0
 
 # PensaGrex
 
-A Googie-themed desktop app that keeps track of what you are doing as a forest of
-task trees, one forest per domain (HomeLab, Work, and so on). You push a task onto
-the tip of a stack, pop it when done, and fork a parallel stack when work
-diverges; a cursor you set by hand ("here") marks where you are on each branch.
-The forest is drawn as a subway map: stations are tasks, tracks are stacks, and a
-junction between stations is a fork. Outline colour follows status; each task
-carries a markdown note.
+A Googie-themed desktop app that keeps track of what you are doing as a live set of
+project plans, gathered one domain at a time (HomeLab, Work, and so on). A plan opens
+at a project node and closes at a terminus, and everything in it happens between the
+two: you insert a task where it belongs on the line, wrap a run of tasks to name it as
+a sub-project, and open a branch where part of the work runs alongside the rest. A
+branch always rejoins the line it left. A cursor you set by hand ("here") marks where
+you are on each branch.
+
+A domain is drawn as a subway map: stations are nodes, tracks are the lines between
+them, and a junction is where a branch leaves or returns. Outline colour follows
+status; every node carries a markdown note.
 
 The project's intent and its axioms are in [`docs/northstar.md`](docs/northstar.md);
-read it first. A forest is plain files on disk: one JSON5 file per domain, beside
-its per-task markdown notes.
+read it first. A domain is plain files on disk: one JSON file in a directory of its
+own, beside its per-node markdown notes.
 
 ## Download
 
