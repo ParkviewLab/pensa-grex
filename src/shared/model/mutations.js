@@ -989,16 +989,31 @@ export function moveSubtree(record, rootId, targetId) {
 }
 
 /**
- * Detach a sub-project into its own independent tree: cut its incoming edge and
- * append it to planOrder, so it becomes a structural root. Only a project node
- * can be a root; refuses a task node and a node that is already a root.
+ * Detach a sub-project into a plan of its own: it and its close leave the trunk they were
+ * on, and what sat above that close stays behind. Only a project node can be a plan's base;
+ * refuses a task node and one that is already a base.
+ *
+ * A scope travels as a pair, which is what makes this more than cutting one edge. The
+ * detached plan runs from the project node to the terminus closing it, and the trunk it
+ * leaves is rejoined across the gap, so neither side is left holding the other's close.
+ * This is the way out when work genuinely does not rejoin, which axiom 3 calls a separate
+ * plan rather than a branch.
  */
 export function detachToTree(record, id) {
   const next = clone(record)
   const node = requireTask(next, id)
   if (node.kind !== 'project') throw new Error('only a project node can become a root')
-  if (!predecessorOf(next, id)) throw new Error('node is already a root')
-  cutIncoming(next, id)
+  const pred = predecessorOf(next, id)
+  if (!pred) throw new Error('node is already a root')
+
+  const closeId = scopes(next).pairs.get(id)
+  const above = closeId ? next.nodes[closeId].next || null : null
+  if (closeId) next.nodes[closeId].next = null
+  // Whatever was above the close takes the detached scope's place on the old trunk.
+  if (pred.kind === 'next') next.nodes[pred.id].next = above
+  else if (above) sideArray(next.nodes[pred.id], pred.side)[pred.index] = above
+  else sideArray(next.nodes[pred.id], pred.side).splice(pred.index, 1)
+
   if (!Array.isArray(next.planOrder)) next.planOrder = []
   next.planOrder.push(id)
   return normalizeReturns(next, record)

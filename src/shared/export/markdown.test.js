@@ -56,6 +56,10 @@ describe('serializeProject', () => {
     const md = serializeProject(record(), 'P', { M1: 'hello\nworld' })
     // Termini: unchanged, and that is the point. The two closes are in the record but
     // contribute no line, so bracketing the scopes leaves the outline exactly as it was.
+    //
+    // Returns: the branch rejoins above Task two rather than at the edge it left, which is
+    // the one thing the nesting cannot show, so it is written as an italic continuation
+    // line at the end of the branch. A branch rejoining at its own edge adds nothing here.
     expect(md).toBe(
       '- Proj\n' +
       '  - [ ] Task one\n' +
@@ -63,6 +67,8 @@ describe('serializeProject', () => {
       '    hello\n' +
       '    world\n' +
       '    - [ ] Branch one\n' +
+      '\n' +
+      '      *rejoins the trunk above "Task two"*\n' +
       '  - [x] Task two\n' +
       '  - Sub\n' +
       '    - [ ] ~~Sub task~~\n'
@@ -89,7 +95,37 @@ describe('serializeProject', () => {
 
   it('omits the note block for an empty or whitespace-only note', () => {
     const md = serializeProject(record(), 'P', { M1: '   \n  ' })
-    expect(md).not.toContain('\n\n') // no blank-line-led note paragraph
+    // Returns: "contains no blank line" no longer states this, since the branch's rejoin
+    // line is itself a blank-line-led paragraph. So the whole output is asserted instead,
+    // which says the same thing more strongly: nothing at all stands where the note would.
+    expect(md).toBe(
+      '- Proj\n' +
+      '  - [ ] Task one\n' +
+      '    - [ ] Branch one\n' +
+      '\n' +
+      '      *rejoins the trunk above "Task two"*\n' +
+      '  - [x] Task two\n' +
+      '  - Sub\n' +
+      '    - [ ] ~~Sub task~~\n'
+    )
+  })
+
+  // Returns: a branch that rejoins at the very edge it left is the default and the
+  // commonest case, and the nesting already places it, so writing a line for it would be
+  // noise. Where the merge point is a scope's close, which carries no title, the line names
+  // the project that close belongs to instead.
+  it('writes nothing for a branch that rejoins at its own edge', () => {
+    const r = record()
+    r.nodes.B1.mergePoint = 'M1' // the edge it left
+    expect(validateRecord(r)).toEqual({ ok: true, errors: [] })
+    expect(serializeProject(r, 'P')).not.toContain('rejoins')
+  })
+
+  it('names the project a close belongs to when the merge point is that close', () => {
+    const r = record()
+    r.nodes.B1.mergePoint = 'TS' // the terminus closing Sub
+    expect(validateRecord(r)).toEqual({ ok: true, errors: [] })
+    expect(serializeProject(r, 'P')).toContain('*rejoins the trunk above the close of "Sub"*')
   })
 
   it('exports only the chosen sub-project when invoked on an interior project node', () => {
@@ -107,10 +143,14 @@ describe('serializeProject', () => {
   // closes carrying notes therefore add two paragraphs and no bullet at all.
   it('gives a scope close no bullet, and inlines its note as a closing remark', () => {
     const md = serializeProject(record(), 'P', { TS: 'sub closed', TP: 'plan closed' })
+    // Returns: the branch's rejoin line is a continuation paragraph as well, and it sits
+    // where the branch ends rather than where a scope closes, so the two do not compete.
     expect(md).toBe(
       '- Proj\n' +
       '  - [ ] Task one\n' +
       '    - [ ] Branch one\n' +
+      '\n' +
+      '      *rejoins the trunk above "Task two"*\n' +
       '  - [x] Task two\n' +
       '  - Sub\n' +
       '    - [ ] ~~Sub task~~\n' +

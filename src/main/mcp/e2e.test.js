@@ -56,10 +56,10 @@ describe('MCP end to end (real SDK client over loopback HTTP)', () => {
 
     const names = (await client.listTools()).tools.map((t) => t.name)
     expect(names).toContain('list_domains')
-    expect(names).toContain('create_project')
+    expect(names).toContain('create_plan')
     expect(names).toContain('delete_task') // destructive tier is on
 
-    const res = await client.callTool({ name: 'create_project', arguments: { name: 'Overview' } })
+    const res = await client.callTool({ name: 'create_plan', arguments: { name: 'Overview' } })
     const out = JSON.parse(res.content[0].text)
     expect(out.id).toBeTruthy()
 
@@ -75,7 +75,7 @@ describe('MCP end to end (real SDK client over loopback HTTP)', () => {
     await connect('read-only')
     const names = (await client.listTools()).tools.map((t) => t.name)
     expect(names).toContain('read_project')
-    expect(names).not.toContain('create_project')
+    expect(names).not.toContain('create_plan')
     expect(names).not.toContain('delete_domain')
   })
 
@@ -84,7 +84,7 @@ describe('MCP end to end (real SDK client over loopback HTTP)', () => {
     store.setLastDomain('HomeLab')
     const events = []
     await connect('read-write', (channel, data) => events.push([channel, data]))
-    await client.callTool({ name: 'create_project', arguments: { name: 'Overview' } })
+    await client.callTool({ name: 'create_plan', arguments: { name: 'Overview' } })
     expect(events.some(([c]) => c === 'pensagrex:domain-changed')).toBe(true)
   })
 
