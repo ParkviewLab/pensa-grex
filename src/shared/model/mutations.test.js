@@ -1145,6 +1145,15 @@ describe('scope-bounded operations — a sub-project with work above its close',
     valid(out)
   })
 
+  it('refuses to delete a close on its own', () => {
+    // A close has no life of its own to end, and its extent is the scope it closes, so a
+    // delete would take the whole scope. The refusal names the two things that were asked
+    // for: removing the scope, or unwrapping it to keep what is inside.
+    const { record, closeId } = wrapped()
+    expect(() => deleteTask(record, closeId, 'subtree')).toThrow(/close cannot be deleted on its own/)
+    expect(() => deleteTask(record, closeId, 'splice')).toThrow(/close cannot be deleted on its own/)
+  })
+
   it('clips the scope as a plan that stands alone, and pastes it as one', () => {
     // A clip is a plan, so no edge may leave it. The scope's close points at m2, which is
     // not in the clip; carrying that edge into a paste would wire the pasted copy into the

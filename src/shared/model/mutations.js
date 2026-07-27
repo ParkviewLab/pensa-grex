@@ -744,7 +744,13 @@ export function setMergePoint(record, footId, mergePointId) {
  */
 export function deleteTask(record, taskId, mode = 'subtree') {
   const next = clone(record)
-  requireTask(next, taskId)
+  const node = requireTask(next, taskId)
+  // A close is one half of a pair and has no life of its own to end. Its extent is the
+  // scope it closes, so deleting it would quietly delete the whole scope, which is not
+  // what was asked; the two things that were are named instead.
+  if (node.kind === 'terminus') {
+    throw new Error('a close cannot be deleted on its own: delete the project node to remove the scope, or unwrap it to keep what is inside')
+  }
   const pred = predecessorOf(next, taskId)
 
   if (!pred || mode !== 'splice') {
