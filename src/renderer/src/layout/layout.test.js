@@ -17,7 +17,7 @@ function syntheticSizes(model) {
   const sizes = new Map()
   for (const [id, node] of model.nodes) {
     // A terminus carries no title, so there is no text to wrap, but it is drawn as the
-    // project hull turned upside down and so takes the project card's width and its minimum
+    // project hull turned through half a turn and so takes the project card's width and its minimum
     // height (style.css: .card{width:188px}, .card.terminus{min-height:58px}). It was a short
     // bar before stage 5 and this fixture still said so, which hid every clearance question a
     // full-width close asks.

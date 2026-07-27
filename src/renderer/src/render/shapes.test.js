@@ -77,12 +77,14 @@ describe('renderCard — the box a silhouette is painted from', () => {
     expect(svg.querySelector('.inner').getAttribute('d')).toMatch(/^M/)
   })
 
-  it('mirrors a terminus about its own horizontal axis, the project hull upside down', () => {
+  it('turns a terminus through half a turn, the project hull mirrored on both axes', () => {
+    // Both mirrors, not just the vertical one: the hull's top edge rises from left to right,
+    // so a half turn is what puts that rise on the close's bottom edge falling the other way.
     const c = card({ w: 188, h: 58, classes: ['card', 'terminus'] })
     renderCard(c)
     const svg = bg(c)
-    expect(svg.querySelector('.outer').getAttribute('transform')).toBe('translate(0 58) scale(1 -1)')
-    expect(svg.querySelector('.inner').getAttribute('transform')).toContain('translate(0 58) scale(1 -1)')
+    expect(svg.querySelector('.outer').getAttribute('transform')).toBe('translate(188 58) scale(-1 -1)')
+    expect(svg.querySelector('.inner').getAttribute('transform')).toContain('translate(188 58) scale(-1 -1)')
   })
 
   it('leaves a hidden card\'s silhouette standing rather than baking a zero box into it', () => {

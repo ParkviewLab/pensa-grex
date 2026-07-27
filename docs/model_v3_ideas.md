@@ -525,8 +525,9 @@ marked as amended in v3.1.0, which changed how a domain is drawn and touched nei
   protects. Nesting between two branch spans is not required.
 - A TerminusNode may carry a note, and only a note, and the interface does not offer even that for now. It has
   no title, status, cursor, or flag, so the paired ProjectNode is the scope's handle for a flag query. It is
-  drawn as the ProjectNode's own hull turned upside down: the same shape says the two are one pair, and the
-  inversion says which end this is.
+  drawn as the ProjectNode's own hull turned through half a turn, mirrored about both of the card's axes: the
+  same shape says the two are one pair, and the inversion says which end this is. The hull's top edge rises from
+  left to right, so the horizontal mirror shows; on the close that rise falls from left to right instead.
 - Empty is a resting state for a project and not for a branch: deleting a project's last task leaves the pair
   standing, deleting a branch's last task removes the branch and its return, and opening a branch creates it
   with one task inside.
