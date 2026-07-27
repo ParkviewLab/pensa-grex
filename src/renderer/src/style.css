@@ -22,12 +22,17 @@
   --ground:#d3e6ef; --panel:#f8f3e8; --ink:#173242; --line:#365b6c; --muted:#5f7d8b;
   --grid:rgba(23,50,66,.10);
   --c-done:#1f8f8a; --c-prog:#d75f2e; --c-todo:#d9a53a; --c-cancel:#8aa0ab; --c-project:#7d54a6; --cursor:#d75f2e;
+  /* The panel a project node and its close wear, in place of --panel: a tint of the
+     project violet, light enough for the ink to read on it. */
+  --c-project-tint:#bd93e6;
   --burst-a:#1f8f8a; --burst-b:#d9a53a; --here-ink:var(--ink);
 }
 :root[data-ground="navy"]{
   --ground:#0f2334; --panel:#1a3a54; --ink:#e8f1f6; --line:#6fb6c9; --muted:#93b3c2;
   --grid:rgba(111,182,201,.13);
   --c-done:#37c2ba; --c-prog:#f27a44; --c-todo:#f0bd55; --c-cancel:#7590a0; --c-project:#bd93e6; --cursor:#f27a44;
+  /* On the navy ground the tint goes the other way, dark enough for the light ink. */
+  --c-project-tint:#4b3168;
   --burst-a:#37c2ba; --burst-b:#f0bd55; --here-ink:var(--ground);
 }
 

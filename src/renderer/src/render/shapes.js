@@ -7,8 +7,10 @@
 // runs thin along one edge and thick along another (the Googie variable-weight
 // look). Four shapes — screen (a task), marquee (a task marked "here"), hull (a
 // project node), keystone (kept, currently unassigned) — plus composable
-// decorators drawn behind the card: `orbits` (the atomic rings of a project) and
-// `shadow` (a filled echo, used when a project is collapsed; see PR C).
+// decorators drawn behind the card: `orbits`, the atomic rings a flagged node wears.
+// A `shadow` decorator lived here too, an echo behind a collapsed project; a folded
+// scope now draws its close flush on its project card instead, which says the same
+// thing without a second silhouette.
 //
 // See docs/node-visual-system.md for the shape grammar, the variable-weight
 // outline model, and the kind/state -> shape assignment policy.
@@ -59,9 +61,33 @@ const BORDERS = {
   keystone: { t: 3, r: 5, b: 9, l: 7 },
 }
 
+// Every silhouette is inset this far inside its own card box, and the hull's top edge is a
+// quadratic from `start` of the card's height at the left corner, through a control point at
+// `control`, to the top edge itself at the right corner. A folded pair's seam depends on both
+// figures, so they are named here rather than restated wherever the seam is computed.
+export const HULL = { margin: 1.5, top: { start: 0.10, control: 0.22 } }
+
+// How far below its card's top the hull's top edge reaches at its lowest, as a fraction of the
+// card's height. A quadratic from a, through control b, to 0 has its extreme at
+// t = (a - b) / (a - 2b), which for 0.10 and 0.22 is about 0.353, where the edge is about
+// 0.142h down. Computed rather than written out, so it cannot drift from the path above.
+export const HULL_DIP = (() => {
+  const { start: a, control: b } = HULL.top
+  const t = (a - b) / (a - 2 * b)
+  return (1 - t) ** 2 * a + 2 * t * (1 - t) * b
+})()
+
+// How far a folded scope's two cards must overlap for the seam between them to close: each
+// silhouette is inset by the margin, and each of the two edges that meet there bows away from
+// the seam by up to HULL_DIP of its own card's height. Less than this and a lens of the ground
+// shows through the middle; the layout takes the greater of this and its own `foldSeam`.
+export function hullSeamToClose(hProject, hClose) {
+  return 2 * HULL.margin + HULL_DIP * (hProject + hClose)
+}
+
 // The outer silhouette path for a shape at size w x h (margin m off the edges).
 function outerPath(shape, w, h) {
-  const m = 1.5
+  const m = HULL.margin
   const x0 = m, x1 = w - m, y0 = m, y1 = h - m
   const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2
 
@@ -84,7 +110,7 @@ function outerPath(shape, w, h) {
   if (shape === 'hull') {
     // Wide, slightly concave top; sides taper inward; convex bottom.
     const inset = 0.13 * w
-    return `M${x0},${(y0 + 0.10 * h).toFixed(1)} Q${cx},${(y0 + 0.22 * h).toFixed(1)} ${x1},${y0}` +
+    return `M${x0},${(y0 + HULL.top.start * h).toFixed(1)} Q${cx},${(y0 + HULL.top.control * h).toFixed(1)} ${x1},${y0}` +
       ` L${(x1 - inset).toFixed(1)},${(y1 - 0.05 * h).toFixed(1)}` +
       ` Q${cx},${y1} ${(x0 + inset).toFixed(1)},${(y1 - 0.05 * h).toFixed(1)} Z`
   }
@@ -134,7 +160,6 @@ export function renderCard(cardEl) {
   // carries no title, so the hull is empty.
   const isProject = cardEl.classList.contains('project') || isTerminus
   const isCursor = cardEl.classList.contains('cursor')
-  const collapsed = cardEl.classList.contains('collapsed')
   const flagged = cardEl.classList.contains('flagged')
   const shape = isProject ? 'hull' : isCursor ? 'marquee' : 'screen'
   const w = cardEl.offsetWidth, h = cardEl.offsetHeight
@@ -179,15 +204,18 @@ export function renderCard(cardEl) {
     }
   }
   outerEl.style.fill = 'var(--c-' + colour + ')'
+  // A project node and its close carry a tinted panel rather than the card panel every
+  // task wears, so a scope's two ends read as one material at a glance and a folded pair,
+  // drawn flush, reads as a single closed object. Cleared explicitly, since renderCard is
+  // called again on the same element whenever a card changes kind.
+  innerEl.style.fill = isProject ? 'var(--c-project-tint)' : ''
 
-  // Decorators, behind the card. A collapsed project casts a filled shadow; a
-  // flagged node wears the atomic orbits in its own colour (the status colour for a
-  // task, the project colour for a project).
+  // Decorators, behind the card: a flagged node wears the atomic orbits in its own colour
+  // (the status colour for a task, the project colour for a project). A folded project no
+  // longer casts a shadow; the pair drawn shut, its close flush on its own card, is what
+  // says a scope is folded, and a shadow behind that reads as a third edge.
   const deco = svg.querySelector('.deco')
   deco.textContent = ''
-  if (collapsed) {
-    deco.appendChild(svgEl('path', { d: outer, transform: 'translate(9 -9)', fill: 'var(--c-project)', 'fill-opacity': 0.45 }))
-  }
   if (flagged) drawOrbits(deco, w / 2, h / 2, 'var(--c-' + colour + ')')
 }
 

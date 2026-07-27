@@ -111,6 +111,57 @@ export function trunksOf(record) {
   return trunks
 }
 
+// Every id reachable from startId, inclusive, following `next` and the branch arrays.
+// Within a branch this is bounded by the branch itself, since a branch's tip has no
+// successor; from a node on a plan's trunk it runs to the top of that trunk, which is
+// why anything that means to stay inside one scope wants scopeOf below instead.
+export function reachableFrom(record, startId) {
+  const nodes = (record && record.nodes) || {}
+  const ids = new Set()
+  const stack = [startId]
+  while (stack.length) {
+    const id = stack.pop()
+    if (ids.has(id)) continue
+    ids.add(id)
+    const node = nodes[id]
+    if (!node) continue
+    if (node.next) stack.push(node.next)
+    for (const b of branchChildrenOf(node)) stack.push(b.child)
+  }
+  return ids
+}
+
+// The extent of the scope a ProjectNode opens: the TerminusNode that closes it, and
+// every id strictly between the two. The body is the trunk run from the project's
+// successor up to (not including) its close, plus everything hanging off those nodes,
+// plus everything hanging off the project node's own rising edge, since that edge
+// belongs to the scope (docs/model_v3_ideas.md, section 8).
+//
+// A branch on the CLOSE is outside: the edge rising from a terminus belongs to
+// whatever encloses the pair, not to the scope the pair delimits.
+//
+// `pairs` is pairScopes(...).pairs, optional, so a caller folding several scopes at
+// once pays for the bracket matching once. On an unbalanced record the close is
+// unknown and the body runs to the top of the trunk, which is the old behaviour and
+// the only sane fallback: there is no scope to stay inside.
+export function scopeOf(record, projectId, pairs) {
+  const nodes = (record && record.nodes) || {}
+  const project = nodes[projectId]
+  if (!project || project.kind !== 'project') return null
+  const closeOf = pairs || pairScopes(record, trunksOf(record)).pairs
+  const terminusId = closeOf.get(projectId) || null
+  const body = new Set()
+  const addSubtree = (id) => { for (const d of reachableFrom(record, id)) body.add(d) }
+  for (const b of branchChildrenOf(project)) addSubtree(b.child)
+  let id = project.next
+  while (id && id !== terminusId && nodes[id] && !body.has(id)) {
+    body.add(id)
+    for (const b of branchChildrenOf(nodes[id])) addSubtree(b.child)
+    id = nodes[id].next
+  }
+  return { terminusId, body }
+}
+
 // ---- branches and their returns ----
 
 // Every branch in the record, as the merge rules and the drawing read one:
