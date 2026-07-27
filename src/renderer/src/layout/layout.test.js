@@ -150,6 +150,11 @@ describe('computeDomainLayout — the HomeLab fixture', () => {
   })
 
   it('never overlaps two station cards, anywhere in the model', () => {
+    // With one exception, which no stored record can ask for: the two halves of a FOLDED scope
+    // overlap on purpose, by the seam that shuts the lens where their silhouettes cross
+    // (geometry.js, and node-visual-system.md). Collapse is client-local view state, so a
+    // fixture is never folded; the exemption is named in the sweep below rather than left
+    // implicit, so the property stays true of the drawing rather than only of these fixtures.
     const { layout } = loadFixtureLayout()
     const rects = layout.stations.map(rectOf)
     for (let i = 0; i < rects.length; i++) {
@@ -1043,6 +1048,13 @@ describe('computeDomainLayout — properties of any drawing', () => {
     const byId = new Map(layout.stations.map((s) => [s.id, s]))
     for (const [id, node] of model.nodes) {
       if (!node.next || !byId.has(node.next)) continue
+      // One edge in the drawing is deliberately airless: a folded scope's close sits flush on
+      // its project card, the two silhouettes crossing into a lens, so the pair reads as one
+      // closed object (geometry.js isFoldedPair). No fixture here is folded, since collapse is
+      // client-local view state, but the exemption is stated so the property stays true rather
+      // than merely untested.
+      const above = model.getNode(node.next)
+      if (node.collapsed && node.kind === 'project' && above && above.kind === 'terminus') continue
       const lower = byId.get(id)
       const upper = byId.get(node.next)
       const air = lower.anchorY - (upper.cardTop + upper.cardH)

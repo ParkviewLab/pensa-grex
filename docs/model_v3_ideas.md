@@ -540,6 +540,13 @@ marked as amended in v3.1.0, which changed how a domain is drawn and touched nei
 - No crossing may fall in a node's space, meaning between the top of a node's dot and the bottom of its label
   shape. *Amended in v3.1.0:* the rule stands, but without the shared row grid it is checked after the solve and
   repaired by lifting rather than guaranteed by construction, with any residual reported on the layout.
+- A project node and its close wear a tint of the project violet as their panel, in place of the panel colour a
+  task wears, so a scope's two ends read as one material.
+- *Added in v3.1.x.* Folding a scope hides what lies strictly between the pair and leaves the trunk above the
+  close untouched; the pair that remains is drawn shut, the close flush on the project's card, where the hull and
+  its half turn cross into a lens. The shadow a folded project used to cast is retired, the pair itself now saying
+  it. Nothing may be added on the edge rising from a folded project node, since that edge is inside the fold, so
+  the context menu withholds the two "above" additions and the merge submenu until it is expanded.
 - Lateral order is the author's and is stored, innermost first, with a new branch landing innermost by default
   because a single-edge span costs no crossings there. Which side a branch hangs on stays stored.
 - A branch point is drawn just above the node below its edge and a merge point just below the node above its

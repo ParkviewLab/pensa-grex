@@ -44,6 +44,12 @@ const DEFAULTS = {
   anchorGap: 14, // how far a circle sits above its own card's top edge
   dotRadius: 6, // half a station dot (style.css .dot{width:11px}), rounded up
   branchYieldsToReturn: true, // a branch line passes behind a return line where the two cross
+  // How far a folded scope's two cards overlap, so the pair reads as one closed object: Gary's
+  // figure, judged against renderings at actual size. It is a floor rather than the whole answer,
+  // since the hull's edges bow away from the seam in proportion to their own card's height, so a
+  // taller project card takes whatever more it needs to keep the seam shut (render/shapes.js
+  // hullSeamToClose). At the ordinary card height, 58 by 58, closing takes 19.5 and this is 22.
+  foldSeam: 22,
   repairPasses: 8, // how many times a lateral crossing a card may lift that card before we stop
   treeGap: 90, // horizontal gap between two trees' bounding boxes
   margin: 40, // canvas margin on every side

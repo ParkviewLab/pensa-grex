@@ -3,6 +3,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { assignLanes, solveHeights } from './geometry.js'
+import { hullSeamToClose } from '../render/shapes.js'
 
 // A minimal stand-in for the buildModel() runtime model (model/model.js),
 // exposing only what geometry.js actually reads: .trees, .nodes and .getNode(id).
@@ -17,7 +18,13 @@ import { assignLanes, solveHeights } from './geometry.js'
 // every fixture about a return states one.
 function fakeModel(trees, nodeDefs) {
   const nodes = new Map(Object.entries(nodeDefs).map(([id, n]) => [
-    id, { id, next: n.next || null, branches: n.branches || [], mergePoint: n.mergePoint || null, predecessorId: n.predecessorId ?? null },
+    id, {
+      id, next: n.next || null, branches: n.branches || [], mergePoint: n.mergePoint || null,
+      predecessorId: n.predecessorId ?? null,
+      // A folded scope is the one case the solve reads a kind and the renderer's view-only
+      // `collapsed` mark for, so a fixture states them only where they matter.
+      kind: n.kind || 'task', collapsed: !!n.collapsed,
+    },
   ]))
   return { trees, nodes, getNode: (id) => nodes.get(id) || null }
 }
@@ -247,6 +254,7 @@ const TAN12 = Math.tan((12 * Math.PI) / 180)
 const METRICS = {
   baseY: 0, anchorGap: 10, minAir: 20, departClear: 10, arriveClear: 10, dotRadius: 6,
   tan12: TAN12, rampRun: 100, rise: 200 * TAN12, junctionMargin: 4, diamondGap: 12,
+  foldSeam: 22,
 }
 const sizesOf = (map) => new Map(Object.entries(map).map(([id, [cardW, cardH]]) => [id, { cardW, cardH }]))
 
@@ -464,6 +472,75 @@ describe('solveHeights', () => {
       (circle(cardTopY.get(host)) - METRICS.departClear) - (bottom(cardTopY.get(foot), 50) + METRICS.arriveClear)
     expect(climbOf('a', 'f')).toBeCloseTo(METRICS.rise, 9)
     expect(climbOf('f', 'h')).toBeCloseTo(METRICS.rise, 9) // the same climb, one level in
+  })
+})
+
+describe('solveHeights — a folded scope, drawn shut', () => {
+  // What the renderer hands the solve for a folded scope: the body is gone from the view and
+  // the project node's successor is its own close (app.js pruneCollapsed). The pair is then
+  // drawn with the two cards touching, so the project hull and the close's half turn cross
+  // into a lens and a shut scope reads as one closed object.
+  const folded = () => fakeModel([{ id: 't1', rootTaskId: 'P' }], {
+    P: { kind: 'project', collapsed: true, next: 'T' },
+    T: { kind: 'terminus', next: 'a' },
+    a: {},
+  })
+  const SIZES = sizesOf({ P: [188, 58], T: [188, 40], a: [188, 50] })
+  // What the seam needs at these two heights is 3 + 0.1424 * 98, about 16.9, so the metric's 22
+  // is what governs here; the taller-card case below is the other way round.
+  const seam = Math.max(METRICS.foldSeam, hullSeamToClose(58, 40))
+
+  it('sits the close on its project card, the two overlapping by the seam', () => {
+    const { cardTopY, airBelow } = solveHeights(folded(), SIZES, METRICS)
+    expect(cardTopY.get('P')).toBe(METRICS.baseY)
+    expect(seam).toBe(METRICS.foldSeam)
+    // No anchorGap and no air: the close's own bottom sits `seam` BELOW the project's own top,
+    // which is what shuts the seam where the two silhouettes cross.
+    expect(cardTopY.get('T') + 40).toBe(cardTopY.get('P') + seam)
+    // The air it reports is negative by the anchorGap and the seam together, because the
+    // project's circle sits inside the close's card and is covered by it. Stated so a reader of
+    // a layout can tell a deliberate overlap from a defect.
+    expect(airBelow.get('T')).toBe(-(METRICS.anchorGap + seam))
+  })
+
+  it('takes more than the metric where a taller project card needs it', () => {
+    // The hull's edges bow away from the seam in proportion to their own card's height, so a
+    // tall project card would reopen a lens at a fixed overlap. 90 by 40 needs 21.5... and 22
+    // still covers it; 120 by 58 does not, so the pair takes what it needs.
+    const tall = sizesOf({ P: [188, 120], T: [188, 58], a: [188, 50] })
+    const need = hullSeamToClose(120, 58)
+    expect(need).toBeGreaterThan(METRICS.foldSeam)
+    const { cardTopY } = solveHeights(folded(), tall, METRICS)
+    expect(cardTopY.get('T') + 58).toBeCloseTo(cardTopY.get('P') + need, 9)
+  })
+
+  it('leaves the trunk above the fold at the ordinary minimum', () => {
+    const { cardTopY } = solveHeights(folded(), SIZES, METRICS)
+    expect(cardTopY.get('a')).toBe(cardTopY.get('T') - (METRICS.anchorGap + METRICS.minAir + 50))
+  })
+
+  it('gives an unfolded pair the ordinary minimum, the fold being the only exception', () => {
+    const open = fakeModel([{ id: 't1', rootTaskId: 'P' }], {
+      P: { kind: 'project', next: 'T' },
+      T: { kind: 'terminus', next: 'a' },
+      a: {},
+    })
+    const { cardTopY, airBelow } = solveHeights(open, SIZES, METRICS)
+    expect(cardTopY.get('T')).toBe(cardTopY.get('P') - (METRICS.anchorGap + METRICS.minAir + 40))
+    expect(airBelow.get('T')).toBe(METRICS.minAir)
+  })
+
+  it('does not read the mark on a task, nor on a project whose successor is not its close', () => {
+    // `collapsed` on anything but a project node closed by the very next node means nothing:
+    // the flush case exists for a pair drawn shut, and nothing else may lose its air.
+    const odd = fakeModel([{ id: 't1', rootTaskId: 'P' }], {
+      P: { kind: 'project', collapsed: true, next: 'b' },
+      b: { kind: 'task', collapsed: true, next: 'T' },
+      T: { kind: 'terminus' },
+    })
+    const { airBelow } = solveHeights(odd, sizesOf({ P: [188, 58], b: [188, 50], T: [188, 40] }), METRICS)
+    expect(airBelow.get('b')).toBe(METRICS.minAir)
+    expect(airBelow.get('T')).toBe(METRICS.minAir)
   })
 })
 

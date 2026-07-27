@@ -185,6 +185,15 @@ receives a return. An edge that does both takes the larger of the two, and at le
 Nothing is aligned across lanes. Two cards in different plans, or one on a trunk and
 one on a branch beside it, share a y only by coincidence.
 
+One edge is exempt from all of this, and it is the only one: a **folded scope**. When a
+project node is collapsed, the client's view keeps the pair and drops the body, and the
+close is placed flush on the project's own card, bottom edge to top edge, with no
+`anchorGap` and no air. The air that edge reports is therefore negative by exactly the
+`anchorGap`, since the project's own circle falls inside the close's card and is covered
+by it. The two silhouettes cross into a lens there, which is what makes a shut scope read
+as one closed object; see `node-visual-system.md`. Collapse is client-local, so no stored
+record ever asks for this.
+
 ## The twelve-degree lateral, and the underpass
 
 A branch line leaving a fork and a return line rejoining a trunk are the same kind

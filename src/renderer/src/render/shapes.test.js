@@ -87,6 +87,33 @@ describe('renderCard — the box a silhouette is painted from', () => {
     expect(svg.querySelector('.inner').getAttribute('transform')).toContain('translate(188 58) scale(-1 -1)')
   })
 
+  it('gives a project node and its close the tinted panel, and a task the card panel', () => {
+    // A scope's two ends wear a tint of the project violet rather than the panel colour every
+    // task wears, so a pair reads as one material and a folded pair, drawn flush, reads as one
+    // closed object. The task's inline fill is cleared rather than left set, since renderCard
+    // is called again on the same element whenever a card changes kind.
+    for (const classes of [['card', 'project'], ['card', 'terminus']]) {
+      const c = card({ w: 188, h: 58, classes })
+      renderCard(c)
+      expect(bg(c).querySelector('.inner').style.fill).toBe('var(--c-project-tint)')
+    }
+    const t = card({ w: 188, h: 58 })
+    renderCard(t)
+    expect(bg(t).querySelector('.inner').style.fill).toBe('')
+  })
+
+  it('casts no shadow behind a folded project node', () => {
+    // The fold is said by the pair drawn shut, its close flush on its own card; a shadow
+    // behind that reads as a third edge, so the decorator layer stays empty unless the node
+    // is flagged.
+    const c = card({ w: 188, h: 58, classes: ['card', 'project', 'collapsed'] })
+    renderCard(c)
+    expect(bg(c).querySelector('.deco').children).toHaveLength(0)
+    const f = card({ w: 188, h: 58, classes: ['card', 'project', 'collapsed', 'flagged'] })
+    renderCard(f)
+    expect(bg(f).querySelector('.deco').children.length).toBeGreaterThan(0)
+  })
+
   it('leaves a hidden card\'s silhouette standing rather than baking a zero box into it', () => {
     // "Show only flagged" puts display:none on every unflagged card, and an element with no
     // box reports zero for both dimensions. A repaint while the filter is on must therefore
