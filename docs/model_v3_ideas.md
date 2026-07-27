@@ -258,6 +258,31 @@ Extending it across the close of a scope the branch was opened outside does not:
 handling is to refuse the move and name the two legal alternatives in the same breath, either merging below
 where that scope opens or above where it closes.
 
+### What an operation takes with it: the extent
+
+*Added at v3.2.2, from a defect.* The nesting rule above says what a scope is; this says what follows for every
+operation that acts on "a node and what belongs to it". A node's **extent** is its subtree bounded by the scope
+it belongs to. For a ProjectNode that is the plan it opens, the pair and everything between. For any other node
+it is the run above it on its trunk, stopping below the first close belonging to a scope opened beneath it,
+together with the branch subtrees hanging off that run; where no such close exists, as on a branch trunk, the
+run ends at the tip, which is what a branch's own bounds already say.
+
+The unbounded reading, following `next` and the branch arrays to the top of the trunk, is what the code did
+first, and it is wrong in the same way at every call site: from a mid-trunk sub-project it takes the work that
+comes after the scope ends, and higher up it takes the enclosing plan's own close, leaving neither side a legal
+plan. Moving, deleting, copying and exporting are all bounded by the extent; only the fold, which hides a body
+in place rather than moving it, wants `scopeOf` alone.
+
+Two properties make an extent safe to lift out or delete whole. It is bracket-matched, because every close
+inside it belongs to a scope opened inside it. And no return line straddles its boundary, because the rule above
+already puts a branch's own edge and its join edge inside the same scopes. What does cross the boundary is a
+branch hanging on the CLOSE of a lifted pair: the edge rising from a terminus belongs to whatever encloses the
+pair, so that branch stays behind and takes the edge the pair vacated.
+
+A clip follows the same bound, and one thing more: a clip is a plan in its own right, so every edge leaving it
+is cleared as it is taken. A close that still named the work above it would splice the pasted copy into the
+record it was copied from.
+
 ## 9 What the layout engine owes
 
 Before v3 a branch cost the trunk nothing vertically. Each row's pitch came from the tallest measured card in

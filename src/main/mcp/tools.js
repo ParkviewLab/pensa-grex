@@ -14,7 +14,8 @@
 import { z } from 'zod'
 import { serializeProject } from '../../shared/export/markdown.js'
 import { noteFileName } from '../../shared/model/notes.js'
-import { branchChildrenOf } from '../../shared/model/validate.js'
+import { branchChildrenOf, extentOf } from '../../shared/model/validate.js'
+import { clipNodes } from '../../shared/model/mutations.js'
 
 const STATUSES = ['todo', 'in-progress', 'completed', 'cancelled']
 
@@ -86,20 +87,6 @@ function rootOf(record, id) {
     cur = p
   }
   return cur
-}
-function subtreeIds(record, start) {
-  const ids = new Set()
-  const stack = [start]
-  while (stack.length) {
-    const id = stack.pop()
-    if (ids.has(id)) continue
-    ids.add(id)
-    const t = record.nodes[id]
-    if (!t) continue
-    if (t.next) stack.push(t.next)
-    for (const b of branchChildrenOf(t)) stack.push(b.child)
-  }
-  return ids
 }
 function structuredNode(record, id) {
   const t = record.nodes[id]
@@ -210,7 +197,8 @@ export function registerTools(server, deps, scope) {
     const dir = dirOf(a); const r = record(dir)
     const roots = a.project_id ? [a.project_id] : rootIds(r).filter((id) => r.nodes[id].kind === 'project')
     for (const id of roots) if (!r.nodes[id]) throw new Error(`no node "${id}" in this domain`)
-    const ids = a.project_id ? [...subtreeIds(r, a.project_id)] : Object.keys(r.nodes)
+    // A project's own extent, so a sub-project reads as far as its close and no further.
+    const ids = a.project_id ? [...extentOf(r, a.project_id)] : Object.keys(r.nodes)
     const notes = {}
     if (a.include_notes) {
       for (const id of ids) {
@@ -243,12 +231,13 @@ export function registerTools(server, deps, scope) {
   }, guard(async (a) => {
     const dir = dirOf(a); const r = record(dir)
     if (!r.nodes[a.node_id]) throw new Error(`no node "${a.node_id}" in this domain`)
-    const ids = subtreeIds(r, a.node_id)
-    // The clip mirrors the record, so its node map is `nodes` too.
-    const nodes = {}; const notes = {}
-    for (const id of ids) {
-      nodes[id] = structuredClone(r.nodes[id])
-      const note = r.nodes[id].note
+    // The node's extent, with no edge leaving it: a project clips as a whole plan, opening
+    // and close, which is what paste_as_plan needs and what stops a sub-project taking the
+    // rest of its trunk. The clip mirrors the record, so its node map is `nodes` too.
+    const nodes = clipNodes(r, a.node_id)
+    const notes = {}
+    for (const id of Object.keys(nodes)) {
+      const note = nodes[id].note
       if (note) { const rn = store.readNote(dir, note); notes[id] = (rn && rn.content) || '' }
     }
     return json({ rootId: a.node_id, nodes, notes })
@@ -373,7 +362,7 @@ export function registerTools(server, deps, scope) {
   }, guard(async (a) => runWrite(taskService, dirOf(a), op, [a[keys[0]], a[keys[1]]], a[keys[0]])))
 
   write2('move_node', 'moveTaskNode', ['node_id', 'target_id'], 'Move a task to hang as a new branch off the edge above a target node, leaving its own children behind. The new branch rejoins at that same edge; use set_merge_point to move the return. Refused where the target has no edge above it.')
-  write2('move_subtree', 'moveSubtree', ['root_id', 'target_id'], 'Move a sub-project (its whole subtree) to hang as a new branch off the edge above a target node, with the same defaults and the same refusal as move_node.')
+  write2('move_subtree', 'moveSubtree', ['root_id', 'target_id'], 'Move a sub-project to hang as a new branch off the edge above a target node, with the same defaults and the same refusal as move_node. A scope travels as a pair, from the project node to its own close; the work above that close stays where it is and the trunk is joined across the gap.')
   write2('move_into_line', 'moveIntoLine', ['moved_id', 'below_id'], 'Splice a node into the gap above below_id on its line.')
   write2('reorder_plan', 'reorderRoot', ['root_id', 'index'], 'Move a plan to a new left-to-right index among the domain\'s plans.')
 

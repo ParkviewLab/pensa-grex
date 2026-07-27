@@ -129,12 +129,24 @@ describe('serializeProject', () => {
   })
 
   it('exports only the chosen sub-project when invoked on an interior project node', () => {
-    // Termini: the containment is still structural, but it is not the close that stops
-    // the walk; the walk simply starts at Sub, and Sub's close and the plan's above it
-    // put nothing on a line. A note on an enclosing scope's close would reach this
-    // output, which the next test's `notes` argument shows and this one avoids.
+    // Termini: the walk starts at Sub and is bounded by Sub's own close, so the plan's
+    // close above it is outside the outline altogether, note and all.
     const md = serializeProject(record(), 'SP')
     expect(md).toBe('- Sub\n  - [ ] ~~Sub task~~\n')
+    expect(serializeProject(record(), 'SP', { TP: 'plan closed' })).toBe(md)
+  })
+
+  it('stops at a sub-project\'s close, leaving the work that comes after it', () => {
+    // The shape the fixture above lacks: a scope with work above its close. Following
+    // `next` from Sub reaches Task three and the plan's own close, neither of which is in
+    // the project asked for; the extent stops at Sub's close and so does the outline.
+    const r = record()
+    r.nodes.TS.next = 'M3'
+    r.nodes.M3 = t('M3', 'Task three', { next: 'TP' })
+    expect(validateRecord(r)).toEqual({ ok: true, errors: [] })
+    expect(serializeProject(r, 'SP')).toBe('- Sub\n  - [ ] ~~Sub task~~\n')
+    // and the whole plan still reads as one outline, Task three included
+    expect(serializeProject(r, 'P')).toContain('Task three')
   })
 
   // Termini: a close is not an item and gets no bullet, having no title to put on a
