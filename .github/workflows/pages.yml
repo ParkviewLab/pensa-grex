@@ -30,6 +30,30 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0        # tags — the stamp below reads the newest release from them
+
+      # Stamp the newest release tag into the page, so the version is right before
+      # any script runs. The page also asks the GitHub API at load time, but that is
+      # unauthenticated and allowed 60 calls an hour per address, so it fails
+      # routinely; when it does, this is what the visitor sees. Read from the repo's
+      # own tags rather than the API: releases here are tag-driven, so the newest v*
+      # tag IS the latest release, and no network call can rate-limit us.
+      - name: Stamp the latest release tag
+        run: |
+          set -euo pipefail
+          tag="$(git tag --list 'v*' --sort=-v:refname | head -n 1)"
+          if [ -z "$tag" ]; then
+            echo "::error::no v* tag found; refusing to publish a page with an unstamped version" >&2
+            exit 1
+          fi
+          echo "stamping $tag"
+          perl -pi -e "s/__LATEST_TAG__/$tag/g" site/index.html
+          if grep -q '__LATEST_TAG__' site/index.html; then
+            echo "::error::placeholder survived the stamp" >&2
+            exit 1
+          fi
+
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:
