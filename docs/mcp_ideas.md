@@ -124,9 +124,20 @@ depth and composes with all of the above.
   it: re-read the current state (find_flagged, list_projects, read_project) before
   acting, and always immediately before a write, resolving any "the flagged one"
   or "the current task" against that fresh read rather than memory. A `work_flagged`
-  prompt bakes the re-read-first order into the common "work the flagged tasks"
+  prompt bakes the re-read-first order into the common "work the flagged nodes"
   flow. (Added after a stale-read slip: three flagged nodes were read, two were
   then unflagged, and "the flagged node" was resolved against the stale count.)
+- A prompt is the one part of this surface that states an ORDER rather than a
+  rule, which is its worth and its hazard: it restates the tools' vocabulary in
+  prose, so it can fall behind them silently. It did. v3.3.0 made the reads strict
+  about kind, whereupon `work_flagged`'s "read_project for context" instructed a
+  refusal, a flagged node ordinarily being a task; the step now passes the
+  `enclosing_project_id` that `find_flagged` reports, which is a call shorter as
+  well as legal. Two guards hold it there (`tools.test.js`). Every tool a prompt
+  names is written with parentheses, checked in both directions, so neither a call
+  to a tool that has left the surface nor a bare mention the forward pass cannot
+  see will ship. And the steps are walked against the real surface, since a name
+  check cannot tell that a name is being called on the wrong kind of node.
 
 ## Live view updates
 

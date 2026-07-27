@@ -26,9 +26,21 @@ afterEach(() => { rmSync(h.userData, { recursive: true, force: true }) })
 
 function fakeServer(scope) {
   const tools = new Map()
-  registerTools({ registerTool: (name, _config, cb) => tools.set(name, cb), registerPrompt: () => {} }, { taskService, store }, scope)
+  const prompts = new Map()
+  registerTools({
+    registerTool: (name, _config, cb) => tools.set(name, cb),
+    registerPrompt: (name, _config, cb) => prompts.set(name, cb),
+  }, { taskService, store }, scope)
   return {
     has: (n) => tools.has(n),
+    toolNames: () => [...tools.keys()],
+    promptNames: () => [...prompts.keys()],
+    // A prompt rendered as the client would receive it: the text of its messages.
+    prompt: (n, args = {}) => {
+      const cb = prompts.get(n)
+      if (!cb) throw new Error('prompt not registered: ' + n)
+      return cb(args, {}).messages.map((m) => m.content.text).join('\n')
+    },
     call: async (n, args = {}) => {
       const cb = tools.get(n)
       if (!cb) throw new Error('tool not registered: ' + n)
@@ -431,5 +443,67 @@ describe('tools notify on changes the op path does not cover', () => {
     s.events.length = 0
     await s.call('set_note', { node_id: cp.id, content: 'second' }) // note-only change
     expect(s.events).toContain('pensagrex:domain-changed')
+  })
+})
+
+// The prompts, which are the one part of the surface that states an ORDER rather than a rule,
+// and so the one part that can silently fall behind the tools it names. Both guards below are
+// written from a real failure: v3.3.0 made the reads strict about kind, whereupon work_flagged's
+// "read_project for context" instructed a refusal, a flagged node ordinarily being a task.
+describe('the prompts', () => {
+  // Every tool a prompt names is written with parentheses. That convention is what makes the
+  // check exact, and it is enforced in both directions: no unregistered name may be called, and
+  // no registered name may appear bare, which is how a mention the forward pass cannot see gets
+  // caught. Read-write is the tier the surface's prompts are written for; the read-only tier
+  // registers work_flagged too, whilst withholding the writes it names (see in-flight_ideas 9).
+  const calledIn = (text) => new Set([...text.matchAll(/\b([a-z][a-z0-9_]*)\(/g)].map((m) => m[1]))
+
+  it('names only registered tools, and names every one of them the same way', () => {
+    const s = fakeServer('read-write')
+    expect(s.promptNames().length).toBeGreaterThan(0)
+    for (const name of s.promptNames()) {
+      const text = s.prompt(name, {})
+      for (const called of calledIn(text)) {
+        expect(s.has(called), `prompt ${name} calls ${called}(), which is not a registered tool`).toBe(true)
+      }
+      for (const tool of s.toolNames()) {
+        for (const m of text.matchAll(new RegExp('\\b' + tool + '\\b(.?)', 'g'))) {
+          expect(m[1], `prompt ${name} mentions ${tool} without parentheses`).toBe('(')
+        }
+      }
+    }
+  })
+
+  it('work_flagged instructs a sequence the surface actually accepts', async () => {
+    store.createDomain('HomeLab')
+    store.setLastDomain('HomeLab')
+    const s = fakeServer('read-write')
+    const plan = data(await s.call('create_plan', { title: 'Ship it' }))
+    const task = data(await s.call('add_task', { target_id: plan.id, position: 'above', title: 'Write the thing' }))
+    await s.call('wrap_run', { from_id: task.id, title: 'Drafting' }) // so the flagged task sits in a sub-project
+    await s.call('set_note', { node_id: task.id, content: 'what is asked of you' })
+    await s.call('toggle_flag', { node_id: task.id })
+
+    // Step 1, and what the hit carries: the note flag and the two context ids the later steps use.
+    const hit = data(await s.call('find_flagged', {})).flagged.find((n) => n.id === task.id)
+    expect(hit.has_note).toBe(true)
+    expect(hit.enclosing_project_id).toBeTruthy()
+
+    const ok = async (name, args) => {
+      const res = await s.call(name, args)
+      expect(res.isError, `${name} refused: ${res.content[0].text}`).toBeFalsy()
+      return data(res)
+    }
+    await ok('read_note', { node_id: hit.id }) // step 2
+    await ok('read_project', { project: hit.enclosing_project_id })
+    await ok('read_task', { task: hit.id }) // step 4
+    await ok('set_note', { node_id: hit.id, content: 'done' })
+    await ok('set_status', { node_id: hit.id, status: 'completed' })
+
+    // And why step 2 passes the enclosing id rather than the flagged one, which is the defect
+    // this prompt shipped with: a read is strict about kind, so read_project handed a task refuses.
+    const refused = await s.call('read_project', { project: hit.id })
+    expect(refused.isError).toBe(true)
+    expect(refused.content[0].text).toMatch(/use read_task/)
   })
 })
