@@ -129,7 +129,7 @@ function drawOrbits(group, cx, cy, colour) {
 // colour tracks the node's status (a task) or is the project colour.
 export function renderCard(cardEl) {
   const isTerminus = cardEl.classList.contains('terminus')
-  // A scope's close wears the project hull, turned upside down: the same shape says
+  // A scope's close wears the project hull, turned through half a turn: the same shape says
   // it belongs to the same pair, and the inversion says which end of it this is. It
   // carries no title, so the hull is empty.
   const isProject = cardEl.classList.contains('project') || isTerminus
@@ -158,10 +158,12 @@ export function renderCard(cardEl) {
   svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h)
   const { outer, innerT } = buildShape(shape, w, h)
   const outerEl = svg.querySelector('.outer'), innerEl = svg.querySelector('.inner')
-  // The close is the same path, mirrored about the card's horizontal axis, so the two
-  // halves of a pair are visibly one shape and its reflection rather than two
-  // drawings that have to be kept in step.
-  const flip = isTerminus ? `translate(0 ${h}) scale(1 -1) ` : ''
+  // The close is the same path turned through half a turn: mirrored about both of the
+  // card's axes, so the two halves of a pair are visibly one shape and its reflection
+  // rather than two drawings that have to be kept in step. The hull's top edge rises from
+  // left to right, which is why the horizontal mirror shows: a half turn puts that rise on
+  // the close's bottom edge, falling from left to right.
+  const flip = isTerminus ? `translate(${w} ${h}) scale(-1 -1) ` : ''
   outerEl.setAttribute('d', outer)
   outerEl.setAttribute('transform', flip.trim())
   innerEl.setAttribute('d', outer)

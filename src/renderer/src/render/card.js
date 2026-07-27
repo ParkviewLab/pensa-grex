@@ -101,7 +101,7 @@ export function buildCard(task, { isCursor } = {}) {
   return card
 }
 
-// A scope's close wears the project hull upside down (see render/shapes.js): the
+// A scope's close wears the project hull turned through half a turn (see render/shapes.js): the
 // same shape says the two belong to one pair, and the inversion says which end this
 // is. It carries no title, no status glyph and no tag, so the hull is empty, and it
 // is sized to match an empty project card so the mirror is exact.

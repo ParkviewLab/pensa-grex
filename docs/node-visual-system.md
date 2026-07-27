@@ -54,6 +54,10 @@ The mapping is policy, set in `renderCard`, not a property of the shapes:
   (in the ink colour, `var(--ink)`);
 - project node → **hull**, in the reserved project colour `--c-project` (a violet:
   `#7d54a6` on the azure ground, `#bd93e6` on navy);
+- terminus node (the close of a scope, schema 3) → the same **hull** in the same violet,
+  turned through half a turn: mirrored about both of the card's axes, so the pair reads as
+  one shape and its reflection, and the inversion says which end of the scope this is. It
+  carries no label, so the hull is empty;
 - any **flagged** node → the **orbits**, in the node's own colour (its status colour
   for a task, the project violet for a project);
 - a **collapsed** project node additionally casts a **shadow**.
