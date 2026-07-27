@@ -143,7 +143,7 @@ describe('tools drive the task authority', () => {
     const clip = data(await s.call('copy_project', { project: cp.id }))
     // Termini: the subtree under a plan's base now includes the terminus closing it,
     // so the clip carries three nodes, not two. Still asserted as the exact set, and
-    // still under the key pasteAsTree reads, `nodes`: the record-wide tasks -> nodes
+    // still under the key pasteAsPlan reads, `nodes`: the record-wide tasks -> nodes
     // rename reaches the clip snapshot too, so a producer that emits the old key (or
     // one that drops the close) fails here rather than downstream.
     const close = data(await s.call('read_domain', {})).nodes.find((n) => n.kind === 'terminus')

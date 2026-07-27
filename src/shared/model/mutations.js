@@ -330,7 +330,7 @@ function requireRisingEdge(record, nodeId) {
  * An empty plan is a legal resting state, and this is how every plan begins: a
  * project carries a title, so an empty one still asserts something.
  */
-export function addTree(record, name) {
+export function addPlan(record, name) {
   const next = clone(record)
   const root = newProjectNode(name)
   const close = newTerminus()
@@ -364,7 +364,7 @@ export function uniqueTitle(record, desired, excludeId) {
 }
 
 // Place a freshly-created node into the record with a domain-unique title (uniqueTitle),
-// so a name typed at creation is suffixed just as setTitle and pasteAsTree already do.
+// so a name typed at creation is suffixed just as setTitle and pasteAsPlan already do.
 // Used by every add* mutation; the node is not yet in the record, so excludeId is null.
 function addNode(record, node) {
   node.title = uniqueTitle(record, node.title, null)
@@ -863,7 +863,7 @@ export function clipNodes(record, rootId) {
  * snapshot bridge/api.js gathers at copy time. Returns { next, notes } where
  * notes is [{ file, content }]. Pure: neither `record` nor `clip` is mutated.
  */
-export function pasteAsTree(record, clip) {
+export function pasteAsPlan(record, clip) {
   const next = clone(record)
   // A clip pastes as a plan of its own, and a plan is bounded by a project and its close, so
   // a clip rooted anywhere else cannot become one. Said here, where the clip is named, rather
@@ -1061,7 +1061,7 @@ export function moveSubtree(record, rootId, targetId) {
  * This is the way out when work genuinely does not rejoin, which axiom 3 calls a separate
  * plan rather than a branch.
  */
-export function detachToTree(record, id) {
+export function detachProject(record, id) {
   const next = clone(record)
   const node = requireTask(next, id)
   if (node.kind !== 'project') throw new Error('only a project node can become a root')

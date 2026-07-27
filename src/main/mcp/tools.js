@@ -355,7 +355,7 @@ export function registerTools(server, deps, scope) {
   server.registerTool('create_plan', {
     description: 'Create a new project plan in a domain: a base project node carrying the name, and the terminus that closes it. An empty plan is a legal resting state, and this is how every plan begins; tasks are then inserted into the edge between the two.',
     inputSchema: { title: z.string(), domain: z.string().optional() },
-  }, guard(async (a) => runWrite(taskService, dirOf(a), 'addTree', [a.title], null)))
+  }, guard(async (a) => runWrite(taskService, dirOf(a), 'addPlan', [a.title], null)))
 
   server.registerTool('add_task', {
     description: 'Insert a task into an edge of a trunk. position "above" takes the edge rising from target_id; "below" takes the edge beneath it, which is refused only below a plan\'s base, nothing preceding it. Below a branch\'s first node is allowed: the new task takes that node\'s place as the foot of the branch. An insertion always names its edge. To start a parallel strand instead, use open_branch.',
@@ -420,7 +420,7 @@ export function registerTools(server, deps, scope) {
   write1('convert_kind', 'convertKind', 'Convert a node between task and sub-project, which opens or closes a scope with it (not allowed on a plan\'s base, or on a terminus). Refused where the new scope would straddle a branch\'s span.')
   write1('move_up', 'moveUp', 'Swap a node up one place within its line.')
   write1('move_down', 'moveDown', 'Swap a node down one place within its line.')
-  write1('detach_project', 'detachToTree', 'Detach a sub-project into a plan of its own: the pair leaves the trunk it was on and that trunk is joined across the gap. Where it was a branch, it gives up its return, a plan having none. Takes a project, and refuses anything else.')
+  write1('detach_project', 'detachProject', 'Detach a sub-project into a plan of its own: the pair leaves the trunk it was on and that trunk is joined across the gap. Where it was a branch, it gives up its return, a plan having none. Takes a project, and refuses anything else.')
 
   server.registerTool('set_note', {
     description: "Set a node's markdown note contents (writes the note file and records it on the node).",
@@ -460,7 +460,7 @@ export function registerTools(server, deps, scope) {
       clip: z.object({ rootId: z.string(), nodes: z.record(z.string(), z.any()), notes: z.record(z.string(), z.string()).optional() }),
       domain: z.string().optional(),
     },
-  }, guard(async (a) => runWrite(taskService, dirOf(a), 'pasteAsTree', [a.clip], null)))
+  }, guard(async (a) => runWrite(taskService, dirOf(a), 'pasteAsPlan', [a.clip], null)))
 
   const write2 = (name, op, keys, description) => server.registerTool(name, {
     description,

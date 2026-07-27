@@ -58,7 +58,7 @@ The dragged node's kind and the drop location pick one of these pure moves:
   a project node carries its scope, and that scope's close then continues onto the
   gap's old upper node. Refused inserting a scope into its own line (a cycle) or
   above itself.
-- **detachToTree** — a sub-project dropped on empty canvas becomes its own plan:
+- **detachProject** — a sub-project dropped on empty canvas becomes its own plan:
   the pair leaves the trunk it was on, the trunk is joined across the gap, and the
   project node's id is appended to `planOrder`. Only a project node can be a root, so
   a task dropped on empty canvas is refused (it cannot become a root).
@@ -113,7 +113,7 @@ sit on.
 so a move that changes where a branch sits has to keep that merge legal, and one
 reshaping has to be refused outright rather than drawn: extending a merge across
 the close of a scope the branch was opened outside, which would leave a return line
-landing inside a collapsed block. `detachToTree` acquires the second purpose that
+landing inside a collapsed block. `detachProject` acquires the second purpose that
 the new axiom 3 gives it, as the way to say that work diverged and will not rejoin,
 which a branch may no longer say.
 

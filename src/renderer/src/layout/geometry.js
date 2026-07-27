@@ -245,7 +245,7 @@ export function assignLanes(model, extentOf) {
   const extent = extentOf
   const lineOfTask = new Map() // taskId -> the line's own start-task id
   const lineExtents = new Map() // lineId -> {min,max} of the line's own extent, in pixels
-  const treeOfLine = new Map() // lineId -> the tree root's task id
+  const planOfLine = new Map() // lineId -> the tree root's task id
   const lane = new Map() // lineId -> absolute integer lane
   const childrenOf = new Map() // lineId -> [{ child, side }], innermost first
   const relLane = new Map() // lineId -> lane relative to its parent spine
@@ -332,19 +332,19 @@ export function assignLanes(model, extentOf) {
   }
 
   // Top-down: accumulate relative lanes into absolute lanes (trunk = 0).
-  function assignAbsolute(startId, base, treeRoot) {
+  function assignAbsolute(startId, base, planRoot) {
     lane.set(startId, base)
-    treeOfLine.set(startId, treeRoot)
+    planOfLine.set(startId, planRoot)
     for (const k of childrenOf.get(startId)) {
-      assignAbsolute(k.child, base + relLane.get(k.child), treeRoot)
+      assignAbsolute(k.child, base + relLane.get(k.child), planRoot)
     }
   }
 
-  for (const tree of model.trees) {
+  for (const tree of model.plans) {
     collectChildren(tree.rootTaskId)
     layout(tree.rootTaskId)
     assignAbsolute(tree.rootTaskId, 0, tree.rootTaskId)
   }
 
-  return { lineOfTask, lineExtents, lane, treeOfLine }
+  return { lineOfTask, lineExtents, lane, planOfLine }
 }

@@ -19,8 +19,8 @@ describe('buildModel — the HomeLab fixture', () => {
   it('carries the domain and all three projects, named by their root nodes, in planOrder', () => {
     expect(model.title).toBe('HomeLab') // the domain's name; the domain also has an id of its own now
     expect(model.id).toBe('d_homelab000')
-    expect(model.trees.map((t) => model.getNode(t.rootTaskId).title)).toEqual(['Media server', 'Home network', 'Home automation'])
-    expect(model.trees.map((t) => t.id)).toEqual(['p_media', 'p_net', 'p_auto'])
+    expect(model.plans.map((t) => model.getNode(t.rootTaskId).title)).toEqual(['Media server', 'Home network', 'Home automation'])
+    expect(model.plans.map((t) => t.id)).toEqual(['p_media', 'p_net', 'p_auto'])
   })
 
   it('derives each task\'s predecessor without it being stored on the task', () => {
@@ -48,13 +48,13 @@ describe('buildModel — the HomeLab fixture', () => {
   })
 
   it('assigns every node to the tree its root reaches, forks included', () => {
-    expect(model.getTreeIdForTask('p_media')).toBe('p_media')
-    expect(model.getTreeIdForTask('k_nas')).toBe('p_media')
-    expect(model.getTreeIdForTask('k_plex')).toBe('p_media') // a branch task, same tree as its root
-    expect(model.getTreeIdForTask('k_btrfs')).toBe('p_media')
-    expect(model.getTreeIdForTask('k_wifi')).toBe('p_net')
-    expect(model.getTreeIdForTask('k_energy')).toBe('p_auto')
-    expect(model.getTreeIdForTask('t_net')).toBe('p_net') // Termini: a close belongs to the tree it closes
+    expect(model.getPlanIdForTask('p_media')).toBe('p_media')
+    expect(model.getPlanIdForTask('k_nas')).toBe('p_media')
+    expect(model.getPlanIdForTask('k_plex')).toBe('p_media') // a branch task, same tree as its root
+    expect(model.getPlanIdForTask('k_btrfs')).toBe('p_media')
+    expect(model.getPlanIdForTask('k_wifi')).toBe('p_net')
+    expect(model.getPlanIdForTask('k_energy')).toBe('p_auto')
+    expect(model.getPlanIdForTask('t_net')).toBe('p_net') // Termini: a close belongs to the tree it closes
   })
 
   it('walks the main-line chain via .next, stopping at a tip', () => {
@@ -88,8 +88,8 @@ describe('buildModel — the HomeLab fixture', () => {
     expect(model.getHereTaskId('k_plex')).toBeNull() // this branch has no cursor
   })
 
-  it('getNode/getTree return null for an unknown id rather than throwing', () => {
+  it('getNode/getPlan return null for an unknown id rather than throwing', () => {
     expect(model.getNode('nope')).toBeNull()
-    expect(model.getTree('nope')).toBeNull()
+    expect(model.getPlan('nope')).toBeNull()
   })
 })

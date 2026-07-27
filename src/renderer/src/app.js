@@ -242,7 +242,7 @@ async function seedSamples() {
 // the user's pan/zoom; on opening a domain it frames the whole of it.
 async function render(record, { fit = true } = {}) {
   const model = buildModel(pruneCollapsed(record, collapsedSet))
-  if (!model.trees.length) {
+  if (!model.plans.length) {
     showEmpty('This domain has no tasks yet. Right-click the canvas to start a tree.')
     return
   }
@@ -443,7 +443,7 @@ function applyDropIntent(sourceId, intent) {
   } else if (intent.kind === 'reorder') {
     applyOp('reorderRoot', sourceId, intent.index)
   } else if (intent.kind === 'detach') {
-    applyOp('detachToTree', sourceId)
+    applyOp('detachProject', sourceId)
   }
 }
 
@@ -520,9 +520,9 @@ async function copyProject(taskId) {
 // Paste the clipboard into the open domain as a new tree: fresh ids, kept
 // statuses, cleared here cursors, fresh note files. The paste op writes the note
 // note files and the record together in the main process.
-async function pasteTreeFlow() {
+async function pastePlanFlow() {
   if (!clipboard || !currentRecord) return
-  await applyOp('pasteAsTree', clipboard)
+  await applyOp('pasteAsPlan', clipboard)
 }
 
 // Export a project's subtree to a markdown outline the user saves where they
@@ -705,10 +705,10 @@ async function deleteTaskFlow(taskId) {
   applyOp('deleteTask', taskId, mode)
 }
 
-async function addTreeFlow() {
+async function addPlanFlow() {
   const name = await promptText({ title: 'New plan', label: 'Plan name', value: '' })
   if (name === null) return
-  applyOp('addTree', name)
+  applyOp('addPlan', name)
 }
 
 function openTaskMenu(x, y, taskId) {
@@ -817,9 +817,9 @@ function openTaskMenu(x, y, taskId) {
 }
 
 function openCanvasMenu(x, y) {
-  const items = [{ label: 'New plan…', onClick: () => addTreeFlow() }]
+  const items = [{ label: 'New plan…', onClick: () => addPlanFlow() }]
   // Paste a previously copied project as a new tree in this domain.
-  if (clipboard) items.push({ label: 'Paste as new plan', onClick: () => pasteTreeFlow() })
+  if (clipboard) items.push({ label: 'Paste as new plan', onClick: () => pastePlanFlow() })
   items.push({ separator: true })
   items.push({ label: 'Add bookmark…', onClick: () => addBookmarkFlow() })
   if (bookmarks.length) {
