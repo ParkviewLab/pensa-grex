@@ -54,12 +54,12 @@ const editorTheme = EditorView.theme({
 // markup punctuation (** # > - 1. `) carries tags.processingInstruction, so the
 // single --muted rule dims every marker while its content keeps its own tag.
 const pgHighlight = HighlightStyle.define([
-  { tag: tags.heading, color: 'var(--c-project)', fontWeight: '700' },
+  { tag: tags.heading, color: 'var(--accent-violet)', fontWeight: '700' },
   { tag: tags.strong, color: 'var(--ink)', fontWeight: '700' },
   { tag: tags.emphasis, color: 'var(--ink)', fontStyle: 'italic' },
   { tag: tags.strikethrough, color: 'var(--muted)', textDecoration: 'line-through' },
-  { tag: tags.monospace, color: 'var(--c-done)' },
-  { tag: tags.link, color: 'var(--c-done)', textDecoration: 'underline' },
+  { tag: tags.monospace, color: 'var(--accent-teal)' },
+  { tag: tags.link, color: 'var(--accent-teal)', textDecoration: 'underline' },
   { tag: tags.url, color: 'var(--c-prog)' },
   { tag: tags.quote, color: 'var(--muted)', fontStyle: 'italic' },
   { tag: tags.list, color: 'var(--c-todo)' },

@@ -8,7 +8,7 @@
 // and looks its own children up by class.
 
 import { describe, it, expect, beforeEach } from 'vitest'
-import { renderCard } from './shapes.js'
+import { renderCard, buildShape, hullCurveHeight, hullSeamToClose, HULL } from './shapes.js'
 
 // A stand-in element. `sel` matching covers only what renderCard asks for, a bare class or
 // a tag.class, and throws on anything else so a future selector cannot pass silently.
@@ -64,6 +64,43 @@ beforeEach(() => {
   globalThis.document = {
     createElementNS: (_ns, tag) => el(tag),
   }
+})
+
+describe('buildShape — the hull\'s curve stops growing with the card', () => {
+  // A project node's label is centred, so its first line sits at (h - lines * 18) / 2 from the
+  // card's top. An uncapped curve descends at 0.1424 of h, which outruns the text: at one line
+  // the text starts at 20 and the curve reaches 11.7, at five lines the text still starts at 16
+  // and the curve would reach 19.6. Capping the curve at the project card's own minimum height
+  // is what keeps the two apart at every size.
+  const topOf = (d) => Number(/^M[\d.]+,([\d.]+)/.exec(d)[1])
+  const controlOf = (d) => Number(/Q[\d.]+,([\d.]+)/.exec(d)[1])
+
+  it('draws the same curve at 58 and at any height above it', () => {
+    const short = buildShape('hull', 188, 58).outer
+    const tall = buildShape('hull', 188, 300).outer
+    expect(topOf(tall)).toBe(topOf(short))
+    expect(controlOf(tall)).toBe(controlOf(short))
+  })
+
+  it('still scales the curve below the cap, where a card cannot carry a full one', () => {
+    const tiny = buildShape('hull', 188, 30).outer
+    expect(topOf(tiny)).toBeLessThan(topOf(buildShape('hull', 188, 58).outer))
+    expect(hullCurveHeight(30)).toBe(30)
+    expect(hullCurveHeight(300)).toBe(HULL.capHeight)
+  })
+
+  it('makes the seam a folded pair needs a constant, so the metric always governs', () => {
+    expect(hullSeamToClose(58, 58)).toBeCloseTo(hullSeamToClose(300, 58), 9)
+  })
+
+  it('leaves the other shapes alone, having no curve to cap', () => {
+    // Only the hull bows into its own card; a task's rounded rectangle does not, which is why
+    // a task card keeps the padding it has.
+    const a = buildShape('screen', 188, 58).outer
+    const b = buildShape('screen', 188, 300).outer
+    expect(a).not.toBe(b) // the box differs, of course
+    expect(topOf(a)).toBe(topOf(b)) // but nothing about it grows into the card
+  })
 })
 
 describe('renderCard — the box a silhouette is painted from', () => {

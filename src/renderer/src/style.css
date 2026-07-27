@@ -21,18 +21,32 @@
 :root[data-ground="azure"]{
   --ground:#d3e6ef; --panel:#f8f3e8; --ink:#173242; --line:#365b6c; --muted:#5f7d8b;
   --grid:rgba(23,50,66,.10);
-  --c-done:#1f8f8a; --c-prog:#d75f2e; --c-todo:#d9a53a; --c-cancel:#8aa0ab; --c-project:#7d54a6; --cursor:#d75f2e;
+  /* The two hues the map gives meaning to, named by hue as well as by role. A few
+     surfaces outside the map want a particular colour rather than a particular meaning
+     (the MCP dot, a link in a note, the note editor's syntax colours), so they name the
+     hue and do not move when the roles are exchanged, as they were here. */
+  --accent-teal:#1f8f8a; --accent-violet:#7d54a6;
+  /* Teal marks the structure of a plan and violet a task that is done. It was the other
+     way round until 3.2.1: completed tasks are numerous and small while scopes are few
+     and large, so the palette was giving the loud colour to the count and the quiet one
+     to the mass. */
+  --c-done:var(--accent-violet); --c-prog:#d75f2e; --c-todo:#d9a53a; --c-cancel:#8aa0ab;
+  --c-project:var(--accent-teal); --cursor:#d75f2e;
   /* The panel a project node and its close wear, in place of --panel: a tint of the
-     project violet, light enough for the ink to read on it. */
-  --c-project-tint:#bd93e6;
+     scope colour, light enough for the ink to read on it. Ten points lighter and fifteen
+     less saturated than the violet tint it replaces, which brings it close to the ground
+     (#d3e6ef): the panel is a pale field here, deliberately. */
+  --c-project-tint:#cbe6e4;
   --burst-a:#1f8f8a; --burst-b:#d9a53a; --here-ink:var(--ink);
 }
 :root[data-ground="navy"]{
   --ground:#0f2334; --panel:#1a3a54; --ink:#e8f1f6; --line:#6fb6c9; --muted:#93b3c2;
   --grid:rgba(111,182,201,.13);
-  --c-done:#37c2ba; --c-prog:#f27a44; --c-todo:#f0bd55; --c-cancel:#7590a0; --c-project:#bd93e6; --cursor:#f27a44;
+  --accent-teal:#37c2ba; --accent-violet:#bd93e6;
+  --c-done:var(--accent-violet); --c-prog:#f27a44; --c-todo:#f0bd55; --c-cancel:#7590a0;
+  --c-project:var(--accent-teal); --cursor:#f27a44;
   /* On the navy ground the tint goes the other way, dark enough for the light ink. */
-  --c-project-tint:#4b3168;
+  --c-project-tint:#356e69;
   --burst-a:#37c2ba; --burst-b:#f0bd55; --here-ink:var(--ground);
 }
 
@@ -75,7 +89,9 @@ body{
 .btn.mcp{ display:inline-flex; align-items:center; gap:7px; }
 .mcp-dot{ width:8px; height:8px; border-radius:50%; background:var(--c-cancel);
   box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--ink) 25%, transparent); }
-.mcp-dot.on{ background:var(--c-done); }
+/* Teal because it reads as healthy, not because anything here is complete: it names the
+   hue so the map's roles can be exchanged without moving it. */
+.mcp-dot.on{ background:var(--accent-teal); }
 .mcp-dot.err{ background:var(--c-prog); }
 .pct{ font-size:11px; color:var(--muted); min-width:42px; text-align:center; font-variant-numeric:tabular-nums; }
 
@@ -148,9 +164,19 @@ body{
   width:188px; display:flex; flex-direction:column; gap:3px; }
 .card.cursor{ padding-left:24px; padding-right:24px; }
 /* A project node has no status tag and no cursor, so a one-word name left the hull
-   too short. Reserve two label lines (2 x 15px x 1.2 = 36px) plus the 11px vertical
-   padding, and centre the content, so every project card is at least two lines tall. */
-.card.project{ min-height:58px; justify-content:center; }
+   too short. Reserve two label lines (2 x 15px x 1.2 = 36px) plus the vertical padding,
+   and centre the content, so every project card is at least two lines tall.
+   
+   The padding is 16 rather than the 11 a task card takes, because the hull curves into
+   the card at top and bottom where a task's rounded rectangle does not. Since the label
+   is centred, the extra padding does not move the text within a card of a given height;
+   it makes the card taller, and the centred label then lands 16 from the top and 16 from
+   the bottom at every line count above one. A one-line card is held at the minimum below
+   and keeps the 20 it already had. */
+.card.project{ min-height:58px; justify-content:center; padding-top:16px; padding-bottom:16px; }
+/* A folded scope's close sits ON its project card, overlapping it by the seam, and its ink
+   reaches about 20 pixels down into it at the two tips. The label clears that. */
+.card.project.collapsed{ padding-top:24px; }
 /* A scope's close: the project hull upside down (render/shapes.js mirrors the path).
    It has no content of its own, so it takes the project card's own width and minimum
    height, which is what makes it an exact reflection of an empty project card. */
@@ -273,7 +299,7 @@ body{
   line-height:1.15; margin:1.3em 0 .45em; }
 .note-body h1{ font-size:1.7em; } .note-body h2{ font-size:1.4em; } .note-body h3{ font-size:1.18em; }
 .note-body p,.note-body ul,.note-body ol,.note-body blockquote,.note-body pre,.note-body table{ margin:0 0 .85em; }
-.note-body a{ color:var(--c-done); text-decoration:none; } .note-body a:hover{ text-decoration:underline; }
+.note-body a{ color:var(--accent-teal); text-decoration:none; } .note-body a:hover{ text-decoration:underline; }
 .note-body code{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.88em;
   background:color-mix(in srgb, var(--line) 16%, transparent); padding:1px 5px; border-radius:4px; }
 .note-body pre{ background:color-mix(in srgb, var(--line) 14%, transparent); padding:12px 14px; border-radius:8px; overflow:auto; }
