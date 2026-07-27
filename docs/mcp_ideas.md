@@ -209,7 +209,8 @@ the namespace, not the kind expected: a tool that takes one kind says so in its 
 and refuses the rest, rather than promising it in a parameter name that would then have to
 change if the tool's reach ever did. Where a call names a second node in some relation to
 the first, that one keeps its role name, since two parameters cannot both be `node_id`:
-`target_id`, `below_id`, `merge_point_id`, `edge_id`, `from_id` and `to_id`.
+`target_id`, `below_id`, `merge_point_id`, `branch_point_id`, `edge_id`, `from_id` and
+`to_id`.
 
 The same reasoning names the tools. One that takes a single kind says which
 (`move_task`, `move_project`, `copy_project`, `unwrap_project`, `read_task`); one that takes
@@ -263,10 +264,14 @@ verb because a branch is three things at once.
 - `create_domain(name)`, `create_plan(title, domain?)`.
 - `add_task(target_id, position, title, domain?)`, position above or below.
 - `open_branch(node_id, position, title, side?, domain?)`, the same two positions as
-  `add_task`; `set_merge_point(branch_id, merge_point_id, domain?)`. `side` is the
-  half-plane the branch is drawn in, chosen by alternation where it is not given, and it
-  has no control in the app: see the draggable-branches entry in `in-flight_ideas.md`,
-  which is the real answer rather than a side menu.
+  `add_task`; `set_merge_point(branch_id, merge_point_id, domain?)`;
+  `set_branch_point(branch_id, branch_point_id, domain?)`, the same object's other end,
+  the branch travelling intact with contents, side and merge point unchanged. In the app
+  both are a junction diamond dragged along the trunk, or the "Merge a branch here" /
+  "Move branch point here" menu pair. `side` is the half-plane the branch is drawn in,
+  chosen by alternation where it is not given, and it has no control in the app: see the
+  draggable-branches entry in `in-flight_ideas.md`, which is the real answer rather than
+  a side menu.
 - `wrap_run(from_id, to_id?, title, domain?)`, `unwrap_project(node_id, domain?)`.
 - `set_title`, `set_status`, `cycle_status`, `set_note`, `delete_note`.
 - `make_here`, `clear_here`, `toggle_flag`, `convert_kind`.

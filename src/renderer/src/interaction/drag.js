@@ -1,17 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
 
-// Pointer-driven drag-and-drop for station cards. A left-button press on a card
-// that then moves past a small threshold begins a drag; a press that does not is
-// left to click / double-click. Panning is unaffected: it only starts on empty
-// canvas (viewport.js bails when the press lands on a card). While dragging, a
-// floating label follows the cursor; the caller resolves what the cursor is over
-// and draws the drop hint.
+// Pointer-driven drag-and-drop for station cards and junction handles. A
+// left-button press on either that then moves past a small threshold begins a
+// drag; a press that does not is left to click / double-click. Panning is
+// unaffected: it only starts on empty canvas (viewport.js bails when the press
+// lands on a card or a handle). While dragging, a floating label follows the
+// cursor; the caller resolves what the cursor is over and draws the drop hint.
 //
 // This module is DOM mechanics only. It reports the gesture in client coordinates
 // and leaves every model rule and all hit-testing to the caller: onProbe on each
 // move (update the hint), onDrop on release (apply the move), onCancel when a drag
-// is abandoned. See docs/interaction_model.md for the rules the caller applies.
+// is abandoned. The source handed to onProbe/onDrop is a descriptor,
+// { type: 'node', id } for a card or { type: 'fork'|'merge', footId } for a
+// junction handle, the branch named by its foot. See docs/interaction_model.md
+// for the rules the caller applies.
 
 const THRESHOLD = 5 // px of pointer travel before a press becomes a drag
 
@@ -20,9 +23,10 @@ function sel(id) {
 }
 
 export function createDragController({ contentEl, viewportEl, onProbe, onDrop, onCancel }) {
-  let state = null // { sourceId, startX, startY, dragging, preview }
+  let state = null // { source, startX, startY, dragging, preview }
 
-  const cardEl = (id) => contentEl.querySelector(sel(id))
+  // The drag-src styling belongs to a card; a junction drag has no card to fade.
+  const cardEl = () => (state && state.source.type === 'node' ? contentEl.querySelector(sel(state.source.id)) : null)
 
   function positionPreview(e) {
     if (state.preview) {
@@ -33,11 +37,13 @@ export function createDragController({ contentEl, viewportEl, onProbe, onDrop, o
 
   function beginDrag(e) {
     state.dragging = true
-    const src = cardEl(state.sourceId)
+    const src = cardEl()
     if (src) src.classList.add('drag-src')
     const preview = document.createElement('div')
     preview.className = 'drag-preview'
-    preview.textContent = (src && src.querySelector('.lbl') && src.querySelector('.lbl').textContent) || 'node'
+    preview.textContent = state.source.type === 'node'
+      ? (src && src.querySelector('.lbl') && src.querySelector('.lbl').textContent) || 'node'
+      : (state.source.type === 'fork' ? 'branch point' : 'merge point')
     document.body.appendChild(preview)
     state.preview = preview
     viewportEl.classList.add('drag-active')
@@ -46,7 +52,7 @@ export function createDragController({ contentEl, viewportEl, onProbe, onDrop, o
 
   function tearDown() {
     if (state.preview) state.preview.remove()
-    const src = cardEl(state.sourceId)
+    const src = cardEl()
     if (src) src.classList.remove('drag-src')
     viewportEl.classList.remove('drag-active')
     window.removeEventListener('pointermove', onMove)
@@ -62,17 +68,17 @@ export function createDragController({ contentEl, viewportEl, onProbe, onDrop, o
       beginDrag(e)
     }
     positionPreview(e)
-    onProbe(state.sourceId, e.clientX, e.clientY)
+    onProbe(state.source, e.clientX, e.clientY)
     e.preventDefault()
   }
 
   function onUp(e) {
     if (!state) return
     const wasDragging = state.dragging
-    const sourceId = state.sourceId
+    const source = state.source
     const cx = e.clientX, cy = e.clientY
     tearDown()
-    if (wasDragging) onDrop(sourceId, cx, cy)
+    if (wasDragging) onDrop(source, cx, cy)
   }
 
   function onCancelEvent() {
@@ -84,9 +90,14 @@ export function createDragController({ contentEl, viewportEl, onProbe, onDrop, o
 
   function onDown(e) {
     if (e.button !== 0) return
-    const card = e.target && e.target.closest ? e.target.closest('[data-node-id]') : null
-    if (!card) return
-    state = { sourceId: card.dataset.nodeId, startX: e.clientX, startY: e.clientY, dragging: false, preview: null }
+    if (!e.target || !e.target.closest) return
+    const card = e.target.closest('[data-node-id]')
+    const jx = card ? null : e.target.closest('[data-jx-foot]')
+    if (!card && !jx) return
+    const source = card
+      ? { type: 'node', id: card.dataset.nodeId }
+      : { type: jx.dataset.jxKind, footId: jx.dataset.jxFoot }
+    state = { source, startX: e.clientX, startY: e.clientY, dragging: false, preview: null }
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
     window.addEventListener('pointercancel', onCancelEvent)

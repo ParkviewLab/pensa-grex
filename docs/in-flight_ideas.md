@@ -159,6 +159,18 @@ verb again (`move_task` and `move_project` already do that by grafting).
 
 Gary's direction, 2026-07-27: a future PR, after v3.3.0.
 
+**Partially answered since (the junction work, after v3.4.0).** The host-edge half is done,
+and by a different handle than this entry imagined: the junction diamond, not the branch's
+foot, is the draggable object, so "move this branch to another edge" is `setBranchPoint` /
+`set_branch_point` (a drag of the departure diamond, or "Move branch point here"), the
+branch travelling intact rather than being grafted. What REMAINS open here is exactly the
+drawing half: side (left/right of the trunk) and lane order within a side, which no gesture
+or field yet controls. The settled direction from that discussion, kept for whoever picks
+this up: no stored lane-order list (a parallel list nothing forces to stay truthful); if
+lane order wants controlling, either the packer's derivation rule changes (for instance
+longest-span-outermost) or the order within one host's side array is dragged, which is the
+one order that is already the author's.
+
 
 # 9. Under consideration: MCP resources, and more MCP prompts
 

@@ -173,10 +173,14 @@ function placeOnce(model, sizes, o, slack) {
   // One diamond per point, not per line meeting it: two branches off one host share a fork, and
   // two branches returning to one edge share a join. The coordinates come from the same
   // expressions in either case, so equality is exact, but the key is rounded against float noise.
+  // A shared point accumulates the feet of every branch meeting it, so a junction is also an
+  // ADDRESS: its kind, the node whose rising edge holds it, and the branches it belongs to,
+  // which is what lets the interaction layer treat it as an object rather than only as ink.
   const junctionByKey = new Map()
-  function junction(x, y) {
+  function junction(x, y, kind, edgeBelowId, footId) {
     const key = x.toFixed(3) + ',' + y.toFixed(3)
-    if (!junctionByKey.has(key)) junctionByKey.set(key, { x, y })
+    if (!junctionByKey.has(key)) junctionByKey.set(key, { x, y, kind, edgeBelowId, footIds: [] })
+    junctionByKey.get(key).footIds.push(footId)
   }
   function lateral(from, to, kind) {
     const dir = Math.sign(to.x - from.x) || 1
@@ -197,7 +201,7 @@ function placeOnce(model, sizes, o, slack) {
 
   for (const b of branches) {
     const from = { x: finalX(b.hostId), y: circleY(b.hostId) - o.departClear }
-    junction(from.x, from.y)
+    junction(from.x, from.y, 'fork', b.hostId, b.footId)
     lateral(from, { x: finalX(b.footId), y: arrivalY(b.footId) }, 'branch')
 
     if (!b.tipId || !b.mergePoint) continue
@@ -205,7 +209,7 @@ function placeOnce(model, sizes, o, slack) {
     const above = merge && merge.next ? merge.next : null
     if (!above || !model.getNode(above)) continue
     const to = { x: finalX(above), y: arrivalY(above) }
-    junction(to.x, to.y)
+    junction(to.x, to.y, 'merge', b.mergePoint, b.footId)
     lateral({ x: finalX(b.tipId), y: circleY(b.tipId) - tailOf(b.footId) }, to, 'return')
   }
 

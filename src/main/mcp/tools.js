@@ -401,6 +401,11 @@ export function registerTools(server, deps, scope) {
     inputSchema: { branch_id: z.string(), merge_point_id: z.string(), domain: z.string().optional() },
   }, guard(async (a) => runWrite(taskService, dirOf(a), 'setMergePoint', [a.branch_id, a.merge_point_id], a.branch_id)))
 
+  server.registerTool('set_branch_point', {
+    description: 'Move where a branch hangs on the trunk, the branch travelling intact: contents, side and merge point all stay. The other end of the same object set_merge_point moves. branch_id is the branch\'s first node; branch_point_id names the node BELOW the edge the branch leaves. A legal attachment is on the trunk the return joins, at or below the merge point (meeting it is the smallest legal branch), and inside exactly the scopes the return is inside; a refusal says which rule failed.',
+    inputSchema: { branch_id: z.string(), branch_point_id: z.string(), domain: z.string().optional() },
+  }, guard(async (a) => runWrite(taskService, dirOf(a), 'setBranchPoint', [a.branch_id, a.branch_point_id], a.branch_id)))
+
   server.registerTool('wrap_run', {
     description: 'Name a run of one trunk as a sub-project: a project node goes in below the run\'s first node and a terminus above its last, so the run becomes a scope. to_id defaults to from_id, which wraps a single node. Refused where the run would straddle an existing scope or a branch\'s span, since a scope has to be collapsible as one block.',
     inputSchema: { from_id: z.string(), to_id: z.string().optional(), title: z.string(), domain: z.string().optional() },
