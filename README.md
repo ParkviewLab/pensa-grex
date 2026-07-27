@@ -27,6 +27,12 @@ Get the latest macOS, Windows, and Linux builds from the
 **[download page](https://parkviewlab.github.io/pensa-grex/)**, or straight from
 [GitHub Releases](https://github.com/ParkviewLab/pensa-grex/releases).
 
+There is no auto-update, and the app makes no request to the internet on its own.
+Opening **About PensaGrex** asks GitHub which release is the latest and says whether
+this copy is it; that request is the only one, it carries nothing about you or your
+domains, and it downloads and installs nothing. If it cannot be made, the window
+says so and nothing else changes.
+
 ## Run from source
 
 ```bash
