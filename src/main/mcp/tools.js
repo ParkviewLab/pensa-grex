@@ -140,8 +140,11 @@ function structuredNode(record, id) {
     id, title: t.title, kind: t.kind, flagged: !!t.flagged,
     has_note: !!t.note, note_file: t.note || null, next: t.next || null,
     branches: branchChildrenOf(t),
+    // The third outgoing edge, which set_merge_point takes by id and no read reported: a branch's
+    // return is stored on the top of its own trunk, so this is null on every other node.
+    merge_point: t.mergePoint || null,
   }
-  if (t.kind === 'task') { base.status = t.status; base.here = !!t.here }
+  if (t.kind === 'task') { base.status = t.status; base.here = !!t.here; base.completed_at = t.completedAt || null }
   return base
 }
 function projectOutline(record, rootId) {
@@ -233,7 +236,10 @@ export function registerTools(server, deps, scope) {
     inputSchema: { domain: z.string().optional() },
   }, guard(async (a) => {
     const dir = dirOf(a); const r = record(dir)
-    const flagged = Object.values(r.nodes).filter((t) => t.flagged).map((t) => structuredNode(r, t.id))
+    // With the two context ids, since a flagged task is nearly always the start of "and what is
+    // this part of?", which would otherwise take a read_task apiece before read_project.
+    const flagged = Object.values(r.nodes).filter((t) => t.flagged)
+      .map((t) => ({ ...structuredNode(r, t.id), ...context(r, t.id) }))
     return json({ domain: dir, flagged })
   }))
 
@@ -281,7 +287,7 @@ export function registerTools(server, deps, scope) {
     const notes = a.include_notes ? notesFor(dir, r, ids) : null
     return json({
       domain: dir,
-      project: id,
+      id,
       ...context(r, id),
       outline: serializeProject(r, id, notes || {}),
       nodes: nodesFor(r, ids, notes),
@@ -481,7 +487,7 @@ export function registerTools(server, deps, scope) {
     }
     const res = taskService.runOp(dir, 'deleteTask', [a.node_id, a.mode || 'subtree'])
     if (res.error) return fail(res.error)
-    return json({ deleted: a.node_id, outline: domainOutline(res.record) })
+    return json({ id: a.node_id, deleted: true, outline: domainOutline(res.record) })
   }))
 
   server.registerTool('delete_domain', {
@@ -494,6 +500,8 @@ export function registerTools(server, deps, scope) {
     if (res.error) return fail(res.error)
     notify('pensagrex:domains-changed', {})
     notify('pensagrex:domain-changed', { dir }) // in case the deleted domain is the open one
-    return json({ deleted: a.name_or_path })
+    // The path resolved, not the caller's own argument handed back: a name and a path both
+    // resolve here, and the reply should say which domain went.
+    return json({ id: dir, deleted: true })
   }))
 }

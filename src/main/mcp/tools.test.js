@@ -224,7 +224,7 @@ describe('tools drive the task authority', () => {
   it('reads a project with the scope it sits in, and a plan base with none', async () => {
     const { sub, plan } = await nested()
     const p = data(await s.call('read_project', { project: sub }))
-    expect(p.project).toBe(sub)
+    expect(p.id).toBe(sub) // the same key every other tool uses for what it acted on
     expect(p.enclosing_project_id).toBe(plan)
     expect(p.root_project_id).toBe(plan)
     const base = data(await s.call('read_project', { project: plan }))
@@ -235,7 +235,7 @@ describe('tools drive the task authority', () => {
   it('takes a title as readily as an id, titles being domain-unique', async () => {
     const { inner, sub } = await nested()
     expect(data(await s.call('read_task', { task: 'Inner' })).id).toBe(inner)
-    expect(data(await s.call('read_project', { project: 'Sub' })).project).toBe(sub)
+    expect(data(await s.call('read_project', { project: 'Sub' })).id).toBe(sub)
     const miss = await s.call('read_task', { task: 'Nowhere' })
     expect(miss.isError).toBe(true)
     expect(miss.content[0].text).toMatch(/nothing in this domain has the id or title "Nowhere"/)
@@ -288,7 +288,7 @@ describe('tools drive the task authority', () => {
     const second = data(await s.call('create_plan', { name: 'P' }))
     expect(first.title).toBe('P')
     expect(second.title).toBe('P-1')
-    expect(data(await s.call('read_project', { project: 'P-1' })).project).toBe(second.id)
+    expect(data(await s.call('read_project', { project: 'P-1' })).id).toBe(second.id)
     // and a rename reports it too
     const renamed = data(await s.call('set_title', { node_id: second.id, title: 'P' }))
     expect(renamed.title).toBe('P-1')
@@ -298,7 +298,8 @@ describe('tools drive the task authority', () => {
     const cp = data(await s.call('create_plan', { name: 'D' }))
     const at = data(await s.call('add_task', { target_id: cp.id, position: 'above', title: 'gone' }))
     const del = data(await s.call('delete_node', { node_id: at.id, mode: 'subtree' }))
-    expect(del.deleted).toBe(at.id)
+    expect(del.id).toBe(at.id)
+    expect(del.deleted).toBe(true)
     expect(data(await s.call('read_domain', {})).nodes.find((n) => n.id === at.id)).toBeUndefined()
   })
 
