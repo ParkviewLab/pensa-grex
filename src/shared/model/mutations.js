@@ -1009,6 +1009,14 @@ function spliceOutTask(next, id) {
   task.next = null
   task.leftBranches = []
   task.rightBranches = []
+  // A stored merge point belongs to the trunk this node is leaving, not to the node:
+  // it says where THAT branch's return joins, and it is stored here only because this
+  // node happened to be the branch's tip. Carried along, it is a live address in the
+  // wrong place — landed on another branch's trunk, relocateReturns' topmost-wins sweep
+  // would read it as that branch's return and silently rewrite it. The branch left
+  // behind keeps its merge through normalizeReturns' wasOn map, which remembers it by
+  // the branch's own foot.
+  task.mergePoint = null
 }
 
 /**
