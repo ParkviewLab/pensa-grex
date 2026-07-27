@@ -4,6 +4,21 @@ All notable changes to this project are recorded here.
 
 ## [Unreleased]
 
+## [v3.4.0] - 2026-07-27
+
+### Highlights
+
+The download page now stamps the release version into the page at deploy time rather than relying on an unauthenticated GitHub API call that was failing and displaying "latest" in its place, and its version badge is enlarged to 22px while the screenshot now switches between the light and dark grounds along with the rest of the page. Opening the About window checks GitHub for the latest release and reports either that this copy is up-to-date or that a newer version is available, with a link to the download page; the check runs only when About is opened, times out after five seconds, and stays quiet on any failure.
+
+### Bug fixes
+
+- The download page shows the version, not the word LATEST (#85) (7ed9287)
+
+### Features
+
+- The screenshot follows the light/dark ground, and the version reads large (#83) (465b41d)
+- About says whether this copy is the latest release (#84) (aa5765a)
+
 ## [v3.3.0] - 2026-07-27
 
 ### Highlights
