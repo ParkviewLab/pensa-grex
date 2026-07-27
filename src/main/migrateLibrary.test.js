@@ -163,7 +163,7 @@ describe('the schema-2 to schema-3 library move', () => {
 
     // And the model still builds one tree over every node: the old five and the close.
     const model = buildModel(record)
-    expect(model.trees).toHaveLength(1)
+    expect(model.plans).toHaveLength(1)
     expect(model.nodes.size).toBe(6)
   })
 

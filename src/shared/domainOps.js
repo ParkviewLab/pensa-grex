@@ -26,22 +26,22 @@ import { migrateRecord } from './model/migrate.js'
 import * as M from './model/mutations.js'
 
 // The task operations a client may invoke by name, each a pure mutation with the
-// signature (record, ...args) -> nextRecord. `pasteAsTree` is handled separately
+// signature (record, ...args) -> nextRecord. `pasteAsPlan` is handled separately
 // because it also writes note files; helpers such as `uniqueTitle` are
 // deliberately not exposed.
 const DOMAIN_OPS = new Set([
-  'addTree', 'insertTask', 'addTaskAbove', 'addTaskBelow', 'addBranchAbove', 'addBranchBelow',
+  'addPlan', 'insertTask', 'addTaskAbove', 'addTaskBelow', 'addBranchAbove', 'addBranchBelow',
   'openBranch', 'setMergePoint', 'wrapRun', 'unwrapProject',
   'setTitle', 'setNote', 'setStatus', 'cycleStatus', 'convertKind', 'toggleFlag',
   'makeHere', 'clearHere', 'deleteTask',
-  'moveTaskNode', 'moveSubtree', 'detachToTree', 'reorderRoot', 'moveIntoLine',
+  'moveTaskNode', 'moveSubtree', 'detachProject', 'reorderRoot', 'moveIntoLine',
   'moveUp', 'moveDown',
 ])
 
 // Whether `op` is a task operation this core will run (the allowlist the IPC
 // dispatch and the fallback both gate on).
 export function isDomainOp(op) {
-  return op === 'pasteAsTree' || DOMAIN_OPS.has(op)
+  return op === 'pasteAsPlan' || DOMAIN_OPS.has(op)
 }
 
 // Parse a domain's file text, migrate it to the current schema, and validate
@@ -85,8 +85,8 @@ export function runOp(storage, dir, op, args) {
 
   let next
   let noteWrites = []
-  if (op === 'pasteAsTree') {
-    const res = M.pasteAsTree(record, args[0])
+  if (op === 'pasteAsPlan') {
+    const res = M.pasteAsPlan(record, args[0])
     next = res.next
     noteWrites = res.notes || []
   } else if (DOMAIN_OPS.has(op)) {

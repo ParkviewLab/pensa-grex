@@ -14,12 +14,12 @@ import { createViewport } from './interaction/viewport.js'
 import { mountLayout } from './render/scene.js'
 import { renderCards } from './render/shapes.js'
 import { buildModel } from '../../shared/model/model.js'
-import { clipNodes } from '../../shared/model/mutations.js'
+import { clipNodes, wrapCandidates } from '../../shared/model/mutations.js'
 import { branchChildrenOf, isPlanClose, branchesIn, indexRecord, mergeErrors, pairScopes, trunksOf, scopeOf, extentOf, reachableFrom } from '../../shared/model/validate.js'
 import { measureDomain } from './layout/measure.js'
 import { computeDomainLayout } from './layout/layout.js'
 import { createApi } from './bridge/api.js'
-import { taskIdFromEvent } from './interaction/hittest.js'
+import { nodeIdFromEvent } from './interaction/hittest.js'
 import { createDragController } from './interaction/drag.js'
 import { centeredStationId, anchorChain, resolveAnchor } from './interaction/bookmarks.js'
 import { openContextMenu, closeContextMenu } from './interaction/contextMenu.js'
@@ -62,17 +62,26 @@ const noteEditor = createNoteEditor({
   readNote: (dir, file) => api.readNote(dir, file),
   writeNote: (dir, file, text) => api.writeNote(dir, file, text),
   openExternal: (url) => api.openExternal(url),
-  onFirstWrite: (taskId, file) => {
-    const t = currentRecord && currentRecord.nodes[taskId]
-    if (t && !t.note) applyOp('setNote', taskId, file)
+  onFirstWrite: (nodeId, file) => {
+    const t = currentRecord && currentRecord.nodes[nodeId]
+    if (t && !t.note) applyOp('setNote', nodeId, file)
   },
   // Surfaced when an external writer changes or removes the note being edited.
   notify: (msg) => { chooseAction({ title: 'Note', message: msg, actions: [{ label: 'OK', value: null }] }) },
 })
 
-function openNote(taskId) {
-  const t = currentRecord && currentRecord.nodes[taskId]
-  if (t) noteEditor.open(t, currentDomainPath)
+// The header's label: a node's own title, or for a close the pair it ends, which is the one
+// kind with nothing of its own to show.
+function noteLabel(node) {
+  if (node.kind !== 'terminus') return node.title
+  const opened = pairScopes(currentRecord, trunksOf(currentRecord)).closes.get(node.id)
+  const of = opened && currentRecord.nodes[opened] ? currentRecord.nodes[opened].title : null
+  return of ? 'the close of “' + of + '”' : 'a close'
+}
+
+function openNote(nodeId) {
+  const t = currentRecord && currentRecord.nodes[nodeId]
+  if (t) noteEditor.open(t, currentDomainPath, noteLabel(t))
 }
 
 // A failed edit must not be silent — the change is on screen but the authority
@@ -233,7 +242,7 @@ async function seedSamples() {
 // the user's pan/zoom; on opening a domain it frames the whole of it.
 async function render(record, { fit = true } = {}) {
   const model = buildModel(pruneCollapsed(record, collapsedSet))
-  if (!model.trees.length) {
+  if (!model.plans.length) {
     showEmpty('This domain has no tasks yet. Right-click the canvas to start a tree.')
     return
   }
@@ -316,7 +325,7 @@ function rootDropIndex(sourceId, clientX) {
   let index = 0
   for (const id of Object.keys(currentRecord.nodes)) {
     if (id === sourceId || !isRootId(currentRecord, id)) continue
-    const el = contentEl.querySelector('[data-task-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]')
+    const el = contentEl.querySelector('[data-node-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]')
     if (!el) continue
     const r = el.getBoundingClientRect()
     if ((r.left + r.right) / 2 < clientX) index++
@@ -324,8 +333,8 @@ function rootDropIndex(sourceId, clientX) {
   return index
 }
 
-function taskSel(id) {
-  return '[data-task-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]'
+function nodeSel(id) {
+  return '[data-node-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]'
 }
 
 // The world-space point under a client coordinate, inverting the viewport's
@@ -396,7 +405,7 @@ let dropHint = { caret: null, cardId: null }
 function clearDropHint() {
   if (dropHint.caret) { dropHint.caret.remove(); dropHint.caret = null }
   if (dropHint.cardId) {
-    const el = contentEl.querySelector(taskSel(dropHint.cardId))
+    const el = contentEl.querySelector(nodeSel(dropHint.cardId))
     if (el) el.classList.remove('drop-target')
     dropHint.cardId = null
   }
@@ -408,7 +417,7 @@ function renderDropHint(intent) {
   clearDropHint()
   if (!intent) return
   if (intent.kind === 'fork') {
-    const el = contentEl.querySelector(taskSel(intent.targetId))
+    const el = contentEl.querySelector(nodeSel(intent.targetId))
     if (el) { el.classList.add('drop-target'); dropHint.cardId = intent.targetId }
   } else if (intent.kind === 'insert') {
     const caret = document.createElement('div')
@@ -434,7 +443,7 @@ function applyDropIntent(sourceId, intent) {
   } else if (intent.kind === 'reorder') {
     applyOp('reorderRoot', sourceId, intent.index)
   } else if (intent.kind === 'detach') {
-    applyOp('detachToTree', sourceId)
+    applyOp('detachProject', sourceId)
   }
 }
 
@@ -478,9 +487,9 @@ function pruneCollapsed(record, collapsed) {
 
 // Fold or unfold a project node, persist the change to the client-local view
 // state, and re-render in place.
-function toggleCollapse(taskId) {
-  if (collapsedSet.has(taskId)) collapsedSet.delete(taskId)
-  else collapsedSet.add(taskId)
+function toggleCollapse(nodeId) {
+  if (collapsedSet.has(nodeId)) collapsedSet.delete(nodeId)
+  else collapsedSet.add(nodeId)
   if (currentDomainName) api.setViewState(currentDomainName, { collapsed: [...collapsedSet] })
   render(currentRecord, { fit: false })
 }
@@ -488,9 +497,9 @@ function toggleCollapse(taskId) {
 // Read the note contents of a node's extent into an { id: content } map, taken by value
 // so it is a snapshot independent of later edits. Shared by copy and export, and bounded
 // by the scope, so a sub-project's notes stop at its own close.
-async function collectSubtreeNotes(taskId) {
+async function collectSubtreeNotes(nodeId) {
   const notes = {}
-  for (const id of extentOf(currentRecord, taskId)) {
+  for (const id of extentOf(currentRecord, nodeId)) {
     const rec = currentRecord.nodes[id]
     if (rec.note) {
       const r = await api.readNote(currentDomainPath, rec.note)
@@ -504,24 +513,24 @@ async function collectSubtreeNotes(taskId) {
 // clipboard. Taken by value at copy time, so it is unaffected by later edits or a
 // domain switch; note text is read now rather than referenced by file. A clip is a whole
 // plan, opening and close, which is what paste needs and what the extent gives.
-async function copyProject(taskId) {
-  clipboard = { rootId: taskId, nodes: clipNodes(currentRecord, taskId), notes: await collectSubtreeNotes(taskId) }
+async function copyProject(nodeId) {
+  clipboard = { rootId: nodeId, nodes: clipNodes(currentRecord, nodeId), notes: await collectSubtreeNotes(nodeId) }
 }
 
 // Paste the clipboard into the open domain as a new tree: fresh ids, kept
 // statuses, cleared here cursors, fresh note files. The paste op writes the note
 // note files and the record together in the main process.
-async function pasteTreeFlow() {
+async function pastePlanFlow() {
   if (!clipboard || !currentRecord) return
-  await applyOp('pasteAsTree', clipboard)
+  await applyOp('pasteAsPlan', clipboard)
 }
 
 // Export a project's subtree to a markdown outline the user saves where they
 // choose. One-way: the file is a rendered copy, with no path back into the record.
-async function exportProjectFlow(taskId) {
-  const notes = await collectSubtreeNotes(taskId)
-  const md = serializeProject(currentRecord, taskId, notes)
-  const base = (currentRecord.nodes[taskId].title || 'project').trim() || 'project'
+async function exportProjectFlow(nodeId) {
+  const notes = await collectSubtreeNotes(nodeId)
+  const md = serializeProject(currentRecord, nodeId, notes)
+  const base = (currentRecord.nodes[nodeId].title || 'project').trim() || 'project'
   const res = await api.exportMarkdown(base + '.md', md)
   if (res && res.error) {
     await chooseAction({ title: 'Export failed', message: res.error, actions: [{ label: 'OK', value: null }] })
@@ -590,43 +599,84 @@ async function deleteBookmarkFlow(index) {
 
 // ---- editing flows (each dialog runs after the menu has closed) ----
 
-async function renameTask(taskId) {
-  const title = await promptText({ title: 'Rename task', label: 'Title', value: currentRecord.nodes[taskId].title })
+async function renameTask(nodeId) {
+  const title = await promptText({ title: 'Rename task', label: 'Title', value: currentRecord.nodes[nodeId].title })
   if (title === null) return
-  applyOp('setTitle', taskId, title)
+  applyOp('setTitle', nodeId, title)
 }
 
-async function addTaskFlow(dir, taskId) {
+async function addTaskFlow(dir, nodeId) {
   const title = await promptText({ title: 'Add task ' + dir, label: 'Title', value: '' })
   if (title === null) return
-  applyOp(dir === 'above' ? 'addTaskAbove' : 'addTaskBelow', taskId, title)
+  applyOp(dir === 'above' ? 'addTaskAbove' : 'addTaskBelow', nodeId, title)
 }
 
-async function addBranchFlow(dir, taskId) {
+async function addBranchFlow(dir, nodeId) {
   const title = await promptText({ title: 'Add branch ' + dir, label: 'Title', value: '' })
   if (title === null) return
-  applyOp(dir === 'above' ? 'addBranchAbove' : 'addBranchBelow', taskId, title)
+  applyOp(dir === 'above' ? 'addBranchAbove' : 'addBranchBelow', nodeId, title)
 }
 
-// The branches that could legally rejoin the trunk at the edge above `taskId`, as a menu
+// The runs starting at `nodeId` that may be named as a sub-project, as a menu of their last
+// node. Wrapping takes two nodes to be named and there is no selection mechanism, so the
+// click names the run's base and the submenu names its top, exactly as "Merge a branch here"
+// resolves the same problem. The candidates come from wrapCandidates, which asks wrapRun
+// itself, so the menu cannot offer a run the authority will refuse.
+function wrapRunFlow(fromId, toId) {
+  const of = (id) => (currentRecord.nodes[id].kind === 'terminus' ? 'the close' : currentRecord.nodes[id].title)
+  const suggestion = fromId === toId ? of(fromId) : of(fromId) + ' to ' + of(toId)
+  promptText({ title: 'Wrap as sub-project', label: 'Name', value: suggestion }).then((title) => {
+    if (title === null || !title.trim()) return
+    applyOp('wrapRun', fromId, toId, title.trim())
+  })
+}
+
+function wrapCandidateMenu(nodeId) {
+  return wrapCandidates(currentRecord, nodeId).map((toId, i) => ({
+    label: i === 0
+      ? 'Just this one'
+      : 'Up to “' + (currentRecord.nodes[toId].kind === 'terminus' ? 'the close' : currentRecord.nodes[toId].title) + '”',
+    onClick: () => wrapRunFlow(nodeId, toId),
+  }))
+}
+
+// Remove a node's note: the file and the record's reference to it, in that order, as
+// delete_note does over MCP. The editor is closed first if it is open on that note, since
+// what it holds is about to stop existing.
+async function deleteNoteFlow(nodeId) {
+  const task = currentRecord.nodes[nodeId]
+  if (!task || !task.note) return
+  const confirm = await chooseAction({
+    title: 'Delete note',
+    message: 'Delete the note on “' + (task.title || nodeId) + '”? The text is not recoverable.',
+    actions: [{ label: 'Cancel', value: null }, { label: 'Delete note', value: 'del', kind: 'danger' }],
+  })
+  if (confirm !== 'del') return
+  noteEditor.closeIfOpen(nodeId)
+  const res = await api.deleteNote(currentDomainPath, task.note)
+  if (res && res.error) { reportEditError(res.error); return }
+  applyOp('setNote', nodeId, null)
+}
+
+// The branches that could legally rejoin the trunk at the edge above `nodeId`, as a menu
 // of their feet. A branch's return is stored on the branch, so moving one takes two things
 // to be named, the branch and the target; there being no selection mechanism, the click
 // names the target and the submenu names the branch. This is how a merge fabricated by the
 // migration is put right, and the only way a return moves.
-function mergeCandidates(taskId) {
+function mergeCandidates(nodeId) {
   const ix = indexRecord(currentRecord)
   return branchesIn(currentRecord)
-    .filter((b) => b.mergePoint !== taskId)
-    .filter((b) => !mergeErrors(currentRecord, { ...b, mergePoint: taskId }, ix).length)
+    .filter((b) => b.mergePoint !== nodeId)
+    .filter((b) => !mergeErrors(currentRecord, { ...b, mergePoint: nodeId }, ix).length)
     .map((b) => ({
       label: currentRecord.nodes[b.footId].title || b.footId,
-      onClick: () => applyOp('setMergePoint', b.footId, taskId),
+      onClick: () => applyOp('setMergePoint', b.footId, nodeId),
     }))
 }
 
-async function deleteTaskFlow(taskId) {
-  const task = currentRecord.nodes[taskId]
-  const isRoot = isRootId(currentRecord, taskId)
+async function deleteTaskFlow(nodeId) {
+  const task = currentRecord.nodes[nodeId]
+  const isRoot = isRootId(currentRecord, nodeId)
   const hasDescendants = !!task.next || branchChildrenOf(task).length > 0
   let mode = 'subtree'
   if (isRoot && hasDescendants) {
@@ -652,32 +702,45 @@ async function deleteTaskFlow(taskId) {
     })
     if (mode === null) return
   }
-  applyOp('deleteTask', taskId, mode)
+  applyOp('deleteTask', nodeId, mode)
 }
 
-async function addTreeFlow() {
+async function addPlanFlow() {
   const name = await promptText({ title: 'New plan', label: 'Plan name', value: '' })
   if (name === null) return
-  applyOp('addTree', name)
+  applyOp('addPlan', name)
 }
 
-function openTaskMenu(x, y, taskId) {
-  const task = currentRecord.nodes[taskId]
+function openTaskMenu(x, y, nodeId) {
+  const task = currentRecord.nodes[nodeId]
   const isProject = task.kind === 'project'
-  const isRoot = isRootId(currentRecord, taskId)
+  const isRoot = isRootId(currentRecord, nodeId)
   const items = []
 
-  // A scope's close has almost no menu of its own: no title to rename, no status, no
-  // flag, no kind to change, and it cannot be moved or deleted on its own, since it
-  // is one half of a pair. A note is not offered for now, by decision, though the
-  // record still allows one. What is left is the edge above it, unless it closes a
-  // plan, in which case there is no edge and so no menu at all.
+  // A scope's close has little menu of its own: no title to rename, no status, no flag, no
+  // kind to change, and it cannot be moved or deleted on its own, since it is one half of a
+  // pair. Three things it does have. The edge above it, unless it closes a plan, where there
+  // is none. Its note, because every kind of node may carry one and the way to a note is the
+  // same on every kind. And the fold, because the pair is one object and a shut scope draws
+  // its close ON the project's card, so the close is as likely a target as the project is.
   if (task.kind === 'terminus') {
-    if (isPlanClose(currentRecord, taskId)) return
-    items.push({ label: 'Add task above', onClick: () => addTaskFlow('above', taskId) })
-    items.push({ label: 'Add branch above', onClick: () => addBranchFlow('above', taskId) })
-    const closeMerges = mergeCandidates(taskId)
-    if (closeMerges.length) items.push({ label: 'Merge a branch here', submenu: closeMerges })
+    if (!isPlanClose(currentRecord, nodeId)) {
+      items.push({ label: 'Add task above', onClick: () => addTaskFlow('above', nodeId) })
+      items.push({ label: 'Add branch above', onClick: () => addBranchFlow('above', nodeId) })
+      const closeMerges = mergeCandidates(nodeId)
+      if (closeMerges.length) items.push({ label: 'Merge a branch here', submenu: closeMerges })
+      items.push({ separator: true })
+    }
+    // The fold is recorded against the project node, so acting from this end resolves the pair
+    // first; which end was clicked makes no difference to what happens.
+    const opened = pairScopes(currentRecord, trunksOf(currentRecord)).closes.get(nodeId)
+    if (opened) {
+      items.push(collapsedSet.has(opened)
+        ? { label: 'Expand', onClick: () => toggleCollapse(opened) }
+        : { label: 'Collapse', onClick: () => toggleCollapse(opened) })
+    }
+    items.push({ label: 'Edit note…', onClick: () => openNote(nodeId) })
+    if (task.note) items.push({ label: 'Delete note…', onClick: () => deleteNoteFlow(nodeId) })
     openContextMenu(x, y, items)
     return
   }
@@ -685,7 +748,7 @@ function openTaskMenu(x, y, taskId) {
   if (!isProject) {
     const status = (label, value) => ({
       label, checked: task.status === value,
-      onClick: () => applyOp('setStatus', taskId, value),
+      onClick: () => applyOp('setStatus', nodeId, value),
     })
     items.push({ label: 'Status', submenu: [
       status('To do', 'todo'),
@@ -694,60 +757,69 @@ function openTaskMenu(x, y, taskId) {
       status('Cancelled', 'cancelled'),
     ] })
     items.push(task.here
-      ? { label: 'Clear here', onClick: () => applyOp('clearHere', taskId) }
-      : { label: 'Make here', onClick: () => applyOp('makeHere', taskId) })
+      ? { label: 'Clear here', onClick: () => applyOp('clearHere', nodeId) }
+      : { label: 'Make here', onClick: () => applyOp('makeHere', nodeId) })
   }
   // A root is always a project node, so its kind cannot be changed.
   if (!isRoot) {
     items.push(isProject
-      ? { label: 'Make task', onClick: () => applyOp('convertKind', taskId) }
-      : { label: 'Make sub-project', onClick: () => applyOp('convertKind', taskId) })
+      ? { label: 'Make task', onClick: () => applyOp('convertKind', nodeId) }
+      : { label: 'Make sub-project', onClick: () => applyOp('convertKind', nodeId) })
+  }
+  // Name a run of this trunk as a sub-project, the click naming its base and the submenu
+  // its top. Withheld from a plan's base, whose scope is the plan itself and which cannot
+  // be the base of a run inside it.
+  if (!isRoot) {
+    const wraps = wrapCandidateMenu(nodeId)
+    if (wraps.length) items.push({ label: 'Wrap as sub-project', submenu: wraps })
   }
   // Collapse/expand folds a project node's subtree (client-local view state).
   if (isProject) {
-    items.push(collapsedSet.has(taskId)
-      ? { label: 'Expand', onClick: () => toggleCollapse(taskId) }
-      : { label: 'Collapse', onClick: () => toggleCollapse(taskId) })
+    items.push(collapsedSet.has(nodeId)
+      ? { label: 'Expand', onClick: () => toggleCollapse(nodeId) }
+      : { label: 'Collapse', onClick: () => toggleCollapse(nodeId) })
     // Copy the project's subtree for pasting as a new tree, here or in another domain.
-    items.push({ label: 'Copy', onClick: () => copyProject(taskId) })
+    items.push({ label: 'Copy', onClick: () => copyProject(nodeId) })
     // Export the project's subtree to a markdown outline (one-way).
-    items.push({ label: 'Export to Markdown…', onClick: () => exportProjectFlow(taskId) })
+    items.push({ label: 'Export to Markdown…', onClick: () => exportProjectFlow(nodeId) })
   }
   // Reorder within the line: a clean swap with the main-line neighbour that keeps
   // the node's own branches. "Move up" needs a successor (and not a root, whose
   // successor cannot take the base); "move down" needs a non-root main-line
   // predecessor to swap below.
   const succId = task.next
-  const predId = Object.keys(currentRecord.nodes).find((pid) => currentRecord.nodes[pid].next === taskId)
-  if (succId && !isRoot) items.push({ label: 'Move up', onClick: () => applyOp('moveUp', taskId) })
-  if (predId && !isRootId(currentRecord, predId)) items.push({ label: 'Move down', onClick: () => applyOp('moveDown', taskId) })
-  items.push({ label: 'Rename…', onClick: () => renameTask(taskId) })
+  const predId = Object.keys(currentRecord.nodes).find((pid) => currentRecord.nodes[pid].next === nodeId)
+  if (succId && !isRoot) items.push({ label: 'Move up', onClick: () => applyOp('moveUp', nodeId) })
+  if (predId && !isRootId(currentRecord, predId)) items.push({ label: 'Move down', onClick: () => applyOp('moveDown', nodeId) })
+  items.push({ label: 'Rename…', onClick: () => renameTask(nodeId) })
   items.push({ separator: true })
   // Nothing may be added on the edge rising from a folded project node: that edge is the
   // first edge of the scope it opens, so whatever landed there would land out of sight
   // inside the fold. Expanding the scope offers all three again.
-  const foldedOpen = isProject && collapsedSet.has(taskId)
-  if (!foldedOpen) items.push({ label: 'Add task above', onClick: () => addTaskFlow('above', taskId) })
+  const foldedOpen = isProject && collapsedSet.has(nodeId)
+  if (!foldedOpen) items.push({ label: 'Add task above', onClick: () => addTaskFlow('above', nodeId) })
   // Nothing may be added below a root node (a project's base).
-  if (!isRoot) items.push({ label: 'Add task below', onClick: () => addTaskFlow('below', taskId) })
-  if (!foldedOpen) items.push({ label: 'Add branch above', onClick: () => addBranchFlow('above', taskId) })
-  if (!isRoot) items.push({ label: 'Add branch below', onClick: () => addBranchFlow('below', taskId) })
+  if (!isRoot) items.push({ label: 'Add task below', onClick: () => addTaskFlow('below', nodeId) })
+  if (!foldedOpen) items.push({ label: 'Add branch above', onClick: () => addBranchFlow('above', nodeId) })
+  if (!isRoot) items.push({ label: 'Add branch below', onClick: () => addBranchFlow('below', nodeId) })
   // A merge lands a return on the edge above this node, so it is an addition on that
   // same hidden edge and goes with the other two.
-  const merges = foldedOpen ? [] : mergeCandidates(taskId)
+  const merges = foldedOpen ? [] : mergeCandidates(nodeId)
   if (merges.length) items.push({ label: 'Merge a branch here', submenu: merges })
   items.push({ separator: true })
-  items.push({ label: 'Edit note…', onClick: () => openNote(taskId) })
+  items.push({ label: 'Edit note…', onClick: () => openNote(nodeId) })
+  // Offered only where there is one to delete, so the item's presence says a note exists.
+  if (task.note) items.push({ label: 'Delete note…', onClick: () => deleteNoteFlow(nodeId) })
   items.push({ separator: true })
-  items.push({ label: 'Delete…', onClick: () => deleteTaskFlow(taskId) })
+  items.push({ label: 'Delete…', onClick: () => deleteTaskFlow(nodeId) })
 
   openContextMenu(x, y, items)
 }
 
 function openCanvasMenu(x, y) {
-  const items = [{ label: 'New plan…', onClick: () => addTreeFlow() }]
+  const items = [{ label: 'New plan…', onClick: () => addPlanFlow() }]
   // Paste a previously copied project as a new tree in this domain.
-  if (clipboard) items.push({ label: 'Paste as new plan', onClick: () => pasteTreeFlow() })
+  if (clipboard) items.push({ label: 'Paste as new plan', onClick: () => pastePlanFlow() })
   items.push({ separator: true })
   items.push({ label: 'Add bookmark…', onClick: () => addBookmarkFlow() })
   if (bookmarks.length) {
@@ -761,8 +833,8 @@ viewportEl.addEventListener('contextmenu', (e) => {
   e.preventDefault()
   if (!currentRecord) return
   if (flaggedOnly) return // read-only view; card gestures are already disabled via CSS
-  const taskId = taskIdFromEvent(e)
-  if (taskId && currentRecord.nodes[taskId]) openTaskMenu(e.clientX, e.clientY, taskId)
+  const nodeId = nodeIdFromEvent(e)
+  if (nodeId && currentRecord.nodes[nodeId]) openTaskMenu(e.clientX, e.clientY, nodeId)
   else openCanvasMenu(e.clientX, e.clientY)
 })
 
@@ -770,8 +842,8 @@ viewportEl.addEventListener('contextmenu', (e) => {
 viewportEl.addEventListener('click', (e) => {
   if (!currentRecord) return
   if (!e.target.closest('.noteicon')) return
-  const taskId = taskIdFromEvent(e)
-  if (taskId && currentRecord.nodes[taskId]) openNote(taskId)
+  const nodeId = nodeIdFromEvent(e)
+  if (nodeId && currentRecord.nodes[nodeId]) openNote(nodeId)
 })
 
 // Double-clicking a card's body toggles its flag (drawn as atomic orbits). The
@@ -780,11 +852,11 @@ viewportEl.addEventListener('click', (e) => {
 viewportEl.addEventListener('dblclick', (e) => {
   if (!currentRecord) return
   if (e.target.closest('.gl') || e.target.closest('.noteicon')) return
-  const taskId = taskIdFromEvent(e)
-  const node = taskId && currentRecord.nodes[taskId]
+  const nodeId = nodeIdFromEvent(e)
+  const node = nodeId && currentRecord.nodes[nodeId]
   // A scope's close carries no flag, so a double-click on it does nothing rather than
   // asking the authority for something it will refuse.
-  if (node && node.kind !== 'terminus') applyOp('toggleFlag', taskId)
+  if (node && node.kind !== 'terminus') applyOp('toggleFlag', nodeId)
 })
 
 // Single-clicking a task's status glyph cycles its status
@@ -794,8 +866,8 @@ viewportEl.addEventListener('click', (e) => {
   if (!currentRecord) return
   const gl = e.target.closest('.gl')
   if (!gl || gl.classList.contains('project')) return
-  const taskId = taskIdFromEvent(e)
-  if (taskId && currentRecord.nodes[taskId]) applyOp('cycleStatus', taskId)
+  const nodeId = nodeIdFromEvent(e)
+  if (nodeId && currentRecord.nodes[nodeId]) applyOp('cycleStatus', nodeId)
 })
 
 const NEW_DOMAIN = '__new__'

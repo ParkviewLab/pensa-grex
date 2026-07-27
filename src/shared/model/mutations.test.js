@@ -4,10 +4,10 @@
 import { describe, it, expect } from 'vitest'
 import { validateRecord, pairScopes, trunksOf } from './validate.js'
 import {
-  setTitle, uniqueTitle, setNote, toggleFlag, setStatus, cycleStatus, makeHere, clearHere, addTree, convertKind,
-  addTaskAbove, addTaskBelow, addBranchAbove, addBranchBelow, openBranch, setMergePoint, deleteTask, pasteAsTree,
-  moveTaskNode, moveSubtree, detachToTree, reorderRoot, moveIntoLine, moveUp, moveDown,
-  wrapRun, unwrapProject, clipNodes,
+  setTitle, uniqueTitle, setNote, toggleFlag, setStatus, cycleStatus, makeHere, clearHere, addPlan, convertKind,
+  addTaskAbove, addTaskBelow, addBranchAbove, addBranchBelow, openBranch, setMergePoint, deleteTask, pasteAsPlan,
+  moveTaskNode, moveSubtree, detachProject, reorderRoot, moveIntoLine, moveUp, moveDown,
+  wrapRun, unwrapProject, clipNodes, wrapCandidates,
 } from './mutations.js'
 
 // A small valid record: project root r -> m1(here) -> m2 -> z, with a fork b1 -> b2
@@ -291,10 +291,10 @@ describe('makeHere / clearHere', () => {
   })
 })
 
-describe('addTree', () => {
+describe('addPlan', () => {
   it('starts a new project with its own project-node root, and works from an empty record', () => {
     const empty = { schemaVersion: 3, id: 'd_test000000', title: 'T', planOrder: [], nodes: {} }
-    const out = addTree(empty, 'Fresh')
+    const out = addPlan(empty, 'Fresh')
     expect(out.planOrder).toHaveLength(1)
     const rootId = out.planOrder[0]
     expect(out.nodes[rootId].title).toBe('Fresh')
@@ -309,7 +309,7 @@ describe('addTree', () => {
   })
 
   it('makes a colliding tree name unique', () => {
-    const out = addTree(base(), 'm2') // base() already has a node titled 'm2'
+    const out = addPlan(base(), 'm2') // base() already has a node titled 'm2'
     const rootId = out.planOrder[out.planOrder.length - 1]
     expect(out.nodes[rootId].title).toBe('m2-1')
     valid(out)
@@ -582,7 +582,7 @@ describe('returns: where a structural edit leaves a merge point', () => {
     const asProject = convertKind(base(), 'b1')
     const closeId = newId(base(), asProject)
     expect(asProject.nodes[closeId].mergePoint).toBe('m1') // carried up to the new top
-    const out = detachToTree(asProject, 'b1')
+    const out = detachProject(asProject, 'b1')
     expect(out.nodes[closeId].mergePoint).toBeNull()
     expect(out.planOrder).toContain('b1')
     expect(forks(out.nodes.m1)).toEqual([]) // m1 no longer holds the branch
@@ -825,7 +825,41 @@ describe('wrapRun / unwrapProject', () => {
   })
 })
 
-describe('pasteAsTree', () => {
+describe('wrapCandidates — the runs a menu may offer', () => {
+  it('offers each node up the trunk, itself first', () => {
+    // base(): r -> m1 -> m2 -> z. From m1 the legal runs are m1 alone and m1 to m2; the
+    // plan's close cannot end a run, since its opening (r) would be left outside.
+    expect(wrapCandidates(base(), 'm1')).toEqual(['m1', 'm2'])
+    expect(wrapCandidates(base(), 'm2')).toEqual(['m2'])
+  })
+
+  it('offers a whole sub-project but never half of one', () => {
+    // r -> Sub -> m1 -> zSub -> m2 -> z. From Sub the runs are the pair alone and the pair
+    // plus m2; a run ending at m1 or at zSub would cut the scope in half.
+    const wrapped = wrapRun(base(), 'm1', 'm1', 'Sub')
+    const subId = ids(wrapped).find((id) => wrapped.nodes[id].title === 'Sub')
+    const closeId = pairScopes(wrapped, trunksOf(wrapped)).pairs.get(subId)
+    expect(wrapCandidates(wrapped, subId)).toEqual([closeId, 'm2'])
+    // and from inside the scope, the run stops below the close that ends it
+    expect(wrapCandidates(wrapped, 'm1')).toEqual(['m1'])
+  })
+
+  it('offers nothing that wrapRun would then refuse', () => {
+    // The property the menu rests on, asserted directly against the operation.
+    const wrapped = wrapRun(base(), 'm1', 'm1', 'Sub')
+    for (const from of ids(wrapped)) {
+      for (const to of wrapCandidates(wrapped, from)) {
+        expect(() => wrapRun(wrapped, from, to, 'X')).not.toThrow()
+      }
+    }
+  })
+
+  it('is empty for a node that is not there', () => {
+    expect(wrapCandidates(base(), 'nope')).toEqual([])
+  })
+})
+
+describe('pasteAsPlan', () => {
   // A clip mirroring base()'s shape, with one completed task and one carrying a
   // note, so the paste can be checked to keep statuses, clear cursors, and carry
   // notes by content: r(project) -> m1(here) -> m2(completed) -> z(r's close);
@@ -846,10 +880,20 @@ describe('pasteAsTree', () => {
     notes: { b2: '# b2 note\n' },
   })
   const empty = () => ({ schemaVersion: 3, id: 'd_test000000', title: 'T', planOrder: [], nodes: {} })
+
+  it('refuses a clip that is not a plan, saying so where the clip is named', () => {
+    // A clip pastes as a plan, and a plan is bounded by a project and its close, so a clip
+    // rooted at a task cannot become one. Refused here rather than by validateRecord at the
+    // end, which would complain about a node the caller never mentioned.
+    const c = clip()
+    c.rootId = 'm1'
+    expect(() => pasteAsPlan(empty(), c)).toThrow(/its root must be a project/)
+    expect(() => pasteAsPlan(empty(), { rootId: 'nope', nodes: {} })).toThrow(/rootId present in its own nodes/)
+  })
   const byTitle = (record) => Object.fromEntries(Object.values(record.nodes).map((t) => [t.title, t]))
 
   it('pastes a copied project as a fresh, valid tree with regenerated ids', () => {
-    const { next } = pasteAsTree(empty(), clip())
+    const { next } = pasteAsPlan(empty(), clip())
     // Termini: the clip carries the close that bounds it, so a copied plan is six
     // nodes, not five, and pastes back as a closed (valid) plan.
     expect(Object.keys(next.nodes)).toHaveLength(6)
@@ -862,7 +906,7 @@ describe('pasteAsTree', () => {
   })
 
   it('keeps statuses, clears here cursors, and stamps a fresh createdAt', () => {
-    const { next } = pasteAsTree(empty(), clip())
+    const { next } = pasteAsPlan(empty(), clip())
     const t = byTitle(next)
     expect(t.m2.status).toBe('completed')
     expect(t.m2.completedAt).toBe('2026-02-02T00:00:00Z') // completion travels
@@ -871,7 +915,7 @@ describe('pasteAsTree', () => {
   })
 
   it('rewires edges through the id map', () => {
-    const { next } = pasteAsTree(empty(), clip())
+    const { next } = pasteAsPlan(empty(), clip())
     const t = byTitle(next)
     expect(t.Proj.next).toBe(t.m1.id)
     expect(t.m1.next).toBe(t.m2.id)
@@ -887,7 +931,7 @@ describe('pasteAsTree', () => {
   })
 
   it('carries a note by content into a fresh file named for the new id and title', () => {
-    const { next, notes } = pasteAsTree(empty(), clip())
+    const { next, notes } = pasteAsPlan(empty(), clip())
     const t = byTitle(next)
     // The id resolves and the slug is decorative (see model/notes.js).
     expect(t.b2.note).toBe(t.b2.id + '_b2.md')
@@ -896,9 +940,9 @@ describe('pasteAsTree', () => {
 
   it('does not mutate the clip, so the same copy can be pasted again disjointly', () => {
     const c = clip()
-    const first = pasteAsTree(empty(), c)
+    const first = pasteAsPlan(empty(), c)
     expect(c.nodes.m1.here).toBe(true) // clip untouched
-    const second = pasteAsTree(first.next, c) // paste again into the result
+    const second = pasteAsPlan(first.next, c) // paste again into the result
     expect(second.next.planOrder).toHaveLength(2)
     expect(Object.keys(second.next.nodes)).toHaveLength(12) // two disjoint trees, closes and all
     expect(second.next.planOrder[0]).not.toBe(second.next.planOrder[1])
@@ -909,7 +953,7 @@ describe('pasteAsTree', () => {
     // Paste the clip into a record that already holds its titles (base(): r, m1,
     // m2, b1, b2), with the root renamed to 'Proj' so the clip root collides too.
     const dest = setTitle(base(), 'r', 'Proj')
-    const { next } = pasteAsTree(dest, clip())
+    const { next } = pasteAsPlan(dest, clip())
     const titles = Object.values(next.nodes).map((t) => t.title)
     expect(titles.filter((t) => t === 'Proj')).toHaveLength(1) // original kept
     expect(titles).toContain('Proj-1') // pasted root suffixed
@@ -1034,11 +1078,18 @@ describe('moveSubtree', () => {
     expect(() => moveSubtree(withSub(), 'SP', 's1')).toThrow() // s1 is inside SP
     expect(() => moveSubtree(withSub(), 'SP', 'SP')).toThrow()
   })
+
+  it('refuses a task, which travels alone and has its own verb', () => {
+    // The two moves are named for the two kinds, and each names the other: a project takes
+    // the plan it opens, a task takes nothing. Refusing here rather than in the tool layer
+    // means the tool surface and the app get the same answer.
+    expect(() => moveSubtree(withSub(), 's1', 'f1')).toThrow(/a task travels alone, and has its own move/)
+  })
 })
 
-describe('detachToTree', () => {
+describe('detachProject', () => {
   it('turns a sub-project into its own root, carrying its subtree', () => {
-    const out = detachToTree(withSub(), 'SP')
+    const out = detachProject(withSub(), 'SP')
     expect(out.nodes.f1.next).toBeNull() // SP cut from f1's line
     expect(out.planOrder).toContain('SP')
     expect(out.nodes.SP.next).toBe('s1') // subtree intact
@@ -1050,8 +1101,8 @@ describe('detachToTree', () => {
   })
 
   it('refuses a task node and a node that is already a root', () => {
-    expect(() => detachToTree(withSub(), 's1')).toThrow() // s1 is a task
-    expect(() => detachToTree(withSub(), 'r')).toThrow() // r is already a root
+    expect(() => detachProject(withSub(), 's1')).toThrow() // s1 is a task
+    expect(() => detachProject(withSub(), 'r')).toThrow() // r is already a root
   })
 
   // Termini: a scope travels as a pair, so a sub-project with work above it takes its own
@@ -1067,7 +1118,7 @@ describe('detachToTree', () => {
     expect(wrapped.nodes.r.next).toBe(subId)
     expect(wrapped.nodes[closeId].next).toBe('m2')
 
-    const out = detachToTree(wrapped, subId)
+    const out = detachProject(wrapped, subId)
     expect(out.planOrder).toContain(subId)
     expect(out.nodes.r.next).toBe('m2') // the old trunk is joined across the gap
     expect(out.nodes[closeId].next).toBeNull() // the detached plan ends at its own close
@@ -1163,7 +1214,7 @@ describe('scope-bounded operations — a sub-project with work above its close',
     expect(Object.keys(nodes).sort()).toEqual([subId, 'b1', 'b2', 'm1', closeId].sort())
     expect(nodes[closeId].next).toBeNull()
 
-    const { next: out } = pasteAsTree(record, { rootId: subId, nodes, notes: {} })
+    const { next: out } = pasteAsPlan(record, { rootId: subId, nodes, notes: {} })
     expect(out.planOrder).toHaveLength(2) // the plan it came from, and the pasted copy
     valid(out)
   })
@@ -1178,11 +1229,56 @@ describe('scope-bounded operations — a sub-project with work above its close',
     const sideId = newId(record, withSide)
     valid(withSide)
 
-    const out = detachToTree(withSide, subId)
+    const out = detachProject(withSide, subId)
     expect(out.nodes[sideId]).toBeDefined()
     expect(forks(out.nodes.r).map((b) => b.child)).toContain(sideId)
     expect(forks(out.nodes[closeId])).toEqual([])
     expect(out.nodes[sideId].mergePoint).toBe('r')
+    valid(out)
+  })
+})
+
+describe('a close does not move on its own', () => {
+  // r -> Sub -> m1 -> zSub -> m2 -> z. Moving zSub alone would quietly resize Sub: down, and m1
+  // falls outside it; up, and m2 falls inside. Both leave the trunk bracket-matched, so nothing
+  // downstream would object, which is why the refusal has to be here.
+  function wrapped() {
+    const record = wrapRun(base(), 'm1', 'm1', 'Sub')
+    const subId = ids(record).find((id) => record.nodes[id].title === 'Sub')
+    return { record, subId, closeId: pairScopes(record, trunksOf(record)).pairs.get(subId) }
+  }
+
+  it('refuses to move a close up, down, or into a line', () => {
+    const { record, closeId } = wrapped()
+    for (const move of [() => moveUp(record, closeId), () => moveDown(record, closeId), () => moveIntoLine(record, closeId, 'm2')]) {
+      expect(move).toThrow(/a close cannot be moved on its own/)
+    }
+  })
+
+  it('moves the scope by its project node instead, which carries its close', () => {
+    const { record, subId, closeId } = wrapped()
+    const out = moveIntoLine(record, subId, 'm2')
+    expect(out.nodes.m2.next).toBe(subId)
+    expect(out.nodes[closeId].next).toBe('z')
+    valid(out)
+  })
+
+  it('still moves an ordinary node by either verb', () => {
+    // The guard is about the close, and must not have caught the ordinary cases with it.
+    expect(() => moveUp(base(), 'm1')).not.toThrow()
+    expect(() => moveDown(base(), 'm2')).not.toThrow()
+  })
+
+  it('moves a node PAST a close, which is how one says it has left the scope', () => {
+    // The other half of the rule, and settled rather than overlooked. A close does not move as
+    // an operand, but a node moving past one does move it, and that is the point: swapping m1
+    // with the close above it is how an author says m1 is no longer part of Sub, leaving Sub
+    // empty and legal. The app offers exactly this ("Move up" on any node with a successor), so
+    // the two surfaces agree; moveIntoLine is the longer way to say the same thing.
+    const { record, subId, closeId } = wrapped()
+    const out = moveUp(record, 'm1')
+    expect(out.nodes[subId].next).toBe(closeId) // Sub now closes immediately: it is empty
+    expect(out.nodes[closeId].next).toBe('m1')
     valid(out)
   })
 })

@@ -58,7 +58,7 @@ The dragged node's kind and the drop location pick one of these pure moves:
   a project node carries its scope, and that scope's close then continues onto the
   gap's old upper node. Refused inserting a scope into its own line (a cycle) or
   above itself.
-- **detachToTree** — a sub-project dropped on empty canvas becomes its own plan:
+- **detachProject** — a sub-project dropped on empty canvas becomes its own plan:
   the pair leaves the trunk it was on, the trunk is joined across the gap, and the
   project node's id is appended to `planOrder`. Only a project node can be a root, so
   a task dropped on empty canvas is refused (it cannot become a root).
@@ -73,6 +73,37 @@ branches (a clean positional swap, distinct from `moveIntoLine`'s splice). "Move
 up" needs a successor and a non-root node; "move down" needs a non-root main-line
 predecessor to swap below.
 
+*A close is the one node these will not take as their operand*, since moving it alone would
+quietly resize its scope, taking in a node that was outside it or letting go of one that was
+inside; the record would still be bracket-matched, so nothing downstream would object. The scope
+moves by its project node, which carries its close. **Moving a node PAST a close is a different
+thing and is allowed**: swapping a node with the close above it is how one says that node is no
+longer part of the sub-project, and the map shows the result at once. So a scope's membership
+changes by moving the member, never by moving the boundary.
+
+### Two verbs that need a second node named
+
+Two menu items act on a pair of nodes, and there is no selection mechanism: every edit
+begins with a right-click, and that click names one node. Both solve it the same way, with
+the click naming one end and a submenu the other.
+
+- **Merge a branch here** names the target with the click and the branch with the submenu,
+  which lists the branches whose return could legally land on the edge above the clicked
+  node. It is how a merge fabricated by the migration is put right, and the only way a
+  return moves.
+- **Wrap as sub-project** names the run's base with the click and its top with the submenu
+  ("Just this one", then each node further up the trunk), then asks for a name and calls
+  `wrapRun`. The candidates come from `wrapCandidates`, which asks `wrapRun` itself on a
+  throwaway record rather than reimplementing its rules, so the menu cannot offer a run
+  that would then be refused: a run may not straddle a scope, nor contain a branch that
+  rejoins outside it. Withheld on a plan's base, whose scope is the plan.
+
+**Delete note** sits beside "Edit note" and appears only where there is a note to delete,
+so the item's presence answers the question its absence would raise. It closes the editor
+first if that note is open (discarding any pending autosave, which would otherwise write
+the file back as it goes), then deletes the file and clears the record's reference, in that
+order, which is what `delete_note` does over MCP.
+
 Every move returns a new record and is re-validated before it is applied; a
 move that merges two lines has its cursors repaired by `normalizeHeres` (the
 tip-most "here" on a merged line survives). "here" flags travel with the nodes they
@@ -82,7 +113,7 @@ sit on.
 so a move that changes where a branch sits has to keep that merge legal, and one
 reshaping has to be refused outright rather than drawn: extending a merge across
 the close of a scope the branch was opened outside, which would leave a return line
-landing inside a collapsed block. `detachToTree` acquires the second purpose that
+landing inside a collapsed block. `detachProject` acquires the second purpose that
 the new axiom 3 gives it, as the way to say that work diverged and will not rejoin,
 which a branch may no longer say.
 

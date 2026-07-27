@@ -9,7 +9,7 @@
 //
 // Trees are not stored either: a tree is the subtree rooted at a node with no
 // incoming edge, and that root node's id IS the tree's identity. planOrder (a list
-// of root ids) only orders the trees left to right and is advisory — the graph,
+// of root ids) only orders the plans left to right and is advisory — the graph,
 // not the list, decides what is a root.
 //
 // Each node's two branch arrays are flattened here into one `branches` list of
@@ -64,17 +64,17 @@ export function buildModel(record) {
   })
   // A tree is identified by its root node's id; there is no separate tree id or
   // stored tree name (the name is the root node's title).
-  const trees = rootIds.map((id) => ({ id, rootTaskId: id }))
+  const plans = rootIds.map((id) => ({ id, baseId: id }))
 
   // Which tree a node belongs to: the tree whose root reaches it by .next or by a
-  // branch (a fork stays within its tree; trees never share nodes).
-  const treeIdByTask = new Map()
+  // branch (a fork stays within its tree; plans never share nodes).
+  const planIdByNode = new Map()
   for (const rootId of rootIds) {
     const stack = [rootId]
     while (stack.length) {
       const id = stack.pop()
-      if (treeIdByTask.has(id)) continue
-      treeIdByTask.set(id, rootId)
+      if (planIdByNode.has(id)) continue
+      planIdByNode.set(id, rootId)
       const node = nodes.get(id)
       if (!node) continue
       if (node.next) stack.push(node.next)
@@ -86,12 +86,12 @@ export function buildModel(record) {
     return nodes.get(id) || null
   }
 
-  function getTree(id) {
-    return trees.find((t) => t.id === id) || null
+  function getPlan(id) {
+    return plans.find((t) => t.id === id) || null
   }
 
-  function getTreeIdForTask(id) {
-    return treeIdByTask.get(id) || null
+  function getPlanIdForNode(id) {
+    return planIdByNode.get(id) || null
   }
 
   // The main-line chain starting at startId (a root or a branch child), following
@@ -127,11 +127,11 @@ export function buildModel(record) {
     id: record.id,
     title: record.title,
     schemaVersion: record.schemaVersion,
-    trees,
+    plans,
     nodes,
     getNode,
-    getTree,
-    getTreeIdForTask,
+    getPlan,
+    getPlanIdForNode,
     getMainLineChain,
     getBranchChildren,
     getHereTaskId,

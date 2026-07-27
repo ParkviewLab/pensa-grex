@@ -124,9 +124,20 @@ depth and composes with all of the above.
   it: re-read the current state (find_flagged, list_projects, read_project) before
   acting, and always immediately before a write, resolving any "the flagged one"
   or "the current task" against that fresh read rather than memory. A `work_flagged`
-  prompt bakes the re-read-first order into the common "work the flagged tasks"
+  prompt bakes the re-read-first order into the common "work the flagged nodes"
   flow. (Added after a stale-read slip: three flagged nodes were read, two were
   then unflagged, and "the flagged node" was resolved against the stale count.)
+- A prompt is the one part of this surface that states an ORDER rather than a
+  rule, which is its worth and its hazard: it restates the tools' vocabulary in
+  prose, so it can fall behind them silently. It did. v3.3.0 made the reads strict
+  about kind, whereupon `work_flagged`'s "read_project for context" instructed a
+  refusal, a flagged node ordinarily being a task; the step now passes the
+  `enclosing_project_id` that `find_flagged` reports, which is a call shorter as
+  well as legal. Two guards hold it there (`tools.test.js`). Every tool a prompt
+  names is written with parentheses, checked in both directions, so neither a call
+  to a tool that has left the surface nor a bare mention the forward pass cannot
+  see will ship. And the steps are walked against the real surface, since a name
+  check cannot tell that a name is being called on the wrong kind of node.
 
 ## Live view updates
 
@@ -161,32 +172,87 @@ is never silently discarded.
 ## Tool surface
 
 Task-level tools, not the coarse whole-forest load and save, across the three
-scope tiers. Full functionality: every mutation in `mutations.js` is exposed. A
+scope tiers. Nearly every mutation in `mutations.js` is exposed; the exceptions are the
+pairs a tool covers with a `position`, `addTaskAbove`/`addTaskBelow` behind `add_task` and
+`addBranchAbove`/`addBranchBelow` behind `open_branch`, and `insertTask`, which those two
+call. A
 node is addressed by its id and a domain by name or path, defaulting to the open
 domain; every write returns the affected id and the re-rendered outline, and a
 write that would violate an invariant returns the mutation's descriptive error,
 since each write is mutation, then `validateRecord`, then atomic write.
 
+### The nouns, and who may be liberal about them
+
+*Settled at v3.3.0, from the rule that the tools and the app should be the same tools.*
+The surface speaks the model's own vocabulary and no other: **domain, project, task,
+terminus**. A plan is the structure a project opens, not an operand type of its own, since
+a plan's base and a sub-project are the same kind and `detach_project` or `move_project`
+can change which is which under a client's feet; `list_projects` says which is which today
+with `is_root`.
+
+**The reads are strict about kind**, because the kind decides the shape of the answer:
+`read_domain` takes no node at all; `read_project` and `read_task` each refuse the wrong kind
+and name the tool that reads it, a close being sent to the project it closes. A refusal names
+what the CALLER should do next, so `copy_project`, which reaches the same resolver, says to clip
+the enclosing project rather than naming a read tool that cannot clip. **The writes are one tool per
+verb**, polymorphic exactly where the app's own menu is: the app has one Delete and one
+Rename, so splitting `delete_node` by kind would take the two surfaces apart again. The
+exception is where the name itself was wrong, which is why `move_node` became `move_task`
+and `move_subtree` became `move_project`, each refusing the other's kind.
+
+**The reads are liberal about naming**, taking an id or a title, titles being domain-unique;
+**the writes are id-only**, which is what their `*_id` parameters say. A title can move
+under a stale read, and a write addressed by one can land on the node next door.
+
+**Every id is a `node_id`.** All three kinds share one id namespace, so the parameter names
+the namespace, not the kind expected: a tool that takes one kind says so in its description
+and refuses the rest, rather than promising it in a parameter name that would then have to
+change if the tool's reach ever did. Where a call names a second node in some relation to
+the first, that one keeps its role name, since two parameters cannot both be `node_id`:
+`target_id`, `below_id`, `merge_point_id`, `edge_id`, `from_id` and `to_id`.
+
+The same reasoning names the tools. One that takes a single kind says which
+(`move_task`, `move_project`, `copy_project`, `unwrap_project`, `read_task`); one that takes
+more than one names no kind at all (`set_title`, `toggle_flag`, `move_up`, `move_into_line`)
+or names the umbrella (`delete_node`, which ends a task or a project and refuses a close).
+`read_project` and `copy_project` name a kind and take an id or a title, so their parameter
+is `project` rather than `project_id`: the `_id` suffix is a promise about what may be
+passed, and those two accept a name as well.
+
 Read-only tier:
 
-- `list_domains()` returns domains as name and path.
-- `list_projects(domain?)` returns each project node's id, title, kind, and
-  whether it is a root, for resolving a named project (for instance "the Pre-MCP
-  project") to an id. Node titles are domain-unique by invariant (enforced on
-  create, rename, and paste as of v1.3.2, PR #52), so a name resolves to at most
-  one node.
+- `list_domains()` returns `{ domains }`, each a name and a path, either of which
+  addresses it in the `domain` parameter every other tool takes.
+- `list_projects(domain?)` returns each project's id, title, kind, and `is_root`
+  (whether it is a plan's own base rather than a sub-project), for resolving a
+  named project (for instance "the Pre-MCP project") to an id. Titles are
+  domain-unique by invariant (enforced on create, rename, and paste as of v1.3.2,
+  PR #52), so a name resolves to at most one node.
 - `find_flagged(domain?)` returns the flagged nodes; the `flagged` mark is set to
   select tasks for an assistant to work, so this serves "plan the flagged tasks."
-- `read_project(domain?, project_id?, include_notes=false)` returns the
+- `read_domain(domain?, include_notes=false)` returns every plan's outline plus a
+  structured node array for the whole domain.
+- `read_project(project, domain?, include_notes=false)` returns the
   `serializeProject` outline plus a structured node array (id, title, kind,
-  status, here, flagged, whether a note exists, and the next and branch links);
-  no `project_id` renders every top-level project, and a `project_id` scopes to
-  that project or sub-project's own extent: for a sub-project, the pair and its
-  body, ending at its close rather than running on up the trunk.
-- `read_note(node_id, domain?)` returns a node's markdown note.
-- `copy_project(node_id, domain?)` returns a serializable clip for
-  `paste_as_plan`: the node's extent, with no edge leaving it, so the clip is a
-  plan that stands alone.
+  status, here, flagged, completed_at, has_note and note_file, and the next, branch and
+  merge_point links),
+  bounded by the project's own extent: the pair and its body, ending at its close
+  rather than running on up the trunk. It also returns `enclosing_project_id` and
+  `root_project_id`.
+- `read_task(task, domain?, include_note=false)` returns one task, in the same
+  structured shape, with the same two context ids. Those two fields are why there
+  is no `read_plan`: one id reaches its scope and its plan in a single further call.
+- `read_note(node_id, domain?)` returns a node's markdown note, whatever kind
+  carries it. The one read that is legitimately kind-agnostic, since any kind may
+  hold a note.
+- `copy_project(project, domain?)` returns a serializable clip for
+  `paste_as_plan`: the project's extent, with no edge leaving it, so the clip is a
+  plan that stands alone. Only a project may be clipped, a clip being a plan.
+
+Deliberately absent: a run reader. To name a run's two ends one must already have
+read the structure containing them, at which point one holds what the run would
+return; the residual need, re-reading known ids, is `read_task`. Were it added, note
+that a read may report a run straddling a scope whilst `wrap_run` must refuse one.
 
 Read-write tier (on by default). *Amended for model v3:* the names follow the new
 vocabulary, since a domain holds plans rather than trees, and the three verbs of
@@ -194,22 +260,36 @@ vocabulary, since a domain holds plans rather than trees, and the three verbs of
 `mode`, an insertion now always naming its edge, and opening a branch being its own
 verb because a branch is three things at once.
 
-- `create_domain(name)`, `create_plan(name, domain?)`.
+- `create_domain(name)`, `create_plan(title, domain?)`.
 - `add_task(target_id, position, title, domain?)`, position above or below.
-- `open_branch(edge_id, title, side?, domain?)`,
-  `set_merge_point(branch_id, merge_point_id, domain?)`.
-- `wrap_run(from_id, to_id?, title, domain?)`, `unwrap_project(project_id, domain?)`.
+- `open_branch(node_id, position, title, side?, domain?)`, the same two positions as
+  `add_task`; `set_merge_point(branch_id, merge_point_id, domain?)`. `side` is the
+  half-plane the branch is drawn in, chosen by alternation where it is not given, and it
+  has no control in the app: see the draggable-branches entry in `in-flight_ideas.md`,
+  which is the real answer rather than a side menu.
+- `wrap_run(from_id, to_id?, title, domain?)`, `unwrap_project(node_id, domain?)`.
 - `set_title`, `set_status`, `cycle_status`, `set_note`, `delete_note`.
 - `make_here`, `clear_here`, `toggle_flag`, `convert_kind`.
 - `paste_as_plan(clip, domain?)`.
-- `move_node`, `move_subtree`, `move_into_line`, `detach_to_plan`,
-  `reorder_plan`, `move_up`, `move_down`.
+- `move_task`, `move_project`, `move_into_line`, `detach_project`,
+  `reorder_project`, `move_up`, `move_down`. Four are named for the kind they take and
+  refuse the rest: a task travels alone, a project travels with the plan it opens, and
+  only a project detaches or reorders. `move_into_line`, `move_up` and `move_down` are one
+  verb over any kind but a close, as the app's menu is. A close is refused by all of them,
+  it being one half of a pair that sits where its scope ends; moving a node PAST one is
+  another matter and is how one says that node has left the scope.
 
 Destructive tier (off unless enabled at startup):
 
-- `delete_task(node_id, mode=subtree|splice, domain?)`, where subtree mode removes
-  the node's extent, which for a sub-project is its pair and body and no more.
-- `delete_domain(name_or_path)`.
+- `delete_node(node_id, mode=subtree|splice, domain?)`, which ends a task or a
+  project and refuses a close, one half of a pair having no life of its own to end.
+  Subtree mode removes the node's extent, which for a project is the plan it opens,
+  pair included, and no more. Splice mode is refused on a plan's base: nothing
+  precedes a base, so there is nothing to reconnect its successor to and the
+  operation would fall through to deleting the whole plan, which is the right answer
+  to "delete this plan" and the wrong one to what splice asks for. Say `subtree` for
+  the first and `unwrap_project` for the second.
+- `delete_domain(domain)`, required rather than defaulting to the open one.
 
 Excluded: the library root (`getLibraryRoot` / `chooseLibraryRoot`), a user
 setting whose change needs a native dialog; an agent works within the existing

@@ -30,7 +30,7 @@ const INSTRUCTIONS = [
   'Never rely on an earlier read. Treat anything you read (domains, projects, flagged nodes,',
   'statuses, notes) as possibly stale the instant after you read it. Before you act, and always',
   'immediately before a write, re-read the current state with the relevant tool (find_flagged,',
-  'list_projects, read_project, read_note) and resolve any description such as "the flagged one",',
+  'list_projects, read_domain, read_project, read_task, read_note) and resolve any description such as "the flagged one",',
   '"the current task", or "the one we discussed" against that fresh read, not against memory.',
   'Every write returns the affected id and the re-rendered outline; treat that returned state as',
   'your new ground truth. Nodes are addressed by id; titles and positions can change under you.',
@@ -43,6 +43,18 @@ const INSTRUCTIONS = [
   'the same scopes; it is never left open. A terminus carries no title, status, flag or cursor,',
   'so a scope is named and found by its project node. Growth is upward: an edge rises from a node',
   'to the next, and a tool that takes an edge names the node BELOW it.',
+  // The naming rule, so a refusal reads as the surface being strict rather than broken.
+  'The tools speak that vocabulary and no other: domain, project, task, terminus. The READS are',
+  'strict about kind, since the kind decides the shape of the answer: read_domain takes no node at',
+  'all, whilst read_project and read_task each refuse the wrong kind and name the one that reads',
+  'it, a terminus being read through the project it closes. Those two take an id OR a title,',
+  'titles being unique within a domain.',
+  'The WRITES are one tool per verb over any kind, except where the kind decides what travels',
+  '(move_task takes a task alone, move_project takes a project with the plan it opens), and they',
+  'are id-only: every parameter ending in _id takes an id and nothing else, because a title can',
+  'move between your read and your write. All three kinds share one id namespace, so the node a',
+  'tool acts on is always node_id, whatever kind it takes; a second node named in the same call',
+  'keeps its role (target_id, below_id, merge_point_id, edge_id, from_id, to_id).',
 ].join(' ')
 
 // Create the MCP service. `deps` = { taskService, store, version, notify }.

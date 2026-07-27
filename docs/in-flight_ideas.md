@@ -135,3 +135,76 @@ brief:
   which may graduate to its own `sync_ideas.md` if it firms up.
 
 This is a question under study, not a plan or a commitment.
+
+# 8. Under consideration: dragging a branch, to move it and to reorder it
+
+A branch is drawn in one of two half-planes and at one of several lanes within it, and
+neither is the author's to set today. `branchSide` (`mutations.js`) alternates, left for the
+first branch off a node and right for the second; the lane comes from the order of the ids in
+`leftBranches` and `rightBranches`, which the author never touches directly. The MCP
+`open_branch` tool takes an explicit `side`, so an agent can express something a person
+cannot, which is the one asymmetry left between the two surfaces after v3.3.0.
+
+The obvious remedy, a side option on "Add branch above" and "Add branch below", is the wrong
+one: it doubles two menu items and still says nothing about lane order, which is what decides
+whether two branches cross. The right one is to let the author drag a branch, across the
+trunk to the other half-plane and along it to reorder within the side, since the map is what
+one is reasoning about and a drag is how one says "put that over there".
+
+Questions it opens, none answered here. What the drag target is, given that a branch is a
+line and a run of cards rather than one object. Whether a reorder that costs a crossing is
+drawn as one or refused. Whether the return line follows the branch or is re-solved. And
+whether the same gesture should move a branch to a different host edge, which is a different
+verb again (`move_task` and `move_project` already do that by grafting).
+
+Gary's direction, 2026-07-27: a future PR, after v3.3.0.
+
+
+# 9. Under consideration: MCP resources, and more MCP prompts
+
+Gary's two questions, 2026-07-27: should the read tools become MCP *resources*, and should the
+server offer more *prompts*? The answers point opposite ways, for the same underlying reason.
+
+**Resources: recommended against, both as a conversion and as an addition for now.** In the
+protocol a tool is model-controlled and a resource is application-controlled: the client, or the
+user, decides when a resource is fetched, and in practice it is fetched once and pinned into the
+conversation as an attachment. That is precisely the stale-read hazard this surface is built
+against, and nothing in a transcript distinguishes an attachment fetched a minute ago from one
+fetched an hour ago. Two lesser reasons compound it. A resource is addressed by a URI template
+and nothing else, so `include_notes` becomes a query string parsed by hand, there is no schema
+and no enum, and an error is a JSON-RPC code rather than the prose refusal that names the
+sibling tool, which is the property v3.3.0 was largely about. And support is uneven across
+clients where tools are universal, so a conversion would break tool-only clients for no gain.
+
+If resources ever earn a place here it is notes and nothing else: a note is genuinely a document
+with a filename and a URI, and it is the one read where a stale copy costs little, being prose
+the user wrote for the agent rather than structure the agent must not act on stale. Even that
+buys a second surface to keep in step with the first. The nearer relative worth remembering is
+the resource *link*, which a tool result may return in place of inlined text; that would stop
+`read_project(include_notes)` dumping every note into the context, though `read_note` already
+covers the need for a client that will make the second call.
+
+**Prompts: recommended for, sparingly.** The argument is an asymmetry in cost. A new tool taxes
+every conversation, the whole tool list being model context and the surface already carrying
+about thirty; a new prompt taxes none, being fetched by the client for the user's own menu and
+costing nothing unless invoked. A prompt is also the only place here that can state an ORDER;
+tool descriptions state rules and refusals state constraints, but neither can say "do this, then
+that".
+
+On that test one addition clearly earns its place: **decomposing a project.** Insert the tasks,
+then wrap runs as sub-projects, then open branches, because `wrap_run` is refused where a run
+would straddle a branch's span, so branching first can make the intended wrap illegal. An agent
+discovers that as a refusal after doing the work in the wrong order; a prompt can say it in
+advance. A read-only "review this plan" prompt (what carries no note, what is still todo under a
+completed scope) is a weaker second candidate. Stop there.
+
+**Open, deferred from the v3.3.0 repair by decision: prompts are not scope-gated.**
+`registerPrompt` sits above the read-write gate (`tools.js`), so the read-only tier offers
+`work_flagged` whilst withholding the `set_note` and `set_status` it names. Instructions are
+rightly ungated; a prompt naming write tools is not. The fix is three lines and one assertion in
+`e2e.test.js`, and it belongs with whatever prompt work happens next rather than in a release
+already cut for other reasons.
+
+What is already done, so it is not proposed again: the `work_flagged` repair itself, and the two
+guards that hold a prompt to the tool surface (`tools.test.js`, and the reasoning in
+`mcp_ideas.md`). These are questions under study, not a plan.

@@ -128,22 +128,22 @@ function newProjectNode(title) {
   }
 }
 
-// The task whose .next or whose branch points at taskId, or null if taskId is a
+// The node whose .next or whose branch points at nodeId, or null if nodeId is a
 // root. validateRecord guarantees at most one such incoming edge.
-function predecessorOf(record, taskId) {
-  for (const [id, task] of Object.entries(record.nodes)) {
-    if (task.next === taskId) return { id, kind: 'next' }
-    const b = branchesOf(task).find((x) => x.child === taskId)
+function predecessorOf(record, nodeId) {
+  for (const [id, node] of Object.entries(record.nodes)) {
+    if (node.next === nodeId) return { id, kind: 'next' }
+    const b = branchesOf(node).find((x) => x.child === nodeId)
     if (b) return { id, kind: 'branch', side: b.side, index: b.index }
   }
   return null
 }
 
-// The ids on taskId's line: the maximal .next chain it sits on. The line starts
+// The ids on nodeId's line: the maximal .next chain it sits on. The line starts
 // at a root or a branch child (the first node with no main-line predecessor) and
 // runs up through .next to the tip.
-function lineIds(record, taskId) {
-  let start = taskId
+function lineIds(record, nodeId) {
+  let start = nodeId
   for (;;) {
     const pred = predecessorOf(record, start)
     if (pred && pred.kind === 'next') start = pred.id
@@ -293,9 +293,22 @@ function requireLegalReturns(next, before, refusal) {
   return next
 }
 
-function requireTask(record, taskId) {
-  if (!record.nodes[taskId]) throw new Error('unknown task "' + taskId + '"')
-  return record.nodes[taskId]
+// A close is one half of a pair and sits where its scope ends, so it does not move on its own:
+// moving it alone would quietly resize the scope, taking in a node that was outside it or
+// letting go of one that was inside, and the record would still be bracket-matched, so nothing
+// downstream would object. The scope moves by its project node, which carries its close. The
+// grafting moves refuse a close by kind already; this is the same rule for the three that
+// reorder a trunk in place.
+function requireMovable(node) {
+  if (node.kind === 'terminus') {
+    throw new Error('a close cannot be moved on its own: it is one half of a pair and sits where its scope ends; move the project it closes, which carries it')
+  }
+  return node
+}
+
+function requireNode(record, nodeId) {
+  if (!record.nodes[nodeId]) throw new Error('unknown task "' + nodeId + '"')
+  return record.nodes[nodeId]
 }
 
 // A branch hangs on the edge rising from a node, and two positions have no such edge: a
@@ -317,7 +330,7 @@ function requireRisingEdge(record, nodeId) {
  * An empty plan is a legal resting state, and this is how every plan begins: a
  * project carries a title, so an empty one still asserts something.
  */
-export function addTree(record, name) {
+export function addPlan(record, name) {
   const next = clone(record)
   const root = newProjectNode(name)
   const close = newTerminus()
@@ -351,7 +364,7 @@ export function uniqueTitle(record, desired, excludeId) {
 }
 
 // Place a freshly-created node into the record with a domain-unique title (uniqueTitle),
-// so a name typed at creation is suffixed just as setTitle and pasteAsTree already do.
+// so a name typed at creation is suffixed just as setTitle and pasteAsPlan already do.
 // Used by every add* mutation; the node is not yet in the record, so excludeId is null.
 function addNode(record, node) {
   node.title = uniqueTitle(record, node.title, null)
@@ -360,30 +373,30 @@ function addNode(record, node) {
 }
 
 /** Set a node's title, kept unique within the domain (see uniqueTitle). */
-export function setTitle(record, taskId, title) {
+export function setTitle(record, nodeId, title) {
   const next = clone(record)
-  const node = requireTask(next, taskId)
+  const node = requireNode(next, nodeId)
   if (node.kind === 'terminus') throw new Error('a terminus has no title')
-  node.title = uniqueTitle(next, title, taskId)
+  node.title = uniqueTitle(next, title, nodeId)
   return next
 }
 
 /** Record (or clear, with null) a node's note filename, which drives the note dot. */
-export function setNote(record, taskId, filename) {
+export function setNote(record, nodeId, filename) {
   const next = clone(record)
-  requireTask(next, taskId).note = filename || null
+  requireNode(next, nodeId).note = filename || null
   return next
 }
 
 /** Set a task's status. Completing stamps completedAt; leaving completed clears it. */
-export function setStatus(record, taskId, status) {
+export function setStatus(record, nodeId, status) {
   if (!STATUSES.includes(status)) throw new Error('invalid status "' + status + '"')
   const next = clone(record)
-  const task = requireTask(next, taskId)
-  if (task.kind !== 'task') throw new Error('only a task has a status')
-  task.status = status
-  if (status === 'completed') task.completedAt = task.completedAt || nowISO()
-  else task.completedAt = null
+  const node = requireNode(next, nodeId)
+  if (node.kind !== 'task') throw new Error('only a task has a status')
+  node.status = status
+  if (status === 'completed') node.completedAt = node.completedAt || nowISO()
+  else node.completedAt = null
   return next
 }
 
@@ -392,11 +405,11 @@ export function setStatus(record, taskId, status) {
  * click-free counterpart of the right-click Status submenu; an unknown current
  * status starts the cycle at todo.
  */
-export function cycleStatus(record, taskId) {
-  const task = requireTask(record, taskId)
-  if (task.kind !== 'task') throw new Error('only a task has a status')
-  const i = STATUSES.indexOf(task.status)
-  return setStatus(record, taskId, STATUSES[(i + 1) % STATUSES.length])
+export function cycleStatus(record, nodeId) {
+  const node = requireNode(record, nodeId)
+  if (node.kind !== 'task') throw new Error('only a task has a status')
+  const i = STATUSES.indexOf(node.status)
+  return setStatus(record, nodeId, STATUSES[(i + 1) % STATUSES.length])
 }
 
 /**
@@ -413,25 +426,25 @@ export function cycleStatus(record, taskId) {
  * it is not an independent node but one half of a pair, and the way to be rid of it
  * is to unwrap its project.
  */
-export function convertKind(record, taskId) {
+export function convertKind(record, nodeId) {
   const next = clone(record)
-  const task = requireTask(next, taskId)
-  if (task.kind === 'terminus') throw new Error('a terminus cannot change kind; unwrap its project instead')
-  if (!predecessorOf(next, taskId)) throw new Error('cannot change the kind of a root node')
-  if (task.kind === 'project') {
-    const terminusId = scopes(next).pairs.get(taskId)
-    task.kind = 'task'
-    task.status = 'todo'
-    task.completedAt = null
-    task.here = false
-    task.mergePoint = null
+  const node = requireNode(next, nodeId)
+  if (node.kind === 'terminus') throw new Error('a terminus cannot change kind; unwrap its project instead')
+  if (!predecessorOf(next, nodeId)) throw new Error('cannot change the kind of a root node')
+  if (node.kind === 'project') {
+    const terminusId = scopes(next).pairs.get(nodeId)
+    node.kind = 'task'
+    node.status = 'todo'
+    node.completedAt = null
+    node.here = false
+    node.mergePoint = null
     if (terminusId) spliceOutNode(next, terminusId)
   } else {
-    task.kind = 'project'
-    delete task.status
-    delete task.completedAt
-    delete task.here
-    insertCloseForScopeOpenedAt(next, taskId)
+    node.kind = 'project'
+    delete node.status
+    delete node.completedAt
+    delete node.here
+    insertCloseForScopeOpenedAt(next, nodeId)
     return requireLegalReturns(next, record, 'this node cannot become a sub-project')
   }
   return normalizeReturns(next, record)
@@ -483,9 +496,9 @@ function insertCloseForScopeOpenedAt(next, openId) {
  */
 export function wrapRun(record, fromId, toId, title) {
   const next = clone(record)
-  requireTask(next, fromId)
+  requireNode(next, fromId)
   const endId = toId || fromId
-  requireTask(next, endId)
+  requireNode(next, endId)
 
   const trunk = lineIds(next, fromId)
   const from = trunk.indexOf(fromId)
@@ -529,6 +542,31 @@ export function wrapRun(record, fromId, toId, title) {
 }
 
 /**
+ * The runs beginning at `fromId` that wrapRun would accept, as the id of each run's last
+ * node, base to top. The first is always `fromId` itself, which wraps one node.
+ *
+ * Computed by asking wrapRun, on a throwaway record per candidate, rather than by a second
+ * reading of its rules. That costs a clone per node up the trunk, which is nothing at these
+ * sizes, and buys the property that matters for a menu: it can never offer a run the
+ * operation would then refuse. wrapRun is pure, so the record is untouched.
+ */
+export function wrapCandidates(record, fromId) {
+  const trunk = lineIds(record, fromId)
+  const from = trunk.indexOf(fromId)
+  if (from === -1) return []
+  const out = []
+  for (let i = from; i < trunk.length; i++) {
+    try {
+      wrapRun(record, fromId, trunk[i], 'Probe')
+      out.push(trunk[i])
+    } catch {
+      // Not a legal run: it straddles a scope, or a branch opened inside it rejoins outside.
+    }
+  }
+  return out
+}
+
+/**
  * Undo a wrap: remove a project node and the terminus that closes it, leaving what
  * was inside on the trunk. The scope goes; nothing inside it moves.
  *
@@ -537,7 +575,7 @@ export function wrapRun(record, fromId, toId, title) {
  */
 export function unwrapProject(record, projectId) {
   const next = clone(record)
-  const node = requireTask(next, projectId)
+  const node = requireNode(next, projectId)
   if (node.kind !== 'project') throw new Error('only a project node can be unwrapped')
   if (!predecessorOf(next, projectId)) throw new Error('a plan\'s base cannot be unwrapped; delete the plan instead')
   const terminusId = scopes(next).pairs.get(projectId)
@@ -576,31 +614,31 @@ function spliceOutNode(next, id) {
  * annotation (it rides in the domain file, not the client's view state), used to
  * select nodes, e.g. for an assistant to examine next. Any node may be flagged.
  */
-export function toggleFlag(record, taskId) {
+export function toggleFlag(record, nodeId) {
   const next = clone(record)
-  const task = requireTask(next, taskId)
+  const node = requireNode(next, nodeId)
   // A terminus carries no flag, so a flag query cannot sweep one up; its paired
   // project node is the scope's handle.
-  if (task.kind === 'terminus') throw new Error('a terminus cannot be flagged; flag its project instead')
-  task.flagged = !task.flagged
+  if (node.kind === 'terminus') throw new Error('a terminus cannot be flagged; flag its project instead')
+  node.flagged = !node.flagged
   return next
 }
 
-/** Mark taskId as "here" on its line, clearing any existing "here" on that same line. */
-export function makeHere(record, taskId) {
+/** Mark nodeId as "here" on its line, clearing any existing "here" on that same line. */
+export function makeHere(record, nodeId) {
   const next = clone(record)
-  const task = requireTask(next, taskId)
-  if (task.kind !== 'task') throw new Error('only a task can hold the "here" mark')
-  for (const id of lineIds(next, taskId)) next.nodes[id].here = false
-  next.nodes[taskId].here = true
+  const node = requireNode(next, nodeId)
+  if (node.kind !== 'task') throw new Error('only a task can hold the "here" mark')
+  for (const id of lineIds(next, nodeId)) next.nodes[id].here = false
+  next.nodes[nodeId].here = true
   return next
 }
 
-/** Clear the "here" cursor on taskId's line (if any). */
-export function clearHere(record, taskId) {
+/** Clear the "here" cursor on nodeId's line (if any). */
+export function clearHere(record, nodeId) {
   const next = clone(record)
-  requireTask(next, taskId)
-  for (const id of lineIds(next, taskId)) next.nodes[id].here = false
+  requireNode(next, nodeId)
+  for (const id of lineIds(next, nodeId)) next.nodes[id].here = false
   return next
 }
 
@@ -615,7 +653,7 @@ export function clearHere(record, taskId) {
  */
 export function insertTask(record, edgeId, title) {
   const next = clone(record)
-  const at = requireTask(next, edgeId)
+  const at = requireNode(next, edgeId)
   if (isPlanClose(next, edgeId)) throw new Error('nothing can be inserted above a plan\'s closing terminus')
   const n = newTask(title)
   n.next = at.next
@@ -625,30 +663,30 @@ export function insertTask(record, edgeId, title) {
 }
 
 /**
- * The edge above taskId, as the right-click menu's "add task above" means it.
+ * The edge above nodeId, as the right-click menu's "add task above" means it.
  * Kept as its own name because that is what the menu says.
  */
-export function addTaskAbove(record, taskId, title) {
-  return insertTask(record, taskId, title)
+export function addTaskAbove(record, nodeId, title) {
+  return insertTask(record, nodeId, title)
 }
 
 /**
- * Push a new task onto the stack immediately below taskId (toward the root): the
- * new task takes taskId's place under its predecessor and points up at taskId.
+ * Push a new task onto the stack immediately below nodeId (toward the root): the
+ * new task takes nodeId's place under its predecessor and points up at nodeId.
  * Refused below a root node — nothing precedes a project's base.
  */
-export function addTaskBelow(record, taskId, title) {
+export function addTaskBelow(record, nodeId, title) {
   const next = clone(record)
-  requireTask(next, taskId)
-  const pred = predecessorOf(next, taskId)
+  requireNode(next, nodeId)
+  const pred = predecessorOf(next, nodeId)
   if (!pred) throw new Error('cannot add a task below a root node')
-  // The edge below taskId rises from its main-line predecessor, so on that trunk
+  // The edge below nodeId rises from its main-line predecessor, so on that trunk
   // this is an insertion like any other. Below a branch's first node the edge is the
   // branch line itself, which holds nothing, so the new task takes its place as the
   // branch's first node instead.
   if (pred.kind === 'next') return insertTask(next, pred.id, title)
   const n = newTask(title)
-  n.next = taskId
+  n.next = nodeId
   sideArray(next.nodes[pred.id], pred.side)[pred.index] = n.id
   addNode(next, n)
   return normalizeReturns(next, record)
@@ -675,7 +713,7 @@ function branchSide(task, side) {
  */
 export function openBranch(record, edgeId, title, side) {
   const next = clone(record)
-  const host = requireTask(next, edgeId)
+  const host = requireNode(next, edgeId)
   if (isPlanClose(next, edgeId)) throw new Error('a plan\'s closing terminus has no edge above it to open a branch on')
   requireRisingEdge(next, edgeId)
   const n = newTask(title)
@@ -686,23 +724,23 @@ export function openBranch(record, edgeId, title, side) {
 }
 
 /**
- * The branch on the edge above taskId, as the right-click menu's "add branch above"
+ * The branch on the edge above nodeId, as the right-click menu's "add branch above"
  * means it. Kept as its own name because that is what the menu says.
  */
-export function addBranchAbove(record, taskId, title, side) {
-  return openBranch(record, taskId, title, side)
+export function addBranchAbove(record, nodeId, title, side) {
+  return openBranch(record, nodeId, title, side)
 }
 
 /**
- * The branch on the edge below taskId. A branch hangs from the node whose rising edge it
- * leaves, so the gap below taskId belongs to taskId's predecessor, and that is the edge
+ * The branch on the edge below nodeId. A branch hangs from the node whose rising edge it
+ * leaves, so the gap below nodeId belongs to nodeId's predecessor, and that is the edge
  * this opens. Refused where there is no such edge: below a root, since nothing precedes a
  * plan's base, and below the foot of a branch, whose lower neighbour is its own branch
  * line rather than a trunk edge.
  */
-export function addBranchBelow(record, taskId, title, side) {
-  requireTask(record, taskId)
-  const pred = predecessorOf(record, taskId)
+export function addBranchBelow(record, nodeId, title, side) {
+  requireNode(record, nodeId)
+  const pred = predecessorOf(record, nodeId)
   if (!pred) throw new Error('cannot add a branch below a root node')
   if (pred.kind !== 'next') throw new Error('cannot add a branch below the first node of a branch')
   return openBranch(record, pred.id, title, side)
@@ -719,8 +757,8 @@ export function addBranchBelow(record, taskId, title, side) {
  */
 export function setMergePoint(record, footId, mergePointId) {
   const next = clone(record)
-  requireTask(next, footId)
-  requireTask(next, mergePointId)
+  requireNode(next, footId)
+  requireNode(next, mergePointId)
   const branch = branchesIn(next).find((b) => b.footId === footId)
   if (!branch) throw new Error('node "' + footId + '" is not the foot of a branch')
   const errors = mergeErrors(next, { ...branch, mergePoint: mergePointId }, indexRecord(next))
@@ -742,26 +780,26 @@ export function setMergePoint(record, footId, mergePointId) {
  * work that came after that close survives. An extent is bracket-matched, so no surviving
  * project is left unclosed and no close is left closing nothing.
  */
-export function deleteTask(record, taskId, mode = 'subtree') {
+export function deleteTask(record, nodeId, mode = 'subtree') {
   const next = clone(record)
-  const node = requireTask(next, taskId)
+  const node = requireNode(next, nodeId)
   // A close is one half of a pair and has no life of its own to end. Its extent is the
   // scope it closes, so deleting it would quietly delete the whole scope, which is not
   // what was asked; the two things that were are named instead.
   if (node.kind === 'terminus') {
     throw new Error('a close cannot be deleted on its own: delete the project node to remove the scope, or unwrap it to keep what is inside')
   }
-  const pred = predecessorOf(next, taskId)
+  const pred = predecessorOf(next, nodeId)
 
   if (!pred || mode !== 'splice') {
-    const { ids } = liftExtent(next, taskId)
+    const { ids } = liftExtent(next, nodeId)
     for (const id of ids) delete next.nodes[id]
     return normalizeReturns(next, record)
   }
 
   // splice. Only the node goes; its successor, or lacking one its first fork, takes its
   // slot under its predecessor, with any remaining forks reattached to that new head.
-  const task = next.nodes[taskId]
+  const task = next.nodes[nodeId]
   const succ = task.next
   let head = null
   let leftover = branchesOf(task)
@@ -783,7 +821,7 @@ export function deleteTask(record, taskId, mode = 'subtree') {
   } else {
     sideArray(next.nodes[pred.id], pred.side).splice(pred.index, 1)
   }
-  delete next.nodes[taskId]
+  delete next.nodes[nodeId]
   return normalizeHeres(normalizeReturns(next, record))
 }
 
@@ -825,8 +863,14 @@ export function clipNodes(record, rootId) {
  * snapshot bridge/api.js gathers at copy time. Returns { next, notes } where
  * notes is [{ file, content }]. Pure: neither `record` nor `clip` is mutated.
  */
-export function pasteAsTree(record, clip) {
+export function pasteAsPlan(record, clip) {
   const next = clone(record)
+  // A clip pastes as a plan of its own, and a plan is bounded by a project and its close, so
+  // a clip rooted anywhere else cannot become one. Said here, where the clip is named, rather
+  // than left to validateRecord to say at the end about a node the caller never mentioned.
+  const clipRoot = clip && clip.nodes && clip.rootId ? clip.nodes[clip.rootId] : null
+  if (!clipRoot) throw new Error('a clip must name a rootId present in its own nodes')
+  if (clipRoot.kind !== 'project') throw new Error('a clip pastes as a plan, so its root must be a project; clip the project that contains this node instead')
   if (!Array.isArray(next.planOrder)) next.planOrder = []
   const idMap = new Map()
   for (const oldId of Object.keys(clip.nodes)) idMap.set(oldId, mintNodeId())
@@ -977,10 +1021,10 @@ function spliceOutTask(next, id) {
  */
 export function moveTaskNode(record, id, targetId) {
   const next = clone(record)
-  const task = requireTask(next, id)
-  requireTask(next, targetId)
+  const node = requireNode(next, id)
+  requireNode(next, targetId)
   if (id === targetId) throw new Error('cannot move a node onto itself')
-  if (task.kind !== 'task') throw new Error('moveTaskNode moves a task node; use moveSubtree for a project')
+  if (node.kind !== 'task') throw new Error('this move takes a node, which travels alone; a project travels with the plan it opens, and has its own move')
   spliceOutTask(next, id) // the node travels alone; its children stay on the line
   graftBranch(next, targetId, id)
   return normalizeHeres(normalizeReturns(next, record))
@@ -996,8 +1040,9 @@ export function moveTaskNode(record, id, targetId) {
  */
 export function moveSubtree(record, rootId, targetId) {
   const next = clone(record)
-  requireTask(next, rootId)
-  requireTask(next, targetId)
+  const node = requireNode(next, rootId)
+  requireNode(next, targetId)
+  if (node.kind !== 'project') throw new Error('this move takes a project and the plan it opens; a task travels alone, and has its own move')
   if (rootId === targetId) throw new Error('cannot move a node onto itself')
   if (extentOf(next, rootId).has(targetId)) throw new Error('cannot graft a subtree onto its own descendant')
   liftExtent(next, rootId)
@@ -1016,9 +1061,9 @@ export function moveSubtree(record, rootId, targetId) {
  * This is the way out when work genuinely does not rejoin, which axiom 3 calls a separate
  * plan rather than a branch.
  */
-export function detachToTree(record, id) {
+export function detachProject(record, id) {
   const next = clone(record)
-  const node = requireTask(next, id)
+  const node = requireNode(next, id)
   if (node.kind !== 'project') throw new Error('only a project node can become a root')
   if (!predecessorOf(next, id)) throw new Error('node is already a root')
 
@@ -1039,8 +1084,8 @@ export function detachToTree(record, id) {
  */
 export function reorderRoot(record, rootId, index) {
   const next = clone(record)
-  requireTask(next, rootId)
-  if (predecessorOf(next, rootId)) throw new Error('reorderRoot expects a root node')
+  requireNode(next, rootId)
+  if (predecessorOf(next, rootId)) throw new Error('only a plan\'s base can be reordered; this node sits inside a plan')
   const isRoot = (id) => !predecessorOf(next, id)
   const listed = (next.planOrder || []).filter((id) => next.nodes[id] && isRoot(id))
   const unlisted = Object.keys(next.nodes)
@@ -1066,8 +1111,9 @@ export function reorderRoot(record, rootId, index) {
  */
 export function moveIntoLine(record, movedId, belowId) {
   const next = clone(record)
-  const moved = requireTask(next, movedId)
-  requireTask(next, belowId)
+  const moved = requireNode(next, movedId)
+  requireMovable(moved)
+  requireNode(next, belowId)
   if (movedId === belowId) throw new Error('cannot insert a node above itself')
   const isProject = moved.kind === 'project'
   if (isProject && extentOf(next, movedId).has(belowId)) throw new Error('cannot insert a subtree into its own line')
@@ -1109,7 +1155,8 @@ function swapWithSuccessor(next, aId) {
  */
 export function moveUp(record, id) {
   const next = clone(record)
-  const node = requireTask(next, id)
+  const node = requireNode(next, id)
+  requireMovable(node)
   if (!node.next) throw new Error('nothing above to swap with')
   if (!predecessorOf(next, id)) throw new Error('cannot move a root up')
   swapWithSuccessor(next, id)
@@ -1123,7 +1170,7 @@ export function moveUp(record, id) {
  */
 export function moveDown(record, id) {
   const next = clone(record)
-  requireTask(next, id)
+  requireMovable(requireNode(next, id))
   const pred = predecessorOf(next, id)
   if (!pred || pred.kind !== 'next') throw new Error('no main-line predecessor to swap with')
   if (!predecessorOf(next, pred.id)) throw new Error('cannot move below the root')

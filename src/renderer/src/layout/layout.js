@@ -51,7 +51,7 @@ const DEFAULTS = {
   // hullSeamToClose). At the ordinary card height, 58 by 58, closing takes 19.5 and this is 22.
   foldSeam: 22,
   repairPasses: 8, // how many times a lateral crossing a card may lift that card before we stop
-  treeGap: 90, // horizontal gap between two trees' bounding boxes
+  planGap: 90, // horizontal gap between two trees' bounding boxes
   margin: 40, // canvas margin on every side
 }
 
@@ -106,26 +106,26 @@ function placeOnce(model, sizes, o, slack) {
     return { min, max }
   }
 
-  const { lineOfTask, lane } = assignLanes(model, extentOf)
+  const { lineOfNode, lane } = assignLanes(model, extentOf)
   const rawX = new Map()
-  for (const id of model.nodes.keys()) rawX.set(id, lane.get(lineOfTask.get(id)) * o.laneStep)
+  for (const id of model.nodes.keys()) rawX.set(id, lane.get(lineOfNode.get(id)) * o.laneStep)
 
   // ---- per-tree bounding box, then packed left to right ----
-  const tasksByTree = new Map(model.trees.map((t) => [t.id, []]))
-  for (const id of model.nodes.keys()) tasksByTree.get(model.getTreeIdForTask(id)).push(id)
-  const treeOffsetX = new Map()
+  const nodesByPlan = new Map(model.plans.map((t) => [t.id, []]))
+  for (const id of model.nodes.keys()) nodesByPlan.get(model.getPlanIdForNode(id)).push(id)
+  const planOffsetX = new Map()
   let packCursor = 0
-  for (const tree of model.trees) {
+  for (const tree of model.plans) {
     let minX = Infinity
     let maxX = -Infinity
-    for (const id of tasksByTree.get(tree.id)) {
+    for (const id of nodesByPlan.get(tree.id)) {
       minX = Math.min(minX, rawX.get(id) - cardW(id) / 2)
       maxX = Math.max(maxX, rawX.get(id) + cardW(id) / 2)
     }
-    treeOffsetX.set(tree.id, packCursor - minX)
-    packCursor = maxX + (packCursor - minX) + o.treeGap
+    planOffsetX.set(tree.id, packCursor - minX)
+    packCursor = maxX + (packCursor - minX) + o.planGap
   }
-  const finalX = (id) => rawX.get(id) + treeOffsetX.get(model.getTreeIdForTask(id))
+  const finalX = (id) => rawX.get(id) + planOffsetX.get(model.getPlanIdForNode(id))
 
   // ---- stations, dots, cursors ----
   const stations = []
@@ -149,7 +149,7 @@ function placeOnce(model, sizes, o, slack) {
   // as it always has.
   const linesByStart = new Map()
   for (const id of model.nodes.keys()) {
-    const start = lineOfTask.get(id)
+    const start = lineOfNode.get(id)
     if (!linesByStart.has(start)) linesByStart.set(start, [])
     linesByStart.get(start).push(id)
   }
@@ -360,7 +360,7 @@ function repairAndPlace(model, sizes, o) {
 
 export function computeDomainLayout(model, sizes, opts = {}) {
   const o = { ...DEFAULTS, ...opts }
-  if (model.trees.length === 0) {
+  if (model.plans.length === 0) {
     return { stations: [], dots: [], cursors: [], tracks: [], junctions: [], bounds: { w: o.margin * 2, h: o.margin * 2 }, metrics: o, conflicts: [] }
   }
   return repairAndPlace(model, sizes, o)

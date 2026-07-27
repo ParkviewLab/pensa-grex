@@ -37,12 +37,12 @@ function onDisk(dir) {
   return JSON5.parse(store.loadDomainFile(dir).text)
 }
 
-// A domain with one project tree; returns [dir, rootId]. addTree now writes two
+// A domain with one project tree; returns [dir, rootId]. addPlan now writes two
 // nodes (the base and the terminus closing it), so the base is taken from
 // planOrder rather than from the node map's first key.
-function domainWithTree(name = 'HomeLab', treeName = 'Overview') {
+function domainWithPlan(name = 'HomeLab', planName = 'Overview') {
   const { path } = store.createDomain(name)
-  const res = taskService.runOp(path, 'addTree', [treeName])
+  const res = taskService.runOp(path, 'addPlan', [planName])
   expect(res.error).toBeUndefined()
   return [path, res.record.planOrder[0]]
 }
@@ -59,7 +59,7 @@ describe('readRecord', () => {
   it('persists every write as plain JSON, parseable without the tolerant reader', () => {
     // Axiom 7 now names plain JSON, so the strict parser is the test: a file with
     // unquoted keys or a trailing comma would throw here.
-    const [dir, rootId] = domainWithTree()
+    const [dir, rootId] = domainWithPlan()
     taskService.runOp(dir, 'addTaskAbove', [rootId, 'First'])
     const text = store.loadDomainFile(dir).text
     expect(() => JSON.parse(text)).not.toThrow()
@@ -71,7 +71,7 @@ describe('readRecord', () => {
     const { path } = store.createDomain('HomeLab')
     const v1 = {
       schema: 1, domain: 'HomeLab',
-      trees: [{ id: 't1', name: 'Overview', rootTaskId: 'a' }],
+      trees: [{ id: 't1', name: 'Overview', rootTaskId: 'a' }], // schema 1's own field name
       tasks: {
         a: { id: 'a', title: 'A', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: null, branches: [] },
       },
@@ -124,7 +124,7 @@ describe('readRecord', () => {
 describe('runOp', () => {
   it('applies a mutation, persists it, and returns the new record', () => {
     const { path } = store.createDomain('HomeLab')
-    const res = taskService.runOp(path, 'addTree', ['Overview'])
+    const res = taskService.runOp(path, 'addPlan', ['Overview'])
     expect(res.error).toBeUndefined()
 
     // Termini: a fresh plan is now TWO nodes, the base and the terminus that closes
@@ -154,21 +154,21 @@ describe('runOp', () => {
   })
 
   it('chains ops: add a task above the root, then complete it', () => {
-    const [dir, rootId] = domainWithTree()
+    const [dir, rootId] = domainWithPlan()
     const added = taskService.runOp(dir, 'addTaskAbove', [rootId, 'First'])
     expect(added.error).toBeUndefined()
-    const taskId = Object.keys(added.record.nodes).find((id) => added.record.nodes[id].kind === 'task')
-    expect(taskId).toBeTruthy()
+    const nodeId = Object.keys(added.record.nodes).find((id) => added.record.nodes[id].kind === 'task')
+    expect(nodeId).toBeTruthy()
 
-    const done = taskService.runOp(dir, 'setStatus', [taskId, 'completed'])
+    const done = taskService.runOp(dir, 'setStatus', [nodeId, 'completed'])
     expect(done.error).toBeUndefined()
-    expect(done.record.nodes[taskId].status).toBe('completed')
-    expect(done.record.nodes[taskId].completedAt).toBeTruthy()
-    expect(onDisk(dir).nodes[taskId].status).toBe('completed')
+    expect(done.record.nodes[nodeId].status).toBe('completed')
+    expect(done.record.nodes[nodeId].completedAt).toBeTruthy()
+    expect(onDisk(dir).nodes[nodeId].status).toBe('completed')
   })
 
   it('refuses an op that breaks an invariant and writes nothing', () => {
-    const [dir, rootId] = domainWithTree()
+    const [dir, rootId] = domainWithPlan()
     const before = store.loadDomainFile(dir).text
     // A project node has no status: setStatus throws, the op returns the error. The
     // guard now names the rule from the task's side ('only a task has a status'), so
@@ -188,7 +188,7 @@ describe('runOp', () => {
   })
 
   it('rejects an unknown op name and writes nothing', () => {
-    const [dir] = domainWithTree()
+    const [dir] = domainWithPlan()
     const before = store.loadDomainFile(dir).text
     const res = taskService.runOp(dir, 'deleteEverything', [])
     expect(res.record).toBeUndefined()
@@ -196,8 +196,8 @@ describe('runOp', () => {
     expect(store.loadDomainFile(dir).text).toBe(before)
   })
 
-  it('writes the pasted note files for pasteAsTree', () => {
-    const [dir, rootId] = domainWithTree('HomeLab', 'Src')
+  it('writes the pasted note files for pasteAsPlan', () => {
+    const [dir, rootId] = domainWithPlan('HomeLab', 'Src')
     taskService.runOp(dir, 'setNote', [rootId, 'src.md'])
     store.writeNote(dir, 'src.md', '# source note\n')
 
@@ -216,7 +216,7 @@ describe('runOp', () => {
       },
       notes: { [rootId]: '# source note\n' },
     }
-    const res = taskService.runOp(dir, 'pasteAsTree', [clip])
+    const res = taskService.runOp(dir, 'pasteAsPlan', [clip])
     expect(res.error).toBeUndefined()
 
     // Two trees now: the original plus the paste.
