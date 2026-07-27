@@ -44,7 +44,7 @@ describe('tool registration by scope tier', () => {
     expect(s.has('list_domains')).toBe(true)
     for (const t of ['read_domain', 'read_project', 'read_task']) expect(s.has(t)).toBe(true)
     expect(s.has('add_task')).toBe(false)
-    expect(s.has('delete_task')).toBe(false)
+    expect(s.has('delete_node')).toBe(false)
   })
   it('names the writes for the kind they take', () => {
     const s = fakeServer('read-write')
@@ -58,12 +58,12 @@ describe('tool registration by scope tier', () => {
     const s = fakeServer('read-write')
     expect(s.has('add_task')).toBe(true)
     expect(s.has('create_plan')).toBe(true)
-    expect(s.has('delete_task')).toBe(false)
+    expect(s.has('delete_node')).toBe(false)
     expect(s.has('delete_domain')).toBe(false)
   })
   it('destructive adds the delete tools', () => {
     const s = fakeServer('destructive')
-    expect(s.has('delete_task')).toBe(true)
+    expect(s.has('delete_node')).toBe(true)
     expect(s.has('delete_domain')).toBe(true)
   })
 })
@@ -240,10 +240,10 @@ describe('tools drive the task authority', () => {
     expect(clip.content[0].text).toMatch(/is a task; use read_task/)
   })
 
-  it('delete_task removes the node', async () => {
+  it('delete_node removes the node', async () => {
     const cp = data(await s.call('create_plan', { name: 'D' }))
     const at = data(await s.call('add_task', { target_id: cp.id, position: 'above', title: 'gone' }))
-    const del = data(await s.call('delete_task', { node_id: at.id, mode: 'subtree' }))
+    const del = data(await s.call('delete_node', { node_id: at.id, mode: 'subtree' }))
     expect(del.deleted).toBe(at.id)
     expect(data(await s.call('read_domain', {})).nodes.find((n) => n.id === at.id)).toBeUndefined()
   })
@@ -310,7 +310,7 @@ describe('tools drive the task authority', () => {
     const termini = data(await s.call('read_domain', {})).nodes.filter((n) => n.kind === 'terminus')
     expect(termini).toHaveLength(2)
 
-    await s.call('unwrap_project', { project_id: wrapped.id })
+    await s.call('unwrap_project', { node_id: wrapped.id })
     projects = data(await s.call('list_projects', {})).projects
     expect(projects.find((p) => p.title === 'Delivery')).toBeUndefined()
     expect(data(await s.call('read_domain', {})).nodes.filter((n) => n.kind === 'terminus')).toHaveLength(1)
@@ -320,7 +320,7 @@ describe('tools drive the task authority', () => {
 
   it('unwrap_project refuses a plan\'s base, since that is the plan itself', async () => {
     const cp = data(await s.call('create_plan', { name: 'Ship' }))
-    const res = await s.call('unwrap_project', { project_id: cp.id })
+    const res = await s.call('unwrap_project', { node_id: cp.id })
     expect(res.isError).toBe(true)
     expect(res.content[0].text).toMatch(/cannot be unwrapped/)
   })

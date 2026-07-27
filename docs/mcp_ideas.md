@@ -180,13 +180,28 @@ with `is_root`.
 `read_domain`, `read_project` and `read_task` each refuse the wrong kind and name the tool
 that reads it, a close being sent to the project it closes. **The writes are one tool per
 verb**, polymorphic exactly where the app's own menu is: the app has one Delete and one
-Rename, so splitting `delete_task` by kind would take the two surfaces apart again. The
+Rename, so splitting `delete_node` by kind would take the two surfaces apart again. The
 exception is where the name itself was wrong, which is why `move_node` became `move_task`
 and `move_subtree` became `move_project`, each refusing the other's kind.
 
 **The reads are liberal about naming**, taking an id or a title, titles being domain-unique;
 **the writes are id-only**, which is what their `*_id` parameters say. A title can move
 under a stale read, and a write addressed by one can land on the node next door.
+
+**Every id is a `node_id`.** All three kinds share one id namespace, so the parameter names
+the namespace, not the kind expected: a tool that takes one kind says so in its description
+and refuses the rest, rather than promising it in a parameter name that would then have to
+change if the tool's reach ever did. Where a call names a second node in some relation to
+the first, that one keeps its role name, since two parameters cannot both be `node_id`:
+`target_id`, `below_id`, `merge_point_id`, `edge_id`, `from_id` and `to_id`.
+
+The same reasoning names the tools. One that takes a single kind says which
+(`move_task`, `move_project`, `copy_project`, `unwrap_project`, `read_task`); one that takes
+more than one names no kind at all (`set_title`, `toggle_flag`, `move_up`, `move_into_line`)
+or names the umbrella (`delete_node`, which ends a task or a project and refuses a close).
+`read_project` and `copy_project` name a kind and take an id or a title, so their parameter
+is `project` rather than `project_id`: the `_id` suffix is a promise about what may be
+passed, and those two accept a name as well.
 
 Read-only tier:
 
@@ -231,7 +246,7 @@ verb because a branch is three things at once.
 - `add_task(target_id, position, title, domain?)`, position above or below.
 - `open_branch(edge_id, title, side?, domain?)`,
   `set_merge_point(branch_id, merge_point_id, domain?)`.
-- `wrap_run(from_id, to_id?, title, domain?)`, `unwrap_project(project_id, domain?)`.
+- `wrap_run(from_id, to_id?, title, domain?)`, `unwrap_project(node_id, domain?)`.
 - `set_title`, `set_status`, `cycle_status`, `set_note`, `delete_note`.
 - `make_here`, `clear_here`, `toggle_flag`, `convert_kind`.
 - `paste_as_plan(clip, domain?)`.
@@ -242,8 +257,10 @@ verb because a branch is three things at once.
 
 Destructive tier (off unless enabled at startup):
 
-- `delete_task(node_id, mode=subtree|splice, domain?)`, where subtree mode removes
-  the node's extent, which for a sub-project is its pair and body and no more.
+- `delete_node(node_id, mode=subtree|splice, domain?)`, which ends a task or a
+  project and refuses a close, one half of a pair having no life of its own to end.
+  Subtree mode removes the node's extent, which for a project is the plan it opens,
+  pair included, and no more.
 - `delete_domain(name_or_path)`.
 
 Excluded: the library root (`getLibraryRoot` / `chooseLibraryRoot`), a user
