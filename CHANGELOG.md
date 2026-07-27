@@ -4,6 +4,31 @@ All notable changes to this project are recorded here.
 
 ## [Unreleased]
 
+## [v3.3.0] - 2026-07-27
+
+### Highlights
+
+This release reworks the MCP tool surface around the model's own vocabulary: reads are now strict about node kind (read_domain, read_project, read_task), writes use one id parameter name (node_id) across a shared id namespace, and several tools are renamed to match what they actually act on (delete_node, move_task, move_project, detach_project, reorder_project, open_branch below a node). The app gains two actions the tools already had, wrapping a run as a sub-project and deleting a note, and the note interface (glyph, menu items, editor, collapse/expand) is now the same on a project's close as on its opening. Two writes that could silently misshape a plan are now refused — moving a close, and splice-deleting a plan's base — and every write reports the title it ended with, so a collision-driven rename is visible to the caller.
+
+### Bug fixes
+
+- Close two writes an agent could make in good faith (#78) (a4b0f88)
+- Repair the work_flagged prompt for the strict reads (#81) (409a1be)
+
+### Docs
+
+- The tool is detach_project, not detach_to_plan (#82) (b149447)
+
+### Features
+
+- One vocabulary across the tools and the app (#76) (ff6deca)
+- The tool contract, and the last of the trees (#79) (f46fad8)
+
+### Refactor
+
+- One id namespace, one parameter name (#77) (4464fea)
+- NodeId, the last of the schema-2 vocabulary (#80) (da909e9)
+
 ## [v3.2.2] - 2026-07-26
 
 ### Highlights
