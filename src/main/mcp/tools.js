@@ -371,14 +371,18 @@ export function registerTools(server, deps, scope) {
   }))
 
   server.registerTool('open_branch', {
-    description: 'Open a branch on the edge rising from a node: one move creating the attachment, a first task inside it, and its return line. The return rejoins at that same edge by default, which is the smallest legal branch and says that this strand runs alongside that one gap; set_merge_point moves it afterwards. Refused where the node has no edge above it, which is a plan\'s closing terminus or the top of a branch.',
+    description: 'Open a branch on an edge of a trunk: one move creating the attachment, a first task inside it, and its return line. position "above" takes the edge rising from node_id, "below" the edge beneath it, exactly as add_task does; "below" is refused below a plan\'s base, nothing preceding it. The return rejoins at that same edge by default, which is the smallest legal branch and says that this strand runs alongside that one gap; set_merge_point moves it afterwards. Refused where there is no edge, which is a plan\'s closing terminus or the top of a branch. side is the half-plane the branch is drawn in, and is chosen by alternation where it is not given.',
     inputSchema: {
-      edge_id: z.string(),
+      node_id: z.string(),
+      position: z.enum(['above', 'below']),
       title: z.string(),
       side: z.enum(['left', 'right']).optional(),
       domain: z.string().optional(),
     },
-  }, guard(async (a) => runWrite(taskService, dirOf(a), 'openBranch', [a.edge_id, a.title, a.side], a.edge_id)))
+  }, guard(async (a) => {
+    const op = a.position === 'above' ? 'addBranchAbove' : 'addBranchBelow'
+    return runWrite(taskService, dirOf(a), op, [a.node_id, a.title, a.side], a.node_id)
+  }))
 
   server.registerTool('set_merge_point', {
     description: 'Move where a branch rejoins the trunk it left. branch_id is the branch\'s first node, the one at the bottom of it; merge_point_id names the node BELOW the edge the return joins. A legal merge is on that trunk, at or above the node the branch left, and inside exactly the scopes the branch\'s own edge is inside; a refusal says which rule failed and what would be legal instead.',
@@ -416,7 +420,7 @@ export function registerTools(server, deps, scope) {
   write1('convert_kind', 'convertKind', 'Convert a node between task and sub-project, which opens or closes a scope with it (not allowed on a plan\'s base, or on a terminus). Refused where the new scope would straddle a branch\'s span.')
   write1('move_up', 'moveUp', 'Swap a node up one place within its line.')
   write1('move_down', 'moveDown', 'Swap a node down one place within its line.')
-  write1('detach_to_plan', 'detachToTree', 'Detach a sub-project into a plan of its own. Where it was a branch, it gives up its return, a plan having none.')
+  write1('detach_project', 'detachToTree', 'Detach a sub-project into a plan of its own: the pair leaves the trunk it was on and that trunk is joined across the gap. Where it was a branch, it gives up its return, a plan having none. Takes a project, and refuses anything else.')
 
   server.registerTool('set_note', {
     description: "Set a node's markdown note contents (writes the note file and records it on the node).",
@@ -466,7 +470,7 @@ export function registerTools(server, deps, scope) {
   write2('move_task', 'moveTaskNode', ['node_id', 'target_id'], 'Move a task to hang as a new branch off the edge above a target node, leaving its own children behind. The new branch rejoins at that same edge; use set_merge_point to move the return. Refused where the target has no edge above it, and refused on a project (use move_project).')
   write2('move_project', 'moveSubtree', ['node_id', 'target_id'], 'Move a project to hang as a new branch off the edge above a target node, with the same defaults and the same refusals as move_task. A project travels with the plan it opens, from the project itself to its own close; the work above that close stays where it is and the trunk is joined across the gap. Refused on a task (use move_task).')
   write2('move_into_line', 'moveIntoLine', ['node_id', 'below_id'], 'Splice a node into the gap above below_id on its line.')
-  write2('reorder_plan', 'reorderRoot', ['node_id', 'index'], 'Move a plan to a new left-to-right index among the domain\'s plans.')
+  write2('reorder_project', 'reorderRoot', ['node_id', 'index'], 'Move a plan to a new left-to-right index among the domain\'s plans, naming it by its base. Takes a plan\'s base, and refuses a node that sits inside one.')
 
   if (level < SCOPES.destructive) return
 

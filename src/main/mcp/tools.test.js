@@ -316,7 +316,7 @@ describe('tools drive the task authority', () => {
   it('open_branch creates a branch with a task inside it and a return of its own', async () => {
     const cp = data(await s.call('create_plan', { title: 'Ship' }))
     const first = data(await s.call('add_task', { target_id: cp.id, position: 'above', title: 'Write it' }))
-    const br = data(await s.call('open_branch', { edge_id: first.id, title: 'Review it' }))
+    const br = data(await s.call('open_branch', { position: 'above', node_id: first.id, title: 'Review it' }))
     const nodes = data(await s.call('read_domain', {})).nodes
     const foot = nodes.find((n) => n.title === 'Review it')
     expect(foot).toBeTruthy()
@@ -331,7 +331,7 @@ describe('tools drive the task authority', () => {
     const cp = data(await s.call('create_plan', { title: 'Ship' }))
     const one = data(await s.call('add_task', { target_id: cp.id, position: 'above', title: 'One' }))
     const two = data(await s.call('add_task', { target_id: one.id, position: 'above', title: 'Two' }))
-    const br = data(await s.call('open_branch', { edge_id: one.id, title: 'Aside' }))
+    const br = data(await s.call('open_branch', { position: 'above', node_id: one.id, title: 'Aside' }))
     const moved = data(await s.call('set_merge_point', { branch_id: br.id, merge_point_id: two.id }))
     expect(moved.outline).toContain('rejoins the trunk above "Two"')
   })
@@ -340,16 +340,30 @@ describe('tools drive the task authority', () => {
     const cp = data(await s.call('create_plan', { title: 'Ship' }))
     const one = data(await s.call('add_task', { target_id: cp.id, position: 'above', title: 'One' }))
     const two = data(await s.call('add_task', { target_id: one.id, position: 'above', title: 'Two' }))
-    const br = data(await s.call('open_branch', { edge_id: two.id, title: 'Aside' }))
+    const br = data(await s.call('open_branch', { position: 'above', node_id: two.id, title: 'Aside' }))
     const res = await s.call('set_merge_point', { branch_id: br.id, merge_point_id: one.id })
     expect(res.isError).toBe(true)
     expect(res.content[0].text).toMatch(/below its own branch point/)
   })
 
+  it('opens a branch below a node as well as above it, as the app does', async () => {
+    // The app has offered "Add branch below" throughout and the tool could only say "above",
+    // so an agent had to name the predecessor to mean the same thing. position now matches
+    // add_task's exactly, including the one refusal.
+    const cp = data(await s.call('create_plan', { title: 'Ship' }))
+    const one = data(await s.call('add_task', { target_id: cp.id, position: 'above', title: 'One' }))
+    const below = data(await s.call('open_branch', { node_id: one.id, position: 'below', title: 'Before it' }))
+    expect(below.id).toBeTruthy()
+    expect(data(await s.call('read_task', { task: below.id })).title).toBe('Before it')
+
+    const refused = await s.call('open_branch', { node_id: cp.id, position: 'below', title: 'Nowhere' })
+    expect(refused.isError).toBe(true) // nothing precedes a plan's base
+  })
+
   it('open_branch refuses a plan\'s closing terminus, which has no edge above it', async () => {
     await s.call('create_plan', { title: 'Ship' })
     const close = data(await s.call('read_domain', {})).nodes.find((n) => n.kind === 'terminus')
-    const res = await s.call('open_branch', { edge_id: close.id, title: 'Nowhere' })
+    const res = await s.call('open_branch', { position: 'above', node_id: close.id, title: 'Nowhere' })
     expect(res.isError).toBe(true)
     expect(res.content[0].text).toMatch(/no edge above it/)
   })
@@ -380,11 +394,11 @@ describe('tools drive the task authority', () => {
     expect(res.content[0].text).toMatch(/cannot be unwrapped/)
   })
 
-  it('detach_to_plan makes a sub-project a plan of its own', async () => {
+  it('detach_project makes a sub-project a plan of its own', async () => {
     const cp = data(await s.call('create_plan', { title: 'Ship' }))
     const one = data(await s.call('add_task', { target_id: cp.id, position: 'above', title: 'One' }))
     const wrapped = data(await s.call('wrap_run', { from_id: one.id, title: 'Delivery' }))
-    await s.call('detach_to_plan', { node_id: wrapped.id })
+    await s.call('detach_project', { node_id: wrapped.id })
     const projects = data(await s.call('list_projects', {})).projects
     expect(projects.filter((p) => p.is_root).map((p) => p.title).sort()).toEqual(['Delivery', 'Ship'])
   })
