@@ -135,3 +135,27 @@ brief:
   which may graduate to its own `sync_ideas.md` if it firms up.
 
 This is a question under study, not a plan or a commitment.
+
+# 8. Under consideration: dragging a branch, to move it and to reorder it
+
+A branch is drawn in one of two half-planes and at one of several lanes within it, and
+neither is the author's to set today. `branchSide` (`mutations.js`) alternates, left for the
+first branch off a node and right for the second; the lane comes from the order of the ids in
+`leftBranches` and `rightBranches`, which the author never touches directly. The MCP
+`open_branch` tool takes an explicit `side`, so an agent can express something a person
+cannot, which is the one asymmetry left between the two surfaces after v3.3.0.
+
+The obvious remedy, a side option on "Add branch above" and "Add branch below", is the wrong
+one: it doubles two menu items and still says nothing about lane order, which is what decides
+whether two branches cross. The right one is to let the author drag a branch, across the
+trunk to the other half-plane and along it to reorder within the side, since the map is what
+one is reasoning about and a drag is how one says "put that over there".
+
+Questions it opens, none answered here. What the drag target is, given that a branch is a
+line and a run of cards rather than one object. Whether a reorder that costs a crossing is
+drawn as one or refused. Whether the return line follows the branch or is re-solved. And
+whether the same gesture should move a branch to a different host edge, which is a different
+verb again (`move_task` and `move_project` already do that by grafting).
+
+Gary's direction, 2026-07-27: a future PR, after v3.3.0.
+
