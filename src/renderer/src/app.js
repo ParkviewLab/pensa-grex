@@ -14,7 +14,8 @@ import { createViewport } from './interaction/viewport.js'
 import { mountLayout } from './render/scene.js'
 import { renderCards } from './render/shapes.js'
 import { buildModel } from '../../shared/model/model.js'
-import { branchChildrenOf, isPlanClose, branchesIn, indexRecord, mergeErrors, pairScopes, trunksOf, scopeOf, reachableFrom } from '../../shared/model/validate.js'
+import { clipNodes } from '../../shared/model/mutations.js'
+import { branchChildrenOf, isPlanClose, branchesIn, indexRecord, mergeErrors, pairScopes, trunksOf, scopeOf, extentOf, reachableFrom } from '../../shared/model/validate.js'
 import { measureDomain } from './layout/measure.js'
 import { computeDomainLayout } from './layout/layout.js'
 import { createApi } from './bridge/api.js'
@@ -347,7 +348,10 @@ function resolveDropIntent(sourceId, clientX, clientY) {
   // scope ends. Moving the scope means moving its project node, which carries it.
   if (src.kind === 'terminus') return { kind: 'none' }
   const { wx, wy } = clientToWorld(clientX, clientY)
-  const sub = reachableFrom(currentRecord, sourceId)
+  // What will travel, which is what may not be dropped onto: a project node carries its
+  // scope and no more (validate.js, extentOf). A task travels alone, so its guard is only
+  // ever conservative, and it is left as it was.
+  const sub = src.kind === 'project' ? extentOf(currentRecord, sourceId) : reachableFrom(currentRecord, sourceId)
   const byId = new Map(currentLayout.stations.map((s) => [s.id, s]))
 
   // 1. Over a card -> fork (never the source itself or a node inside its subtree).
@@ -481,11 +485,12 @@ function toggleCollapse(taskId) {
   render(currentRecord, { fit: false })
 }
 
-// Read the note contents of a subtree into an { id: content } map, taken by value
-// so it is a snapshot independent of later edits. Shared by copy and export.
+// Read the note contents of a node's extent into an { id: content } map, taken by value
+// so it is a snapshot independent of later edits. Shared by copy and export, and bounded
+// by the scope, so a sub-project's notes stop at its own close.
 async function collectSubtreeNotes(taskId) {
   const notes = {}
-  for (const id of reachableFrom(currentRecord, taskId)) {
+  for (const id of extentOf(currentRecord, taskId)) {
     const rec = currentRecord.nodes[id]
     if (rec.note) {
       const r = await api.readNote(currentDomainPath, rec.note)
@@ -495,13 +500,12 @@ async function collectSubtreeNotes(taskId) {
   return notes
 }
 
-// Snapshot a project's subtree (records and note contents) into the in-session
+// Snapshot a project's scope (records and note contents) into the in-session
 // clipboard. Taken by value at copy time, so it is unaffected by later edits or a
-// domain switch; note text is read now rather than referenced by file.
+// domain switch; note text is read now rather than referenced by file. A clip is a whole
+// plan, opening and close, which is what paste needs and what the extent gives.
 async function copyProject(taskId) {
-  const nodes = {}
-  for (const id of reachableFrom(currentRecord, taskId)) nodes[id] = structuredClone(currentRecord.nodes[id])
-  clipboard = { rootId: taskId, nodes, notes: await collectSubtreeNotes(taskId) }
+  clipboard = { rootId: taskId, nodes: clipNodes(currentRecord, taskId), notes: await collectSubtreeNotes(taskId) }
 }
 
 // Paste the clipboard into the open domain as a new tree: fresh ids, kept

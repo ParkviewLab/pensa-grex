@@ -34,27 +34,34 @@ fork made by a drop is given the smallest legal return, rejoining at the very ed
 leaves; the author moves it afterwards with "Merge a branch here" on the node below
 the edge it should join, which lists the branches that could legally land there.
 
+*Model v3 also bounds what a move takes with it.* An operation on a node acts on that
+node's **extent**, which is bounded by the scope it belongs to: a project node's extent
+is the plan it opens, pair included, and any other node's is the run above it stopping
+below the close of the scope it sits in. The unbounded reading, following `next` to the
+top of the trunk, takes the work that comes after a sub-project ends and, higher up, the
+enclosing plan's own close. The same bound governs delete, copy and export.
+
 The dragged node's kind and the drop location pick one of these pure moves:
 
 - **moveTaskNode** — a task dropped onto a card moves *alone*. Its children are
   spliced onto its predecessor in its old slot (the same reconnection
   `deleteTask`'s splice mode performs), then the childless node is grafted onto the
   target. Moving one card never drags its subtree along.
-- **moveSubtree** — a project node dropped onto a card moves its *whole* subtree.
-  Its incoming edge is cut and the subtree re-attached intact. Refused when the
-  target is inside the moved subtree (which would detach a fragment and form a
-  cycle) or is the node itself.
+- **moveSubtree** — a project node dropped onto a card moves its *scope*: the pair,
+  from its own project node to its own close, and everything between them. The scope
+  is lifted whole and the trunk it left is joined across the gap, so the work that
+  came after the scope ended stays where it was. Refused when the target is inside
+  the moved scope (which would detach a fragment and form a cycle) or is the node
+  itself.
 - **moveIntoLine** — a node dropped into a line gap splices in just above the gap's
   lower node. A task travels alone (its children splice onto its old predecessor);
-  a project node carries its whole subtree, whose main-line tip then continues onto
-  the gap's old upper node. Refused inserting a subtree into its own line (a cycle)
-  or above itself. Because a mid-line node contains everything above it, inserting a
-  sub-project into a line makes it contain that line's continuation — the same
-  containment collapse already reflects.
-- **detachToTree** — a sub-project dropped on empty canvas becomes its own tree:
-  its incoming edge is cut and its id appended to `rootOrder`. Only a project node
-  can be a root, so a task dropped on empty canvas is refused (it cannot become a
-  root).
+  a project node carries its scope, and that scope's close then continues onto the
+  gap's old upper node. Refused inserting a scope into its own line (a cycle) or
+  above itself.
+- **detachToTree** — a sub-project dropped on empty canvas becomes its own plan:
+  the pair leaves the trunk it was on, the trunk is joined across the gap, and the
+  project node's id is appended to `planOrder`. Only a project node can be a root, so
+  a task dropped on empty canvas is refused (it cannot become a root).
 - **reorderRoot** — a root dropped on empty canvas is reordered among the trees by
   where it lands, left to right. `rootOrder` is canonicalised to the full current
   root set first (it is advisory and may omit some), so the target index is

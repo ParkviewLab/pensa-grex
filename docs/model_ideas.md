@@ -146,7 +146,10 @@ the subway grammar in [`subway-forest-themed.html`](subway-forest-themed.html).
   (remove only the task; its main-line successor, or lacking one its first fork,
   takes its place, and any remaining forks reattach to that new head). Deleting a
   tip is the same either way. A splice that would merge two cursored lines keeps
-  the tip-most "here" and clears the rest.
+  the tip-most "here" and clears the rest. *Amended for model v3:* "everything
+  growing from it" is bounded by the scope the node sits in, so deleting a
+  sub-project deletes the pair and its body and leaves the work above its close
+  standing; the trunk is joined across the gap.
 - **Pop and status (M5).** Independent. Completing or cancelling a task leaves it
   on the map (recoloured, struck through); delete is the separate structural
   "pop". Finishing a task never removes it.

@@ -25,7 +25,7 @@
 
 import { mintNodeId } from './ids.js'
 import { noteFileName } from './notes.js'
-import { pairScopes, trunksOf, isPlanClose, branchesIn, indexRecord, mergeErrors } from './validate.js'
+import { pairScopes, trunksOf, isPlanClose, branchesIn, indexRecord, mergeErrors, extentOf } from './validate.js'
 
 const STATUSES = ['todo', 'in-progress', 'completed', 'cancelled']
 
@@ -137,23 +137,6 @@ function predecessorOf(record, taskId) {
     if (b) return { id, kind: 'branch', side: b.side, index: b.index }
   }
   return null
-}
-
-// Every id reachable from startId (inclusive), following .next and branches —
-// i.e. the subtree rooted at startId.
-function subtreeIds(record, startId) {
-  const ids = new Set()
-  const stack = [startId]
-  while (stack.length) {
-    const id = stack.pop()
-    if (ids.has(id)) continue
-    ids.add(id)
-    const t = record.nodes[id]
-    if (!t) continue
-    if (t.next) stack.push(t.next)
-    for (const b of branchesOf(t)) stack.push(b.child)
-  }
-  return ids
 }
 
 // The ids on taskId's line: the maximal .next chain it sits on. The line starts
@@ -747,87 +730,85 @@ export function setMergePoint(record, footId, mergePointId) {
 }
 
 /**
- * Remove a node. Deleting a root removes the whole project (a root has no
+ * Remove a node. Deleting a root removes the whole plan (a root has no
  * meaningful splice, since its replacement would be a task and a root must be a
- * project node). For a non-root: mode 'subtree' (default) removes the node and
- * everything growing from it; mode 'splice' removes only the node and reconnects
+ * project node). For a non-root: mode 'subtree' (default) removes the node's extent, which
+ * is what grows from it within the scope it sits in, and joins the trunk across the gap;
+ * mode 'splice' removes only the node and reconnects
  * its main-line successor (or, lacking one, its first fork) into its place, with
  * any remaining forks reattached to that new head. Returns the new record.
+ *
+ * A sub-project therefore dies as a scope, from its project node to its own close, and the
+ * work that came after that close survives. An extent is bracket-matched, so no surviving
+ * project is left unclosed and no close is left closing nothing.
  */
 export function deleteTask(record, taskId, mode = 'subtree') {
   const next = clone(record)
-  requireTask(next, taskId)
+  const node = requireTask(next, taskId)
+  // A close is one half of a pair and has no life of its own to end. Its extent is the
+  // scope it closes, so deleting it would quietly delete the whole scope, which is not
+  // what was asked; the two things that were are named instead.
+  if (node.kind === 'terminus') {
+    throw new Error('a close cannot be deleted on its own: delete the project node to remove the scope, or unwrap it to keep what is inside')
+  }
   const pred = predecessorOf(next, taskId)
 
-  if (!pred) {
-    const doomed = subtreeIds(next, taskId)
-    next.planOrder = (next.planOrder || []).filter((id) => id !== taskId)
-    for (const id of doomed) delete next.nodes[id]
+  if (!pred || mode !== 'splice') {
+    const { ids } = liftExtent(next, taskId)
+    for (const id of ids) delete next.nodes[id]
     return normalizeReturns(next, record)
   }
 
-  const detachFromPred = (replacement) => {
-    if (pred.kind === 'next') {
-      next.nodes[pred.id].next = replacement
-    } else if (replacement) {
-      sideArray(next.nodes[pred.id], pred.side)[pred.index] = replacement
-    } else {
-      sideArray(next.nodes[pred.id], pred.side).splice(pred.index, 1)
-    }
+  // splice. Only the node goes; its successor, or lacking one its first fork, takes its
+  // slot under its predecessor, with any remaining forks reattached to that new head.
+  const task = next.nodes[taskId]
+  const succ = task.next
+  let head = null
+  let leftover = branchesOf(task)
+  if (succ) {
+    head = succ
+  } else if (leftover.length) {
+    head = leftover[0].child
+    leftover = leftover.slice(1)
+  } else {
+    leftover = []
   }
+  if (head) {
+    for (const b of leftover) addBranch(next.nodes[head], b.child, b.side, 'outermost')
+  }
+  if (pred.kind === 'next') {
+    next.nodes[pred.id].next = head
+  } else if (head) {
+    sideArray(next.nodes[pred.id], pred.side)[pred.index] = head
+  } else {
+    sideArray(next.nodes[pred.id], pred.side).splice(pred.index, 1)
+  }
+  delete next.nodes[taskId]
+  return normalizeHeres(normalizeReturns(next, record))
+}
 
-  if (mode === 'splice') {
-    const task = next.nodes[taskId]
-    const succ = task.next
-    let head = null
-    let leftover = branchesOf(task)
-    if (succ) {
-      head = succ
-    } else if (leftover.length) {
-      head = leftover[0].child
-      leftover = leftover.slice(1)
-    } else {
-      leftover = []
+/**
+ * The node map for a clip of `rootId`: its extent, copied by value, with every edge that
+ * leaves the clip cleared, so the clip stands alone as a plan of its own. A sub-project's
+ * close points at the work above it on the trunk, which is no part of the clip, and
+ * carrying that edge into a paste would wire the pasted copy into the record it came from.
+ *
+ * The pure half of copy: note contents are the caller's business, since only the caller can
+ * read them (the renderer over IPC, the main process from disk).
+ */
+export function clipNodes(record, rootId) {
+  const ids = extentOf(record, rootId)
+  const nodes = {}
+  for (const id of ids) {
+    const node = structuredClone(record.nodes[id])
+    if (node.next && !ids.has(node.next)) node.next = null
+    if (node.mergePoint && !ids.has(node.mergePoint)) node.mergePoint = null
+    for (const key of ['leftBranches', 'rightBranches']) {
+      if (Array.isArray(node[key])) node[key] = node[key].filter((child) => ids.has(child))
     }
-    if (head) {
-      for (const b of leftover) addBranch(next.nodes[head], b.child, b.side, 'outermost')
-    }
-    detachFromPred(head)
-    delete next.nodes[taskId]
-    return normalizeHeres(normalizeReturns(next, record))
+    nodes[id] = node
   }
-
-  // subtree. What is above the deleted node includes the closes of every scope that
-  // opened below it, and those scopes still have to close, so their termini are
-  // spared and re-stacked above what remains. They are moved rather than replaced
-  // because a terminus carries a note, and minting fresh ones would drop it.
-  const doomed = subtreeIds(next, taskId)
-  const { closes } = scopes(next)
-  const spared = [...doomed].filter((id) => {
-    const node = next.nodes[id]
-    if (!node || node.kind !== 'terminus') return false
-    const opened = closes.get(id)
-    return !!opened && !doomed.has(opened)
-  })
-  // In trunk order, so the innermost still closes first.
-  const trunk = lineIds(next, taskId)
-  spared.sort((a, b) => trunk.indexOf(a) - trunk.indexOf(b))
-
-  detachFromPred(null)
-  for (const id of doomed) {
-    if (!spared.includes(id)) delete next.nodes[id]
-  }
-  let top = pred.id
-  for (const id of spared) {
-    const terminus = next.nodes[id]
-    terminus.next = null
-    terminus.mergePoint = null
-    terminus.leftBranches = []
-    terminus.rightBranches = []
-    next.nodes[top].next = id
-    top = id
-  }
-  return normalizeReturns(next, record)
+  return nodes
 }
 
 /**
@@ -857,12 +838,16 @@ export function pasteAsTree(record, clip) {
     const node = structuredClone(rec)
     node.id = newId
     node.createdAt = stamp
-    if (node.next) node.next = map(node.next)
+    // Every edge is remapped or dropped, never carried over as it stands: an id the clip
+    // does not contain names a node in whatever record the clip was taken from, and
+    // pointing the paste at it would splice the two together. clipNodes already leaves no
+    // such edge, but a clip can arrive from an MCP client, so the authority checks too.
+    if (node.next) node.next = idMap.get(node.next) || null
     // A return inside the clip travels with it; one naming a node outside the clip has
     // nothing to point at, and relocateReturns gives that branch its own edge instead.
     if (node.mergePoint) node.mergePoint = idMap.get(node.mergePoint) || null
-    node.leftBranches = (node.leftBranches || []).map(map)
-    node.rightBranches = (node.rightBranches || []).map(map)
+    node.leftBranches = (node.leftBranches || []).filter((id) => idMap.has(id)).map(map)
+    node.rightBranches = (node.rightBranches || []).filter((id) => idMap.has(id)).map(map)
     if ('here' in node) node.here = false
     if (node.note) {
       node.note = noteFileName(newId, node.title)
@@ -888,19 +873,61 @@ export function pasteAsTree(record, clip) {
 // distinct from moveIntoLine, where a task travels alone. See
 // docs/interaction_model.md for the rules and moves.
 
-// Detach `id` from whatever points at it, cutting the incoming edge cleanly so
-// its whole subtree travels with it. A root (no predecessor) is dropped from
-// planOrder; a main-line child leaves its predecessor a tip; a branch child is
-// spliced out of its predecessor's branch list.
-function cutIncoming(next, id) {
+/**
+ * Take a node's extent off its trunk, whole: the run travels together, the trunk it leaves
+ * is joined across the gap, and the record is left with the run detached and ready to be
+ * re-attached elsewhere or deleted.
+ *
+ * The extent is bounded by the scope the node sits in (validate.js, extentOf), which is
+ * what makes this more than cutting one edge. A sub-project travels as a pair, from its
+ * project node to its own close, and what sat above that close stays behind; without the
+ * bound the run would take the rest of the trunk with it, the enclosing plan's close
+ * included, so neither side would be left a legal plan.
+ *
+ * A branch hanging on a node in the run but not itself in it stays behind too, re-homed
+ * onto whatever now holds that edge, exactly as spliceOutNode does. In practice that is the
+ * close of a lifted scope, whose rising edge belongs to what encloses the pair rather than
+ * to the scope the pair delimits.
+ *
+ * Returns { ids, topId, above }: the extent, the node at the top of its trunk run, and the
+ * node that took the run's place on the old trunk (null where nothing was above it).
+ */
+function liftExtent(next, id) {
+  const ids = extentOf(next, id)
+  let topId = id
+  while (next.nodes[topId].next && ids.has(next.nodes[topId].next)) topId = next.nodes[topId].next
+  const above = next.nodes[topId].next || null
+  next.nodes[topId].next = null
+
   const pred = predecessorOf(next, id)
   if (!pred) {
     next.planOrder = (next.planOrder || []).filter((rid) => rid !== id)
   } else if (pred.kind === 'next') {
-    next.nodes[pred.id].next = null
+    next.nodes[pred.id].next = above
+  } else if (above) {
+    sideArray(next.nodes[pred.id], pred.side)[pred.index] = above
   } else {
     sideArray(next.nodes[pred.id], pred.side).splice(pred.index, 1)
   }
+
+  // The edge a departing node held is now the predecessor's, or the successor's where the
+  // run was a branch's foot. Lacking both, the branch stays put and rehomeOrphanedBranches
+  // has the last word; a valid record cannot get here, since a branch on the top of a trunk
+  // is already an error.
+  const host = pred && pred.kind === 'next' ? next.nodes[pred.id] : (above ? next.nodes[above] : null)
+  if (host) {
+    for (const nodeId of ids) {
+      const node = next.nodes[nodeId]
+      const leaving = branchesOf(node).filter((b) => !ids.has(b.child))
+      if (!leaving.length) continue
+      for (const side of ['left', 'right']) {
+        const key = SIDE_KEY[side]
+        node[key] = node[key].filter((child) => ids.has(child))
+      }
+      for (const b of leaving) addBranch(host, b.child, b.side, 'outermost')
+    }
+  }
+  return { ids, topId, above }
 }
 
 // Graft `id` as a fresh fork off `targetId` (alternating side). Refused where the target
@@ -940,17 +967,6 @@ function spliceOutTask(next, id) {
   task.rightBranches = []
 }
 
-// The end of a node's main line: follow .next to the node whose .next is null.
-function mainLineTip(next, id) {
-  let cur = id
-  const seen = new Set()
-  while (next.nodes[cur] && next.nodes[cur].next && !seen.has(cur)) {
-    seen.add(cur)
-    cur = next.nodes[cur].next
-  }
-  return cur
-}
-
 /**
  * Move a single task node onto a target, as a new fork of the target. The moved
  * task leaves its children behind: they are spliced onto its predecessor in its
@@ -971,10 +987,11 @@ export function moveTaskNode(record, id, targetId) {
 }
 
 /**
- * Move a whole subtree (the node `rootId` and everything growing from it) onto a
- * target, as a new fork of the target — graft/nest. The subtree's incoming edge
- * is cut and the subtree re-attached intact, so every "here" inside it travels.
- * Refuses a drop onto itself or onto one of its own descendants (which would
+ * Move a whole subtree (the node `rootId` and its extent) onto a target, as a new fork of
+ * the target — graft/nest. The extent is lifted intact, so every "here" inside it travels,
+ * and the trunk it left is joined across the gap. A sub-project therefore moves as a scope,
+ * from its project node to its own close, and the work that came after that close stays
+ * where it was. Refuses a drop onto itself or onto one of its own descendants (which would
  * detach a fragment and form a cycle).
  */
 export function moveSubtree(record, rootId, targetId) {
@@ -982,8 +999,8 @@ export function moveSubtree(record, rootId, targetId) {
   requireTask(next, rootId)
   requireTask(next, targetId)
   if (rootId === targetId) throw new Error('cannot move a node onto itself')
-  if (subtreeIds(next, rootId).has(targetId)) throw new Error('cannot graft a subtree onto its own descendant')
-  cutIncoming(next, rootId)
+  if (extentOf(next, rootId).has(targetId)) throw new Error('cannot graft a subtree onto its own descendant')
+  liftExtent(next, rootId)
   graftBranch(next, targetId, rootId)
   return normalizeHeres(normalizeReturns(next, record))
 }
@@ -1003,16 +1020,10 @@ export function detachToTree(record, id) {
   const next = clone(record)
   const node = requireTask(next, id)
   if (node.kind !== 'project') throw new Error('only a project node can become a root')
-  const pred = predecessorOf(next, id)
-  if (!pred) throw new Error('node is already a root')
+  if (!predecessorOf(next, id)) throw new Error('node is already a root')
 
-  const closeId = scopes(next).pairs.get(id)
-  const above = closeId ? next.nodes[closeId].next || null : null
-  if (closeId) next.nodes[closeId].next = null
   // Whatever was above the close takes the detached scope's place on the old trunk.
-  if (pred.kind === 'next') next.nodes[pred.id].next = above
-  else if (above) sideArray(next.nodes[pred.id], pred.side)[pred.index] = above
-  else sideArray(next.nodes[pred.id], pred.side).splice(pred.index, 1)
+  liftExtent(next, id)
 
   if (!Array.isArray(next.planOrder)) next.planOrder = []
   next.planOrder.push(id)
@@ -1045,8 +1056,9 @@ export function reorderRoot(record, rootId, index) {
 /**
  * Splice a node into the gap on a line just above `belowId` (between belowId and
  * its current successor). A task travels alone (its children splice onto its old
- * predecessor); a project node carries its whole subtree, whose main-line tip then
- * continues onto belowId's old successor. Detaching first, then reading belowId's
+ * predecessor); a project node carries its scope, from its own project node to its own
+ * close, and that close then continues onto belowId's old successor, whilst the work that
+ * stood above it stays on the trunk it came from. Detaching first, then reading belowId's
  * successor, keeps the rewiring correct even when belowId was the moved node's own
  * neighbour (in which case the result is a no-op). Refuses inserting a subtree into
  * its own line (a cycle) or above itself. "here" cursors travel; a merged line is
@@ -1058,12 +1070,11 @@ export function moveIntoLine(record, movedId, belowId) {
   requireTask(next, belowId)
   if (movedId === belowId) throw new Error('cannot insert a node above itself')
   const isProject = moved.kind === 'project'
-  if (isProject && subtreeIds(next, movedId).has(belowId)) throw new Error('cannot insert a subtree into its own line')
+  if (isProject && extentOf(next, movedId).has(belowId)) throw new Error('cannot insert a subtree into its own line')
 
   let tipId
   if (isProject) {
-    cutIncoming(next, movedId) // the whole subtree leaves its current place
-    tipId = mainLineTip(next, movedId) // its line will continue from here
+    tipId = liftExtent(next, movedId).topId // the scope leaves whole; its line continues from its close
   } else {
     spliceOutTask(next, movedId) // one task; its children stay behind
     tipId = movedId

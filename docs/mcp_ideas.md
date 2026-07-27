@@ -181,10 +181,12 @@ Read-only tier:
   `serializeProject` outline plus a structured node array (id, title, kind,
   status, here, flagged, whether a note exists, and the next and branch links);
   no `project_id` renders every top-level project, and a `project_id` scopes to
-  that project or sub-project's subtree.
+  that project or sub-project's own extent: for a sub-project, the pair and its
+  body, ending at its close rather than running on up the trunk.
 - `read_note(node_id, domain?)` returns a node's markdown note.
 - `copy_project(node_id, domain?)` returns a serializable clip for
-  `paste_as_plan`.
+  `paste_as_plan`: the node's extent, with no edge leaving it, so the clip is a
+  plan that stands alone.
 
 Read-write tier (on by default). *Amended for model v3:* the names follow the new
 vocabulary, since a domain holds plans rather than trees, and the three verbs of
@@ -205,7 +207,8 @@ verb because a branch is three things at once.
 
 Destructive tier (off unless enabled at startup):
 
-- `delete_task(node_id, mode=subtree|splice, domain?)`.
+- `delete_task(node_id, mode=subtree|splice, domain?)`, where subtree mode removes
+  the node's extent, which for a sub-project is its pair and body and no more.
 - `delete_domain(name_or_path)`.
 
 Excluded: the library root (`getLibraryRoot` / `chooseLibraryRoot`), a user

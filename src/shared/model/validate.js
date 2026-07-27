@@ -162,6 +162,63 @@ export function scopeOf(record, projectId, pairs) {
   return { terminusId, body }
 }
 
+// Everything that belongs to a node, which is what an operation on that node takes with
+// it: its subtree, bounded by the scope it sits in.
+//
+// A ProjectNode's extent is the plan it opens, the pair and its body, which is scopeOf
+// plus the two ends. Any other node's extent is the run above it on its trunk, stopping
+// below the first close belonging to a scope opened beneath it, plus the branch subtrees
+// hanging off that run; where there is no such close, as on a branch trunk, the run ends
+// at the tip, which is what a branch's own bounds already say. A terminus is half of a
+// pair and has no extent of its own, so it answers with its scope's.
+//
+// Every close inside an extent therefore belongs to a scope opened inside it: an extent is
+// bracket-matched, and can be lifted out or deleted whole without either side being left
+// holding the other's close. Nor does a return line straddle its boundary, since a branch's
+// own edge and its join edge are inside the same scopes (docs/model_v3_ideas.md, section 8).
+// This is the walk the move, delete, copy and export paths want; reachableFrom is the
+// unbounded one, and from a node on a trunk it takes the rest of the plan with it.
+export function extentOf(record, id, pairs) {
+  const nodes = (record && record.nodes) || {}
+  const start = nodes[id]
+  if (!start) return new Set()
+
+  if (start.kind === 'project') {
+    const scope = scopeOf(record, id, pairs)
+    const ids = new Set([id])
+    if (scope) {
+      for (const d of scope.body) ids.add(d)
+      if (scope.terminusId) ids.add(scope.terminusId)
+    }
+    return ids
+  }
+
+  if (start.kind === 'terminus') {
+    const matched = pairScopes(record, trunksOf(record))
+    const openId = matched.closes.get(id)
+    return openId ? extentOf(record, openId, matched.pairs) : new Set([id])
+  }
+
+  // Up the trunk, matching brackets as we go: a close met at depth zero opened below us
+  // and is the boundary; one met deeper belongs to a scope inside the run and travels.
+  const ids = new Set()
+  let depth = 0
+  let cur = id
+  while (cur && nodes[cur] && !ids.has(cur)) {
+    const node = nodes[cur]
+    if (node.kind === 'terminus') {
+      if (depth === 0) break
+      depth -= 1
+    } else if (node.kind === 'project') {
+      depth += 1
+    }
+    ids.add(cur)
+    for (const b of branchChildrenOf(node)) for (const d of reachableFrom(record, b.child)) ids.add(d)
+    cur = node.next
+  }
+  return ids
+}
+
 // ---- branches and their returns ----
 
 // Every branch in the record, as the merge rules and the drawing read one:
