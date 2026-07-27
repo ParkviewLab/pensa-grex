@@ -4,6 +4,21 @@ All notable changes to this project are recorded here.
 
 ## [Unreleased]
 
+## [v3.5.0] - 2026-07-27
+
+### Highlights
+
+Branch and merge junctions are now draggable objects on the trunk: a card dropped among them carries those below it into its new position, and a junction diamond can be dragged along the trunk to move a branch point or merge point, with illegal targets showing no drop hint. A new "Move branch point here" menu item mirrors the existing "Merge a branch here". This release also fixes two drag-path bugs where a moved node could silently rewrite another branch's return address, and where a caret appeared above a plan's close offering a drop the app would then refuse.
+
+### Bug fixes
+
+- A spliced-out node abandons its return address, and no caret above a plan's close (#86) (17ab9bb)
+- What the fresh-eyes review of the junction work found (#88) (87c6cfa)
+
+### Features
+
+- Junctions are objects — drag a card past them, drag them along the trunk (#87) (6d8a357)
+
 ## [v3.4.0] - 2026-07-27
 
 ### Highlights
