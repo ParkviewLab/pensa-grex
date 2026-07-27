@@ -795,7 +795,16 @@ export function setBranchPoint(record, footId, branchPointId) {
   if (!branch) throw new Error('node "' + footId + '" is not the foot of a branch')
   if (branchPointId === branch.hostId) return next
   const errors = mergeErrors(next, { ...branch, hostId: branchPointId }, indexRecord(next))
-  if (errors.length) throw new Error('cannot move the branch point: ' + errors[0])
+  if (errors.length) {
+    // mergeErrors speaks from the merge end; here the attachment moved, so a scope-clause
+    // remedy ("merge below where X opens...") would name the end that stayed put and could
+    // not be followed. Keep the diagnosis, replace the remedy with the movable end's.
+    const scopeErr = /a scope it was opened outside|cannot reach out of its scope/.test(errors[0])
+    const msg = scopeErr
+      ? errors[0].replace(/; merge below where .+$/, '') + '; the branch must hang inside exactly the scopes its return is inside'
+      : errors[0]
+    throw new Error('cannot move the branch point: ' + msg)
+  }
   rehostBranch(next, footId, branch.side, branch.hostId, branchPointId)
   return next
 }
@@ -975,6 +984,13 @@ function liftExtent(next, id) {
   while (next.nodes[topId].next && ids.has(next.nodes[topId].next)) topId = next.nodes[topId].next
   const above = next.nodes[topId].next || null
   next.nodes[topId].next = null
+  // The rule spliceOutTask applies one node at a time (#86), for the run's top: a stored
+  // merge point belongs to the trunk the run is leaving, held here only because this node
+  // was that branch's tip. Carried along and landed on another branch's trunk, it is a
+  // live address in the wrong place, silently rewriting that branch's authored return via
+  // relocateReturns' topmost-wins sweep. A branch the run leaves behind keeps its merge
+  // through the wasOn map, by its own foot.
+  next.nodes[topId].mergePoint = null
 
   const pred = predecessorOf(next, id)
   if (!pred) {
