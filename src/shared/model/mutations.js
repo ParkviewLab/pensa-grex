@@ -73,6 +73,16 @@ function addBranch(node, childId, side, where = 'innermost') {
   else arr.unshift(childId)
 }
 
+// Move a branch's foot from one host's side array to another's, keeping its side. The one
+// primitive that changes which edge a branch hangs on, and membership is by id, never by
+// index, so a caller holding a stale position cannot move the wrong branch.
+function rehostBranch(record, footId, side, fromId, toId, where = 'innermost') {
+  const key = SIDE_KEY[side] || SIDE_KEY.left
+  const from = record.nodes[fromId]
+  if (Array.isArray(from[key])) from[key] = from[key].filter((id) => id !== footId)
+  addBranch(record.nodes[toId], footId, side, where)
+}
+
 // A scope's close. It says nothing of its own: no title, no status, no flag, no
 // "here". The one expressive field it keeps is a note, which is where one records
 // what closing the scope took.
@@ -208,9 +218,7 @@ export function rehomeOrphanedBranches(record) {
       if (!host || host.next) continue
       const pred = ix.pred.get(branch.hostId)
       if (!pred || !record.nodes[pred.id]) continue
-      const key = SIDE_KEY[branch.side]
-      host[key] = host[key].filter((id) => id !== branch.footId)
-      sideArray(record.nodes[pred.id], branch.side).push(branch.footId)
+      rehostBranch(record, branch.footId, branch.side, branch.hostId, pred.id, 'outermost')
       moved++
     }
     if (!moved) return record
@@ -768,6 +776,40 @@ export function setMergePoint(record, footId, mergePointId) {
 }
 
 /**
+ * Move a branch's attachment to the edge rising from `branchPointId`, the branch itself
+ * travelling intact: its contents, its side, and its merge point all stay as they are.
+ * The sibling of setMergePoint, moving the other end of the same object.
+ *
+ * Refused where the move would break a merge rule: the attachment stays on the trunk the
+ * return joins, at or below the merge point (meeting it is the smallest legal branch, the
+ * bubble), and inside exactly the scopes the return is inside. The rules are checked by
+ * mergeErrors, whose words blame the merge end, so the refusal is prefixed with which end
+ * actually moved. Moving a branch to the host it already hangs on is a no-op, returned
+ * unchanged rather than re-run, since re-adding the foot would silently reorder its lane.
+ */
+export function setBranchPoint(record, footId, branchPointId) {
+  const next = clone(record)
+  requireNode(next, footId)
+  requireNode(next, branchPointId)
+  const branch = branchesIn(next).find((b) => b.footId === footId)
+  if (!branch) throw new Error('node "' + footId + '" is not the foot of a branch')
+  if (branchPointId === branch.hostId) return next
+  const errors = mergeErrors(next, { ...branch, hostId: branchPointId }, indexRecord(next))
+  if (errors.length) {
+    // mergeErrors speaks from the merge end; here the attachment moved, so a scope-clause
+    // remedy ("merge below where X opens...") would name the end that stayed put and could
+    // not be followed. Keep the diagnosis, replace the remedy with the movable end's.
+    const scopeErr = /a scope it was opened outside|cannot reach out of its scope/.test(errors[0])
+    const msg = scopeErr
+      ? errors[0].replace(/; merge below where .+$/, '') + '; the branch must hang inside exactly the scopes its return is inside'
+      : errors[0]
+    throw new Error('cannot move the branch point: ' + msg)
+  }
+  rehostBranch(next, footId, branch.side, branch.hostId, branchPointId)
+  return next
+}
+
+/**
  * Remove a node. Deleting a root removes the whole plan (a root has no
  * meaningful splice, since its replacement would be a task and a root must be a
  * project node). For a non-root: mode 'subtree' (default) removes the node's extent, which
@@ -942,6 +984,13 @@ function liftExtent(next, id) {
   while (next.nodes[topId].next && ids.has(next.nodes[topId].next)) topId = next.nodes[topId].next
   const above = next.nodes[topId].next || null
   next.nodes[topId].next = null
+  // The rule spliceOutTask applies one node at a time (#86), for the run's top: a stored
+  // merge point belongs to the trunk the run is leaving, held here only because this node
+  // was that branch's tip. Carried along and landed on another branch's trunk, it is a
+  // live address in the wrong place, silently rewriting that branch's authored return via
+  // relocateReturns' topmost-wins sweep. A branch the run leaves behind keeps its merge
+  // through the wasOn map, by its own foot.
+  next.nodes[topId].mergePoint = null
 
   const pred = predecessorOf(next, id)
   if (!pred) {
@@ -1009,6 +1058,14 @@ function spliceOutTask(next, id) {
   task.next = null
   task.leftBranches = []
   task.rightBranches = []
+  // A stored merge point belongs to the trunk this node is leaving, not to the node:
+  // it says where THAT branch's return joins, and it is stored here only because this
+  // node happened to be the branch's tip. Carried along, it is a live address in the
+  // wrong place — landed on another branch's trunk, relocateReturns' topmost-wins sweep
+  // would read it as that branch's return and silently rewrite it. The branch left
+  // behind keeps its merge through normalizeReturns' wasOn map, which remembers it by
+  // the branch's own foot.
+  task.mergePoint = null
 }
 
 /**
@@ -1108,8 +1165,12 @@ export function reorderRoot(record, rootId, index) {
  * neighbour (in which case the result is a no-op). Refuses inserting a subtree into
  * its own line (a cycle) or above itself. "here" cursors travel; a merged line is
  * repaired by normalizeHeres.
+ *
+ * `carry`, optional, is { branchFeet, mergeFeet }: the junctions in that gap the caller
+ * placed the node below, named by their branches' feet, which follow the node up. Absent,
+ * every junction keeps its address on belowId, which is exactly the old behaviour.
  */
-export function moveIntoLine(record, movedId, belowId) {
+export function moveIntoLine(record, movedId, belowId, carry) {
   const next = clone(record)
   const moved = requireNode(next, movedId)
   requireMovable(moved)
@@ -1117,19 +1178,69 @@ export function moveIntoLine(record, movedId, belowId) {
   if (movedId === belowId) throw new Error('cannot insert a node above itself')
   const isProject = moved.kind === 'project'
   if (isProject && extentOf(next, movedId).has(belowId)) throw new Error('cannot insert a subtree into its own line')
+  // Resolved before the splice, so a refusal names what the caller was looking at.
+  const carried = resolveCarry(next, movedId, belowId, carry)
 
-  let tipId
+  let topId
   if (isProject) {
-    tipId = liftExtent(next, movedId).topId // the scope leaves whole; its line continues from its close
+    topId = liftExtent(next, movedId).topId // the scope leaves whole; its line continues from its close
   } else {
     spliceOutTask(next, movedId) // one task; its children stay behind
-    tipId = movedId
+    topId = movedId
   }
   const below = next.nodes[belowId]
   const oldNext = below.next
   below.next = movedId
-  next.nodes[tipId].next = oldNext
+  next.nodes[topId].next = oldNext
+
+  // The gap above belowId can hold junctions: departures of branches hanging on belowId,
+  // arrivals of returns merging at belowId. The carry names the ones the drop placed the
+  // node BELOW; they are re-addressed to the top of what was spliced in (the node itself,
+  // or a moved project's own close), so the record ends as the drop looked. Every carried
+  // address is then re-checked against the merge rules and the whole edit refused on any
+  // failure: this mutation is on the open op allowlist, so it cannot assume its caller
+  // sends only sane carries, and a bad one must never be "handled" by the silent clamp
+  // in normalizeReturns.
+  if (carried.branchFeet.length || carried.mergeFeet.length) {
+    for (const c of carried.branchFeet) rehostBranch(next, c.footId, c.side, belowId, topId, 'outermost')
+    for (const c of carried.mergeFeet) {
+      // Re-found after the splice; its trunk cannot contain the moved node (resolveCarry
+      // refused that), so the branch itself is unchanged and only its address moves.
+      const b = branchesIn(next).find((x) => x.footId === c.footId)
+      next.nodes[b.tipId].mergePoint = topId
+    }
+    const ix = indexRecord(next)
+    const feet = new Set([...carried.branchFeet, ...carried.mergeFeet].map((c) => c.footId))
+    for (const b of branchesIn(next)) {
+      if (!feet.has(b.footId)) continue
+      const errs = mergeErrors(next, b, ix)
+      if (errs.length) throw new Error('cannot carry the junction: ' + errs[0])
+    }
+  }
   return normalizeHeres(normalizeReturns(next, record))
+}
+
+// Validate a moveIntoLine carry against the record as the caller saw it. Each entry names
+// a branch by its foot; a branch junction must actually hang on belowId, a merge junction
+// must actually merge at belowId, and no carried branch may contain the node being moved,
+// whose splice-out would leave the entry naming a branch that no longer looks like that.
+function resolveCarry(record, movedId, belowId, carry) {
+  const out = { branchFeet: [], mergeFeet: [] }
+  if (!carry) return out
+  const all = branchesIn(record)
+  const check = (footId, want) => {
+    const b = all.find((x) => x.footId === footId)
+    if (!b || (want === 'branch' ? b.hostId !== belowId : b.mergePoint !== belowId)) {
+      throw new Error('"' + footId + '" is not the foot of a branch ' + (want === 'branch' ? 'hanging on' : 'merging at') + ' "' + belowId + '"')
+    }
+    if (b.trunk.includes(movedId)) {
+      throw new Error('cannot carry a junction of the branch the moved node is on; drop the node first, then move the junction')
+    }
+    return b
+  }
+  for (const footId of carry.branchFeet || []) out.branchFeet.push({ footId, side: check(footId, 'branch').side })
+  for (const footId of carry.mergeFeet || []) { check(footId, 'merge'); out.mergeFeet.push({ footId }) }
+  return out
 }
 
 // Swap aId with its main-line successor, keeping each node's own branches: the two

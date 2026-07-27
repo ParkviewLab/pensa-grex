@@ -58,6 +58,16 @@ The dragged node's kind and the drop location pick one of these pure moves:
   a project node carries its scope, and that scope's close then continues onto the
   gap's old upper node. Refused inserting a scope into its own line (a cycle) or
   above itself.
+
+  *A gap is an ordered run, not a single slot.* The junctions in it — departures of
+  branches hanging on the gap's lower node, arrivals of returns merging there — divide
+  it, and the drop's position among them says which junctions the moved node landed
+  below. Those follow it up (the op's `carry`), re-addressed to the top of what was
+  spliced in: the node itself, or a moved project's own close, so a carried junction
+  lands on the edge above the whole scope. Dropping a card just under a return's
+  arrival is therefore how one says "this is now inside the branch's span", and the
+  smallest drop that changes nothing — the node spliced where it already sits, no
+  junction crossed — shows no caret and does nothing.
 - **detachProject** — a sub-project dropped on empty canvas becomes its own plan:
   the pair leaves the trunk it was on, the trunk is joined across the gap, and the
   project node's id is appended to `planOrder`. Only a project node can be a root, so
@@ -67,11 +77,24 @@ The dragged node's kind and the drop location pick one of these pure moves:
   root set first (it is advisory and may omit some), so the target index is
   meaningful.
 
+*The junctions themselves are draggable.* A diamond standing for a single branch is a
+drag handle: the departure dragged to another gap is `setBranchPoint`, the branch
+travelling intact; the arrival dragged is `setMergePoint`. A target is offered only
+where the merge rules accept it, so an illegal gap simply shows no hint: a branch
+point never lands strictly above its own merge, a merge never strictly below its own
+branch point (meeting is the bubble, and legal), and neither crosses a scope boundary,
+departure and return sitting inside exactly the same scopes. A diamond where several
+branches meet is no handle — a drag must name one branch — and is served by the menu
+items below instead.
+
 The right-click menu offers the same reordering without a drag: **moveUp /
 moveDown** swap a node with its main-line neighbour, keeping each node's own
 branches (a clean positional swap, distinct from `moveIntoLine`'s splice). "Move
 up" needs a successor and a non-root node; "move down" needs a non-root main-line
-predecessor to swap below.
+predecessor to swap below. One asymmetry is noted rather than resolved: these two
+swaps still move a card past a junction without carrying it, silently clamping a
+merge the swap inverted, where the drag now refuses or carries. Whether they should
+gain the drag's semantics is an open question.
 
 *A close is the one node these will not take as their operand*, since moving it alone would
 quietly resize its scope, taking in a node that was outside it or letting go of one that was
@@ -89,8 +112,11 @@ the click naming one end and a submenu the other.
 
 - **Merge a branch here** names the target with the click and the branch with the submenu,
   which lists the branches whose return could legally land on the edge above the clicked
-  node. It is how a merge fabricated by the migration is put right, and the only way a
-  return moves.
+  node. It is how a merge fabricated by the migration is put right; the other way a return
+  moves is dragging its junction diamond. **Move branch point here** is its twin for the
+  other end: the branches that could legally hang on the edge above the clicked node, each
+  travelling intact. The menu pair is also what reaches a shared diamond, which the drag
+  cannot name.
 - **Wrap as sub-project** names the run's base with the click and its top with the submenu
   ("Just this one", then each node further up the trunk), then asks for a name and calls
   `wrapRun`. The candidates come from `wrapCandidates`, which asks `wrapRun` itself on a

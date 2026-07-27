@@ -16,6 +16,7 @@ import { renderCards } from './render/shapes.js'
 import { buildModel } from '../../shared/model/model.js'
 import { clipNodes, wrapCandidates } from '../../shared/model/mutations.js'
 import { branchChildrenOf, isPlanClose, branchesIn, indexRecord, mergeErrors, pairScopes, trunksOf, scopeOf, extentOf, reachableFrom } from '../../shared/model/validate.js'
+import { gapAt, carryAt } from './interaction/gapZones.js'
 import { measureDomain } from './layout/measure.js'
 import { computeDomainLayout } from './layout/layout.js'
 import { createApi } from './bridge/api.js'
@@ -120,14 +121,19 @@ const viewport = createViewport({
 // See model/mutations.js and docs/interaction_model.md.
 createDragController({
   contentEl, viewportEl,
-  onProbe: (sourceId, cx, cy) => renderDropHint(resolveDropIntent(sourceId, cx, cy)),
+  onProbe: (source, cx, cy) => renderDropHint(resolveDrop(source, cx, cy)),
   onCancel: () => clearDropHint(),
-  onDrop: (sourceId, cx, cy) => {
-    const intent = resolveDropIntent(sourceId, cx, cy)
+  onDrop: (source, cx, cy) => {
+    const intent = resolveDrop(source, cx, cy)
     clearDropHint()
-    applyDropIntent(sourceId, intent)
+    applyDropIntent(source, intent)
   },
 })
+
+// A drag's source is a card or a junction handle; each resolves its own intents.
+function resolveDrop(source, cx, cy) {
+  return source.type === 'node' ? resolveDropIntent(source.id, cx, cy) : resolveJunctionIntent(source, cx, cy)
+}
 
 document.getElementById('fit').addEventListener('click', () => viewport.fit())
 document.getElementById('zin').addEventListener('click', () => {
@@ -361,7 +367,6 @@ function resolveDropIntent(sourceId, clientX, clientY) {
   // scope and no more (validate.js, extentOf). A task travels alone, so its guard is only
   // ever conservative, and it is left as it was.
   const sub = src.kind === 'project' ? extentOf(currentRecord, sourceId) : reachableFrom(currentRecord, sourceId)
-  const byId = new Map(currentLayout.stations.map((s) => [s.id, s]))
 
   // 1. Over a card -> fork (never the source itself or a node inside its subtree).
   const onCard = currentLayout.stations.find((s) =>
@@ -376,21 +381,25 @@ function resolveDropIntent(sourceId, clientX, clientY) {
     return { kind: 'fork', targetId: onCard.id }
   }
 
-  // 2. Over a line gap -> insert. A gap sits above a node P (between P and its .next
-  // Q, colinear); a line's tip has an open band just above it. The trunk grows
-  // upward, so Q's bottom edge is above P's top edge.
-  const CARET_HALF = 78 // a touch wider than the card, for a comfortable target
-  const TIP_GAP = 44
-  for (const [pid, p] of Object.entries(currentRecord.nodes)) {
-    const ps = byId.get(pid)
-    if (!ps || Math.abs(wx - ps.x) > CARET_HALF) continue
-    const q = p.next ? byId.get(p.next) : null
-    const yBot = ps.cardTop
-    const yTop = q ? q.cardTop + q.cardH : ps.cardTop - TIP_GAP
-    if (wy >= yTop && wy <= yBot) {
-      if (pid === sourceId) return { kind: 'none' }
-      if (src.kind === 'project' && sub.has(pid)) return { kind: 'none' }
-      return { kind: 'insert', belowId: pid, caret: { x: ps.x, y: (yTop + yBot) / 2 } }
+  // 2. Over a line gap -> insert, the gap read as the ordered run it is: the junctions
+  // in it (departures of branches hanging on the node below, arrivals of returns merging
+  // there) divide it, and the drop's position among them says which junctions the moved
+  // node lands below. Those follow it up as the op's carry, so the record ends looking
+  // the way the drop looked. A drop that would change nothing — the node spliced where
+  // it already sits, no junction crossed — resolves to nothing, so no caret promises an
+  // edit that is not one (geometry in interaction/gapZones.js).
+  const gap = gapAt(currentRecord, currentLayout.stations, wx, wy)
+  if (gap) {
+    const pid = gap.belowId
+    if (pid === sourceId) return { kind: 'none' }
+    if (src.kind === 'project' && sub.has(pid)) return { kind: 'none' }
+    const { branchFeet, mergeFeet, caretY } = carryAt(currentRecord, currentLayout.junctions, gap, wy, sourceId)
+    const carries = branchFeet.length || mergeFeet.length
+    if (!carries && currentRecord.nodes[pid].next === sourceId) return { kind: 'none' }
+    return {
+      kind: 'insert', belowId: pid,
+      carry: carries ? { branchFeet, mergeFeet } : null,
+      caret: { x: gap.x, y: caretY },
     }
   }
 
@@ -398,6 +407,32 @@ function resolveDropIntent(sourceId, clientX, clientY) {
   if (src.kind !== 'project') return { kind: 'none' }
   if (isRootId(currentRecord, sourceId)) return { kind: 'reorder', index: rootDropIndex(sourceId, clientX) }
   return { kind: 'detach' }
+}
+
+// A junction dragged along the trunk: the same reorder read from the other side. The
+// handle names one branch by its foot; the target is a whole gap, named by the node
+// below it; the edit is setBranchPoint for a departure, setMergePoint for an arrival.
+// Offered only where the merge rules accept the candidate (the same filter the two menu
+// items use), so an illegal target simply shows no hint: the refusals Gary settled — a
+// branch point never strictly above its own merge, a merge never strictly below its own
+// branch point, neither across a scope boundary — are mergeErrors' own clauses.
+function resolveJunctionIntent(source, clientX, clientY) {
+  if (!currentRecord || !currentLayout) return { kind: 'none' }
+  const branch = branchesIn(currentRecord).find((b) => b.footId === source.footId)
+  if (!branch) return { kind: 'none' }
+  const { wx, wy } = clientToWorld(clientX, clientY)
+  const gap = gapAt(currentRecord, currentLayout.stations, wx, wy)
+  if (!gap) return { kind: 'none' }
+  const pid = gap.belowId
+  const already = source.type === 'fork' ? branch.hostId : branch.mergePoint
+  if (pid === already) return { kind: 'none' }
+  const candidate = source.type === 'fork' ? { ...branch, hostId: pid } : { ...branch, mergePoint: pid }
+  if (mergeErrors(currentRecord, candidate, indexRecord(currentRecord)).length) return { kind: 'none' }
+  return {
+    kind: source.type === 'fork' ? 'set-branch-point' : 'set-merge-point',
+    footId: branch.footId, targetId: pid,
+    caret: { x: gap.x, y: (gap.yTop + gap.yBot) / 2 },
+  }
 }
 
 let dropHint = { caret: null, cardId: null }
@@ -411,15 +446,16 @@ function clearDropHint() {
   }
 }
 
-// Draw the hint for a resolved intent: a ring on the fork target, or an insertion
-// caret across the gap. Nothing is drawn for detach/reorder/none.
+// Draw the hint for a resolved intent: a ring on the fork target, or a caret across
+// the gap (an insertion's sub-gap, or the gap a dragged junction would land in).
+// Nothing is drawn for detach/reorder/none.
 function renderDropHint(intent) {
   clearDropHint()
   if (!intent) return
   if (intent.kind === 'fork') {
     const el = contentEl.querySelector(nodeSel(intent.targetId))
     if (el) { el.classList.add('drop-target'); dropHint.cardId = intent.targetId }
-  } else if (intent.kind === 'insert') {
+  } else if (intent.caret) {
     const caret = document.createElement('div')
     caret.className = 'insert-caret'
     caret.style.left = intent.caret.x + 'px'
@@ -432,14 +468,19 @@ function renderDropHint(intent) {
 // Apply a resolved drop intent as a task op. The authority re-validates every
 // op, so a stale or degenerate drop is rejected there and surfaced, rather than
 // corrupting the record.
-function applyDropIntent(sourceId, intent) {
+function applyDropIntent(source, intent) {
   if (!currentRecord || !intent) return
+  if (intent.kind === 'set-branch-point') { applyOp('setBranchPoint', intent.footId, intent.targetId); return }
+  if (intent.kind === 'set-merge-point') { applyOp('setMergePoint', intent.footId, intent.targetId); return }
+  if (source.type !== 'node') return
+  const sourceId = source.id
   const node = currentRecord.nodes[sourceId]
   if (!node) return
   if (intent.kind === 'fork') {
     applyOp(node.kind === 'project' ? 'moveSubtree' : 'moveTaskNode', sourceId, intent.targetId)
   } else if (intent.kind === 'insert') {
-    applyOp('moveIntoLine', sourceId, intent.belowId)
+    if (intent.carry) applyOp('moveIntoLine', sourceId, intent.belowId, intent.carry)
+    else applyOp('moveIntoLine', sourceId, intent.belowId)
   } else if (intent.kind === 'reorder') {
     applyOp('reorderRoot', sourceId, intent.index)
   } else if (intent.kind === 'detach') {
@@ -662,7 +703,7 @@ async function deleteNoteFlow(nodeId) {
 // of their feet. A branch's return is stored on the branch, so moving one takes two things
 // to be named, the branch and the target; there being no selection mechanism, the click
 // names the target and the submenu names the branch. This is how a merge fabricated by the
-// migration is put right, and the only way a return moves.
+// migration is put right; the other way a return moves is dragging its junction diamond.
 function mergeCandidates(nodeId) {
   const ix = indexRecord(currentRecord)
   return branchesIn(currentRecord)
@@ -671,6 +712,21 @@ function mergeCandidates(nodeId) {
     .map((b) => ({
       label: currentRecord.nodes[b.footId].title || b.footId,
       onClick: () => applyOp('setMergePoint', b.footId, nodeId),
+    }))
+}
+
+// The same shape for the other end of a branch: the ones that could legally hang on the
+// edge above `nodeId`, each travelling intact. This is also the surface that reaches a
+// SHARED junction: a diamond where several branches meet is no drag handle, since a drag
+// must name one branch, and the submenu is what can.
+function branchPointCandidates(nodeId) {
+  const ix = indexRecord(currentRecord)
+  return branchesIn(currentRecord)
+    .filter((b) => b.hostId !== nodeId)
+    .filter((b) => !mergeErrors(currentRecord, { ...b, hostId: nodeId }, ix).length)
+    .map((b) => ({
+      label: currentRecord.nodes[b.footId].title || b.footId,
+      onClick: () => applyOp('setBranchPoint', b.footId, nodeId),
     }))
 }
 
@@ -729,6 +785,8 @@ function openTaskMenu(x, y, nodeId) {
       items.push({ label: 'Add branch above', onClick: () => addBranchFlow('above', nodeId) })
       const closeMerges = mergeCandidates(nodeId)
       if (closeMerges.length) items.push({ label: 'Merge a branch here', submenu: closeMerges })
+      const closeBranchPoints = branchPointCandidates(nodeId)
+      if (closeBranchPoints.length) items.push({ label: 'Move branch point here', submenu: closeBranchPoints })
       items.push({ separator: true })
     }
     // The fold is recorded against the project node, so acting from this end resolves the pair
@@ -803,9 +861,11 @@ function openTaskMenu(x, y, nodeId) {
   if (!foldedOpen) items.push({ label: 'Add branch above', onClick: () => addBranchFlow('above', nodeId) })
   if (!isRoot) items.push({ label: 'Add branch below', onClick: () => addBranchFlow('below', nodeId) })
   // A merge lands a return on the edge above this node, so it is an addition on that
-  // same hidden edge and goes with the other two.
+  // same hidden edge and goes with the other two; a moved branch point likewise.
   const merges = foldedOpen ? [] : mergeCandidates(nodeId)
   if (merges.length) items.push({ label: 'Merge a branch here', submenu: merges })
+  const branchPoints = foldedOpen ? [] : branchPointCandidates(nodeId)
+  if (branchPoints.length) items.push({ label: 'Move branch point here', submenu: branchPoints })
   items.push({ separator: true })
   items.push({ label: 'Edit note…', onClick: () => openNote(nodeId) })
   // Offered only where there is one to delete, so the item's presence says a note exists.

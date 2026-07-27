@@ -143,6 +143,11 @@ body{
    the path, since the round linecap above would otherwise leave a bulb of ink past the cap. */
 .underpass-cap{ stroke:var(--line); stroke-width:1.6; }
 .fork{ fill:var(--line); }
+/* A junction with a single branch is a drag handle: the transparent halo is the target
+   (the diamond alone is 8px of ink), and the hover names the affordance. Shared diamonds
+   get no halo — a drag must name one branch — so they stay inert and menu-driven. */
+.jx-hit{ fill:transparent; pointer-events:all; cursor:grab; }
+.jx:hover .fork{ fill:var(--ink); }
 .burst line{ stroke:var(--burst-a); stroke-width:1.4; }
 .burst.b line{ stroke:var(--burst-b); }
 .burst{ opacity:.13; }
@@ -154,8 +159,11 @@ body{
    azure. */
 .cursor-mark{ fill:var(--ink); stroke:var(--ink); }
 
+/* pointer-events none: a dot has no interaction of its own, and it sits at z-index 2
+   over the SVG where a fork junction's hit halo reaches to within a few pixels of it;
+   letting presses pass through gives the halo its lower half. */
 .dot{ position:absolute; width:11px; height:11px; border-radius:50%; background:var(--line);
-  transform:translate(-50%,-50%); z-index:2; }
+  transform:translate(-50%,-50%); z-index:2; pointer-events:none; }
 .ttl{ position:absolute; transform:translateX(-50%); text-align:center; font-size:11px; font-weight:800;
   letter-spacing:.08em; text-transform:uppercase; color:var(--ink); white-space:nowrap; }
 

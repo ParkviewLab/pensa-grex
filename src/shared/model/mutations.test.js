@@ -5,7 +5,7 @@ import { describe, it, expect } from 'vitest'
 import { validateRecord, pairScopes, trunksOf } from './validate.js'
 import {
   setTitle, uniqueTitle, setNote, toggleFlag, setStatus, cycleStatus, makeHere, clearHere, addPlan, convertKind,
-  addTaskAbove, addTaskBelow, addBranchAbove, addBranchBelow, openBranch, setMergePoint, deleteTask, pasteAsPlan,
+  addTaskAbove, addTaskBelow, addBranchAbove, addBranchBelow, openBranch, setMergePoint, setBranchPoint, deleteTask, pasteAsPlan,
   moveTaskNode, moveSubtree, detachProject, reorderRoot, moveIntoLine, moveUp, moveDown,
   wrapRun, unwrapProject, clipNodes, wrapCandidates,
 } from './mutations.js'
@@ -530,6 +530,73 @@ describe('setMergePoint', () => {
   })
 })
 
+describe('setBranchPoint', () => {
+  // The other end of the same object: setMergePoint moves where a branch rejoins,
+  // this moves where it hangs, and the branch itself travels intact between them.
+  const wide = () => setMergePoint(base(), 'b1', 'm2')
+
+  it('moves the attachment, the branch travelling intact', () => {
+    // The branch leaves m1 and rejoins above m2; moving its attachment up to m2 makes
+    // it a bubble on the join edge. Contents, side and merge point all stay.
+    const out = setBranchPoint(wide(), 'b1', 'm2')
+    expect(out.nodes.m1.leftBranches).toEqual([])
+    expect(out.nodes.m2.leftBranches).toEqual(['b1'])
+    expect(out.nodes.b1.next).toBe('b2') // the branch's own trunk untouched
+    expect(out.nodes.b2.mergePoint).toBe('m2') // and its return where the author put it
+    valid(out)
+  })
+
+  it('lands innermost on its new host, the new-attachment default', () => {
+    const two = openBranch(wide(), 'm2', 'N') // m2 now hosts its own branch
+    const out = setBranchPoint(two, 'b1', 'm2')
+    expect(out.nodes.m2.leftBranches[0]).toBe('b1') // the moved branch takes the inner lane
+    valid(out)
+  })
+
+  it('is a no-op on the host it already hangs on, leaving lane order alone', () => {
+    // Alternation puts the second branch right, the third left and innermost, so b1 sits
+    // outermost on the left. Re-hosting it "to m1" must not quietly hand it the inner lane.
+    const two = openBranch(base(), 'm1', 'N')
+    const three = openBranch(two, 'm1', 'N2')
+    const n2 = newId(two, three)
+    const out = setBranchPoint(three, 'b1', 'm1')
+    expect(out.nodes.m1.leftBranches).toEqual([n2, 'b1']) // untouched, not re-added innermost
+  })
+
+  it('refuses the crossings the merge rules refuse, blaming the moved end', () => {
+    // Strictly above its own merge point is a loop; meeting it is the bubble and legal.
+    expect(() => setBranchPoint(base(), 'b1', 'm2')).toThrow(/cannot move the branch point: .*loop rather than a return/)
+    // The top of a trunk has no rising edge to hang on.
+    expect(() => setBranchPoint(wide(), 'b1', 'z')).toThrow(/cannot move the branch point: .*top of its trunk/)
+    // Another trunk entirely: the return stays behind, and a branch rejoins the trunk it left.
+    expect(() => setBranchPoint(wide(), 'b1', 'b1')).toThrow(/cannot move the branch point: .*not on the trunk it left/)
+    expect(() => setBranchPoint(base(), 'm2', 'm1')).toThrow(/not the foot of a branch/)
+  })
+
+  it('refuses a scope crossing in either direction, with the movable end\'s remedy', () => {
+    // nested() runs r -> a -> SP -> s1 -> zs -> zr. A branch opened outside SP may not
+    // hang inside it whilst its return stays outside, and one opened inside may not
+    // reach out: departure and return sit inside exactly the same scopes. The refusal
+    // must not forward mergeErrors' merge-end remedy ("merge below where SP opens..."),
+    // which names the end that did not move; it speaks of where the branch may hang.
+    const outside = openBranch(nested(), 'a', 'B')
+    const footO = newId(nested(), outside)
+    const wide2 = setMergePoint(outside, footO, 'zs') // spans the whole sub-project
+    expect(() => setBranchPoint(wide2, footO, 's1'))
+      .toThrow(/cannot move the branch point: .*the branch must hang inside exactly the scopes its return is inside/)
+    expect(() => setBranchPoint(wide2, footO, 's1')).not.toThrow(/merge below where/)
+
+    const inside = openBranch(nested(), 's1', 'C') // opened and closed inside SP
+    const footI = newId(nested(), inside)
+    // This direction is the one whose mergeErrors string carries the merge-end remedy,
+    // so this is where the stripping has to be seen to happen.
+    expect(() => setBranchPoint(inside, footI, 'a'))
+      .toThrow(/cannot move the branch point: .*the branch must hang inside exactly the scopes its return is inside/)
+    expect(() => setBranchPoint(inside, footI, 'a')).not.toThrow(/merge below where/)
+    valid(inside)
+  })
+})
+
 // Every structural edit ends by putting each return line back on the top of its own
 // branch, since that is where it is stored and an edit can move the top. A span the
 // author chose therefore survives the edits around it, and is only shortened where the
@@ -563,6 +630,21 @@ describe('returns: where a structural edit leaves a merge point', () => {
     // no reason to shorten the span they chose.
     const out = deleteTask(wide(), 'b2', 'subtree')
     expect(out.nodes.b1.mergePoint).toBe('m2')
+    valid(out)
+  })
+
+  it('a node spliced out of one branch does not carry its return address into another', () => {
+    // n is the tip of its own single-node branch off m2, so it stores that branch's
+    // merge point. Moved onto the b-branch's trunk above b2, it becomes THAT branch's
+    // tip; if the stale address travelled with it, relocateReturns' topmost-wins sweep
+    // would read it as the b branch's return and silently rewrite m1 to m2. The address
+    // stays with the trunk it described, not with the node that happened to hold it.
+    const before = openBranch(base(), 'm2', 'X')
+    const n = newId(base(), before)
+    expect(before.nodes[n].mergePoint).toBe('m2')
+    const out = moveIntoLine(before, n, 'b2')
+    expect(out.nodes.b2.next).toBe(n) // n sits above b2, the b branch's new tip...
+    expect(out.nodes[n].mergePoint).toBe('m1') // ...and the branch keeps ITS return, not n's old one
     valid(out)
   })
 
@@ -1390,6 +1472,146 @@ describe('moveIntoLine', () => {
     expect(out.nodes.m1.next).toBe('b2')
     expect(out.nodes.m1.here).toBe(false) // cleared
     expect(out.nodes.b2.here).toBe(true) // kept (tip-most)
+    valid(out)
+  })
+})
+
+describe('moveIntoLine: carrying the junctions of the gap', () => {
+  // The gap above a node can hold junctions: departures of branches hanging on it,
+  // arrivals of returns merging at it. A drop into that gap says, by its position, which
+  // junctions the node landed below; the carry names those, and they follow it up.
+  const wide = () => setMergePoint(base(), 'b1', 'm2') // branch on m1, rejoining above m2
+  // A node to move, on a second plan so the moves read cleanly. The fixture builders
+  // return fresh records, so adding to the one handed in is safe.
+  const withX = (r2) => {
+    r2.nodes.p2 = { id: 'p2', title: 'P2', kind: 'project', createdAt: 'x', note: null, next: 'x1', leftBranches: [], rightBranches: [] }
+    r2.nodes.x1 = { id: 'x1', title: 'X', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: 'z2', leftBranches: [], rightBranches: [] }
+    r2.nodes.z2 = { id: 'z2', kind: 'terminus', createdAt: 'x', note: null, next: null, leftBranches: [], rightBranches: [] }
+    r2.planOrder = [...r2.planOrder, 'p2']
+    return r2
+  }
+
+  it('a carried merge lands on the moved card: the card is now inside the span', () => {
+    const before = withX(wide())
+    const out = moveIntoLine(before, 'x1', 'm2', { mergeFeet: ['b1'] })
+    expect(out.nodes.m2.next).toBe('x1') // spliced above m2...
+    expect(out.nodes.b2.mergePoint).toBe('x1') // ...and the return now rejoins above it
+    valid(out)
+  })
+
+  it('a carried branch hangs on the moved card: the card is now below the departure', () => {
+    const before = withX(wide())
+    const out = moveIntoLine(before, 'x1', 'm1', { branchFeet: ['b1'] })
+    expect(out.nodes.m1.leftBranches).toEqual([])
+    expect(out.nodes.x1.leftBranches).toEqual(['b1'])
+    expect(out.nodes.b2.mergePoint).toBe('m2') // the return stayed where the author put it
+    valid(out)
+  })
+
+  it('a whole bubble carried moves onto the moved card', () => {
+    const before = withX(base()) // bubble: branch on m1, merging at m1, both junctions in one gap
+    const out = moveIntoLine(before, 'x1', 'm1', { branchFeet: ['b1'], mergeFeet: ['b1'] })
+    expect(out.nodes.x1.leftBranches).toEqual(['b1'])
+    expect(out.nodes.b2.mergePoint).toBe('x1')
+    valid(out)
+  })
+
+  it('a moved project takes carried junctions onto its own close', () => {
+    // The whole scope lands in the gap, so "above the card" means above the pair: the
+    // edge rising from its close, which belongs to the trunk, not to the scope.
+    const before = withX(wide())
+    const out = moveIntoLine(before, 'p2', 'm2', { mergeFeet: ['b1'] })
+    expect(out.nodes.m2.next).toBe('p2')
+    expect(out.nodes.z2.next).toBe('z')
+    expect(out.nodes.b2.mergePoint).toBe('z2') // on the close: outside the scope, above the card
+    valid(out)
+  })
+
+  it('refuses a carry that is not in that gap, and one on the moved node\'s own branch', () => {
+    const before = withX(wide())
+    expect(() => moveIntoLine(before, 'x1', 'm1', { mergeFeet: ['b1'] }))
+      .toThrow(/not the foot of a branch merging at "m1"/) // it merges at m2
+    expect(() => moveIntoLine(before, 'x1', 'm2', { branchFeet: ['b1'] }))
+      .toThrow(/not the foot of a branch hanging on "m2"/) // it hangs on m1
+    expect(() => moveIntoLine(before, 'x1', 'm1', { branchFeet: ['nope'] }))
+      .toThrow(/not the foot of a branch/)
+    expect(() => moveIntoLine(wide(), 'b2', 'm1', { branchFeet: ['b1'] }))
+      .toThrow(/drop the node first, then move the junction/)
+  })
+
+  it('refuses loudly a carry that would break the merge rules, rather than clamping', () => {
+    // A fork carried without its bubble's merge would leave the attachment above the
+    // return: the clamp in normalizeReturns must never be what answers a bad carry.
+    const before = withX(base())
+    expect(() => moveIntoLine(before, 'x1', 'm1', { branchFeet: ['b1'] }))
+      .toThrow(/cannot carry the junction: /)
+  })
+
+  it('a moved project takes a carried BRANCH onto its close, not into its scope', () => {
+    // The sibling of the carried-merge test above, distinguishing the close from the
+    // project node: for a moved task the two targets coincide, so only a project shows
+    // which one the code addresses. The branch must hang on the close's rising edge,
+    // which belongs to the trunk, never inside the scope the pair brackets.
+    const before = withX(wide())
+    const out = moveIntoLine(before, 'p2', 'm1', { branchFeet: ['b1'], mergeFeet: [] })
+    expect(out.nodes.m1.leftBranches).toEqual([])
+    expect(out.nodes.z2.leftBranches).toEqual(['b1']) // on the close
+    expect(out.nodes.p2.leftBranches).toEqual([]) // not on the project node
+    expect(out.nodes.b2.mergePoint).toBe('m2') // the return untouched
+    valid(out)
+  })
+
+  it('carries several feet at once, keeping their stored order', () => {
+    // Two branches on m1's left (the first from base(), the third by alternation), both
+    // bubbles carried whole onto the moved card: the outer-end join in stored order is
+    // what keeps their lanes as the author had them.
+    const two = openBranch(base(), 'm1', 'N') // right, by alternation
+    const three = openBranch(two, 'm1', 'N2') // left, innermost
+    const n2 = newId(two, three)
+    const before = withX(three)
+    const out = moveIntoLine(before, 'x1', 'm1', { branchFeet: [n2, 'b1'], mergeFeet: [n2, 'b1'] })
+    expect(out.nodes.m1.leftBranches).toEqual([])
+    expect(out.nodes.x1.leftBranches).toEqual([n2, 'b1']) // stored order kept
+    expect(out.nodes.b2.mergePoint).toBe('x1')
+    expect(out.nodes[n2].mergePoint).toBe('x1')
+    valid(out)
+  })
+})
+
+describe('liftExtent and a stale return address (the #86 rule\'s project arm)', () => {
+  // A sub-project that constitutes a branch's whole upper run has the branch's tip as its
+  // own close, so the close carries that branch's merge point. Lifting the run must
+  // abandon the address exactly as spliceOutTask abandons a moved task's: carried onto
+  // another branch's trunk as its new tip, a live address silently rewrites that branch's
+  // authored return through relocateReturns' topmost-wins sweep, with the record valid
+  // throughout.
+  const rig = () => ({
+    schemaVersion: 3, id: 'd_test000000', title: 'T', planOrder: ['r'],
+    nodes: {
+      r: { id: 'r', title: 'R', kind: 'project', createdAt: 'x', note: null, next: 'a', leftBranches: [], rightBranches: [] },
+      a: { id: 'a', title: 'A', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: 'b', leftBranches: ['SP'], rightBranches: [] },
+      b: { id: 'b', title: 'B', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: 'c', leftBranches: [], rightBranches: ['g1'] },
+      c: { id: 'c', title: 'C', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: 'zr', leftBranches: [], rightBranches: [] },
+      zr: { id: 'zr', kind: 'terminus', createdAt: 'x', note: null, next: null, leftBranches: [], rightBranches: [] },
+      // branch 1, hanging on a: the whole branch is the sub-project SP..zs, so zs is both
+      // SP's close and the branch's tip, and it holds the branch's merge, above b's edge.
+      SP: { id: 'SP', title: 'Sub', kind: 'project', createdAt: 'x', note: null, next: 's1', leftBranches: [], rightBranches: [] },
+      s1: { id: 's1', title: 'S1', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: 'zs', leftBranches: [], rightBranches: [] },
+      zs: { id: 'zs', kind: 'terminus', createdAt: 'x', note: null, next: null, mergePoint: 'b', leftBranches: [], rightBranches: [] },
+      // branch 2, hanging on b, with an authored merge above c: the victim.
+      g1: { id: 'g1', title: 'G1', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: 'g2', leftBranches: [], rightBranches: [] },
+      g2: { id: 'g2', title: 'G2', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: null, mergePoint: 'c', leftBranches: [], rightBranches: [] },
+    },
+  })
+
+  it('a lifted run abandons the return address stored on its top', () => {
+    const record = rig()
+    valid(record)
+    // Splice SP..zs above branch 2's tip: zs becomes that branch's new tip. Before the
+    // fix, zs still held 'b', and the sweep took it, topmost, over the authored 'c'.
+    const out = moveIntoLine(record, 'SP', 'g2')
+    expect(out.nodes.g2.next).toBe('SP')
+    expect(out.nodes.zs.mergePoint).toBe('c') // branch 2's own return, recovered onto its new tip
     valid(out)
   })
 })
