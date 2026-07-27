@@ -14,7 +14,7 @@
 import { z } from 'zod'
 import { serializeProject } from '../../shared/export/markdown.js'
 import { noteFileName } from '../../shared/model/notes.js'
-import { branchChildrenOf, extentOf } from '../../shared/model/validate.js'
+import { branchChildrenOf, extentOf, enclosingScopeOpen, indexRecord, pairScopes, trunksOf } from '../../shared/model/validate.js'
 import { clipNodes } from '../../shared/model/mutations.js'
 
 const STATUSES = ['todo', 'in-progress', 'completed', 'cancelled']
@@ -88,6 +88,47 @@ function rootOf(record, id) {
   }
   return cur
 }
+// ---- addressing: an id or a title, and the kind the caller asked for ----------
+//
+// The reads are strict about kind, because the kind decides the shape of the answer, and a
+// tool handed the wrong one refuses and names its sibling rather than returning something
+// adjacent. They are liberal about how a caller names the thing: titles are unique within a
+// domain (setTitle routes every rename through uniqueTitle), so a title resolves as well as
+// an id. The writes stay id-only, which is what their `*_id` parameters say: a title can
+// move under a stale read, and a write addressed by one can land on the node next door.
+const KIND_NAME = { project: 'a project', task: 'a task', terminus: 'a close' }
+
+function resolveRead(record, ref, want) {
+  if (typeof ref !== 'string' || !ref.length) throw new Error('pass an id or a title')
+  let id = record.nodes[ref] ? ref : null
+  if (!id) {
+    const byTitle = Object.values(record.nodes).filter((t) => t.title === ref)
+    if (byTitle.length > 1) throw new Error(`"${ref}" names ${byTitle.length} nodes in this domain; pass an id`)
+    if (byTitle.length === 1) id = byTitle[0].id
+  }
+  if (!id) throw new Error(`nothing in this domain has the id or title "${ref}"`)
+
+  const kind = record.nodes[id].kind
+  if (kind === want) return id
+  if (kind === 'terminus') {
+    const opened = pairScopes(record, trunksOf(record)).closes.get(id)
+    throw new Error(`"${ref}" is a close, one half of a pair; read the project it closes with read_project("${opened || '?'}")`)
+  }
+  throw new Error(`"${ref}" is ${KIND_NAME[kind] || 'not ' + KIND_NAME[want]}; use ${kind === 'project' ? 'read_project' : 'read_task'}`)
+}
+
+// The innermost project whose scope contains `id`, and the base of the plan it belongs to.
+// Together they are what makes a separate "read the plan" tool unnecessary: an agent holding
+// one id can reach its scope and its plan in a single further call.
+function context(record, id) {
+  const ix = indexRecord(record)
+  const pred = ix.pred.get(id)
+  return {
+    enclosing_project_id: pred ? enclosingScopeOpen(record, pred.id, ix) : null,
+    root_project_id: rootOf(record, id),
+  }
+}
+
 function structuredNode(record, id) {
   const t = record.nodes[id]
   const base = {
@@ -168,12 +209,12 @@ export function registerTools(server, deps, scope) {
   }, guard(async () => json(store.listDomains())))
 
   server.registerTool('list_projects', {
-    description: 'List the project nodes in a domain (id, title, kind, and whether it is a plan\'s own base rather than a sub-project), for resolving a named project to an id. Node titles are domain-unique; a terminus has none, so a plan is named by its base.',
+    description: 'List the projects in a domain (id, title, kind, and is_root: whether it is a plan\'s own base rather than a sub-project), for resolving a named project to an id. Titles are domain-unique; a terminus has none, so a plan is named by its base.',
     inputSchema: { domain: z.string().optional() },
   }, guard(async (a) => {
     const dir = dirOf(a); const r = record(dir); const inc = incomingSet(r)
     const projects = Object.values(r.nodes).filter((t) => t.kind === 'project')
-      .map((t) => ({ id: t.id, title: t.title, kind: t.kind, root: !inc.has(t.id) }))
+      .map((t) => ({ id: t.id, title: t.title, kind: t.kind, is_root: !inc.has(t.id) }))
     return json({ domain: dir, projects })
   }))
 
@@ -186,37 +227,74 @@ export function registerTools(server, deps, scope) {
     return json({ domain: dir, flagged })
   }))
 
+  // Read the notes of `ids` into an { id: content } map, for the two tools that inline them.
+  const notesFor = (dir, r, ids) => {
+    const notes = {}
+    for (const id of ids) {
+      const n = r.nodes[id] && r.nodes[id].note
+      if (n) { const rn = store.readNote(dir, n); notes[id] = (rn && rn.content) || '' }
+    }
+    return notes
+  }
+  const nodesFor = (r, ids, notes) => ids.map((id) => {
+    const s = structuredNode(r, id)
+    if (notes && notes[id] != null) s.note = notes[id]
+    return s
+  })
+
+  server.registerTool('read_domain', {
+    description: 'Read a whole domain: every plan as a markdown outline, plus a structured node array for all of them. include_notes inlines note contents. To read one plan or sub-project, use read_project; to read one task, read_task.',
+    inputSchema: { domain: z.string().optional(), include_notes: z.boolean().optional() },
+  }, guard(async (a) => {
+    const dir = dirOf(a); const r = record(dir)
+    const ids = Object.keys(r.nodes)
+    const notes = a.include_notes ? notesFor(dir, r, ids) : null
+    const roots = rootIds(r).filter((id) => r.nodes[id].kind === 'project')
+    return json({
+      domain: dir,
+      outline: roots.map((id) => serializeProject(r, id, notes || {})).join('\n'),
+      nodes: nodesFor(r, ids, notes),
+    })
+  }))
+
   server.registerTool('read_project', {
-    description: 'Read a project as a markdown outline plus a structured node array. With no project_id, renders every top-level project in the domain; with a project_id, scopes to that project or sub-project subtree. include_notes inlines note contents.',
+    description: 'Read one project and the plan it opens: a markdown outline plus a structured node array, bounded by the project\'s own close, so a sub-project reads as far as it ends and no further. `project` takes an id or a domain-unique title, and a plan\'s base and a sub-project are both projects. enclosing_project_id names the scope this one sits in (null for a plan\'s base) and root_project_id the base of its plan. Refuses a task (use read_task) and a close (read the project it closes). include_notes inlines note contents; for the whole domain use read_domain.',
     inputSchema: {
+      project: z.string(),
       domain: z.string().optional(),
-      project_id: z.string().optional(),
       include_notes: z.boolean().optional(),
     },
   }, guard(async (a) => {
     const dir = dirOf(a); const r = record(dir)
-    const roots = a.project_id ? [a.project_id] : rootIds(r).filter((id) => r.nodes[id].kind === 'project')
-    for (const id of roots) if (!r.nodes[id]) throw new Error(`no node "${id}" in this domain`)
-    // A project's own extent, so a sub-project reads as far as its close and no further.
-    const ids = a.project_id ? [...extentOf(r, a.project_id)] : Object.keys(r.nodes)
-    const notes = {}
-    if (a.include_notes) {
-      for (const id of ids) {
-        const n = r.nodes[id] && r.nodes[id].note
-        if (n) { const rn = store.readNote(dir, n); notes[id] = (rn && rn.content) || '' }
-      }
-    }
-    const outline = roots.map((id) => serializeProject(r, id, notes)).join('\n')
-    const nodes = ids.map((id) => {
-      const s = structuredNode(r, id)
-      if (a.include_notes && notes[id] != null) s.note = notes[id]
-      return s
+    const id = resolveRead(r, a.project, 'project')
+    const ids = [...extentOf(r, id)]
+    const notes = a.include_notes ? notesFor(dir, r, ids) : null
+    return json({
+      domain: dir,
+      project: id,
+      ...context(r, id),
+      outline: serializeProject(r, id, notes || {}),
+      nodes: nodesFor(r, ids, notes),
     })
-    return json({ domain: dir, outline, nodes })
+  }))
+
+  server.registerTool('read_task', {
+    description: 'Read one task: its title, status, flag, "here" mark, whether it carries a note, and its links. `task` takes an id or a domain-unique title. enclosing_project_id names the project whose scope it sits in and root_project_id the base of its plan, so one task id reaches its project and its plan in one further call. Refuses a project (use read_project) and a close. include_note inlines the note contents.',
+    inputSchema: {
+      task: z.string(),
+      domain: z.string().optional(),
+      include_note: z.boolean().optional(),
+    },
+  }, guard(async (a) => {
+    const dir = dirOf(a); const r = record(dir)
+    const id = resolveRead(r, a.task, 'task')
+    const out = { domain: dir, ...structuredNode(r, id), ...context(r, id) }
+    if (a.include_note) out.note = r.nodes[id].note ? ((store.readNote(dir, r.nodes[id].note) || {}).content || '') : ''
+    return json(out)
   }))
 
   server.registerTool('read_note', {
-    description: "Read a node's markdown note. Empty if the node has no note.",
+    description: "Read a node's markdown note, whatever kind carries it. Empty if it has none.",
     inputSchema: { node_id: z.string(), domain: z.string().optional() },
   }, guard(async (a) => {
     const dir = dirOf(a); const r = record(dir); const t = r.nodes[a.node_id]
@@ -226,21 +304,21 @@ export function registerTools(server, deps, scope) {
   }))
 
   server.registerTool('copy_project', {
-    description: 'Snapshot a project subtree (records and note contents) into a clip for paste_as_plan.',
-    inputSchema: { node_id: z.string(), domain: z.string().optional() },
+    description: 'Snapshot a project and the plan it opens (records and note contents) into a clip for paste_as_plan. `project` takes an id or a domain-unique title. Only a project can be clipped, since a clip pastes as a plan of its own and a plan is bounded by a project and its close.',
+    inputSchema: { project: z.string(), domain: z.string().optional() },
   }, guard(async (a) => {
     const dir = dirOf(a); const r = record(dir)
-    if (!r.nodes[a.node_id]) throw new Error(`no node "${a.node_id}" in this domain`)
-    // The node's extent, with no edge leaving it: a project clips as a whole plan, opening
-    // and close, which is what paste_as_plan needs and what stops a sub-project taking the
-    // rest of its trunk. The clip mirrors the record, so its node map is `nodes` too.
-    const nodes = clipNodes(r, a.node_id)
+    const id = resolveRead(r, a.project, 'project')
+    // The project's extent, with no edge leaving it: a clip is a whole plan, opening and
+    // close, which is what paste_as_plan needs and what stops a sub-project taking the rest
+    // of its trunk. The clip mirrors the record, so its node map is `nodes` too.
+    const nodes = clipNodes(r, id)
     const notes = {}
-    for (const id of Object.keys(nodes)) {
-      const note = nodes[id].note
-      if (note) { const rn = store.readNote(dir, note); notes[id] = (rn && rn.content) || '' }
+    for (const nid of Object.keys(nodes)) {
+      const note = nodes[nid].note
+      if (note) { const rn = store.readNote(dir, note); notes[nid] = (rn && rn.content) || '' }
     }
-    return json({ rootId: a.node_id, nodes, notes })
+    return json({ rootId: id, nodes, notes })
   }))
 
   if (level < SCOPES['read-write']) return
@@ -361,8 +439,8 @@ export function registerTools(server, deps, scope) {
     inputSchema: { [keys[0]]: z.string(), [keys[1]]: keys[1] === 'index' ? z.number().int() : z.string(), domain: z.string().optional() },
   }, guard(async (a) => runWrite(taskService, dirOf(a), op, [a[keys[0]], a[keys[1]]], a[keys[0]])))
 
-  write2('move_node', 'moveTaskNode', ['node_id', 'target_id'], 'Move a task to hang as a new branch off the edge above a target node, leaving its own children behind. The new branch rejoins at that same edge; use set_merge_point to move the return. Refused where the target has no edge above it.')
-  write2('move_subtree', 'moveSubtree', ['root_id', 'target_id'], 'Move a sub-project to hang as a new branch off the edge above a target node, with the same defaults and the same refusal as move_node. A scope travels as a pair, from the project node to its own close; the work above that close stays where it is and the trunk is joined across the gap.')
+  write2('move_task', 'moveTaskNode', ['task_id', 'target_id'], 'Move a task to hang as a new branch off the edge above a target node, leaving its own children behind. The new branch rejoins at that same edge; use set_merge_point to move the return. Refused where the target has no edge above it, and refused on a project (use move_project).')
+  write2('move_project', 'moveSubtree', ['project_id', 'target_id'], 'Move a project to hang as a new branch off the edge above a target node, with the same defaults and the same refusals as move_task. A project travels with the plan it opens, from the project itself to its own close; the work above that close stays where it is and the trunk is joined across the gap. Refused on a task (use move_task).')
   write2('move_into_line', 'moveIntoLine', ['moved_id', 'below_id'], 'Splice a node into the gap above below_id on its line.')
   write2('reorder_plan', 'reorderRoot', ['root_id', 'index'], 'Move a plan to a new left-to-right index among the domain\'s plans.')
 
