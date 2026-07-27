@@ -73,6 +73,29 @@ branches (a clean positional swap, distinct from `moveIntoLine`'s splice). "Move
 up" needs a successor and a non-root node; "move down" needs a non-root main-line
 predecessor to swap below.
 
+### Two verbs that need a second node named
+
+Two menu items act on a pair of nodes, and there is no selection mechanism: every edit
+begins with a right-click, and that click names one node. Both solve it the same way, with
+the click naming one end and a submenu the other.
+
+- **Merge a branch here** names the target with the click and the branch with the submenu,
+  which lists the branches whose return could legally land on the edge above the clicked
+  node. It is how a merge fabricated by the migration is put right, and the only way a
+  return moves.
+- **Wrap as sub-project** names the run's base with the click and its top with the submenu
+  ("Just this one", then each node further up the trunk), then asks for a name and calls
+  `wrapRun`. The candidates come from `wrapCandidates`, which asks `wrapRun` itself on a
+  throwaway record rather than reimplementing its rules, so the menu cannot offer a run
+  that would then be refused: a run may not straddle a scope, nor contain a branch that
+  rejoins outside it. Withheld on a plan's base, whose scope is the plan.
+
+**Delete note** sits beside "Edit note" and appears only where there is a note to delete,
+so the item's presence answers the question its absence would raise. It closes the editor
+first if that note is open (discarding any pending autosave, which would otherwise write
+the file back as it goes), then deletes the file and clears the record's reference, in that
+order, which is what `delete_note` does over MCP.
+
 Every move returns a new record and is re-validated before it is applied; a
 move that merges two lines has its cursors repaired by `normalizeHeres` (the
 tip-most "here" on a merged line survives). "here" flags travel with the nodes they

@@ -167,26 +167,59 @@ domain; every write returns the affected id and the re-rendered outline, and a
 write that would violate an invariant returns the mutation's descriptive error,
 since each write is mutation, then `validateRecord`, then atomic write.
 
+### The nouns, and who may be liberal about them
+
+*Settled at v3.3.0, from the rule that the tools and the app should be the same tools.*
+The surface speaks the model's own vocabulary and no other: **domain, project, task,
+terminus**. A plan is the structure a project opens, not an operand type of its own, since
+a plan's base and a sub-project are the same kind and `detach_to_plan` or `move_project`
+can change which is which under a client's feet; `list_projects` says which is which today
+with `is_root`.
+
+**The reads are strict about kind**, because the kind decides the shape of the answer:
+`read_domain`, `read_project` and `read_task` each refuse the wrong kind and name the tool
+that reads it, a close being sent to the project it closes. **The writes are one tool per
+verb**, polymorphic exactly where the app's own menu is: the app has one Delete and one
+Rename, so splitting `delete_task` by kind would take the two surfaces apart again. The
+exception is where the name itself was wrong, which is why `move_node` became `move_task`
+and `move_subtree` became `move_project`, each refusing the other's kind.
+
+**The reads are liberal about naming**, taking an id or a title, titles being domain-unique;
+**the writes are id-only**, which is what their `*_id` parameters say. A title can move
+under a stale read, and a write addressed by one can land on the node next door.
+
 Read-only tier:
 
 - `list_domains()` returns domains as name and path.
-- `list_projects(domain?)` returns each project node's id, title, kind, and
-  whether it is a root, for resolving a named project (for instance "the Pre-MCP
-  project") to an id. Node titles are domain-unique by invariant (enforced on
-  create, rename, and paste as of v1.3.2, PR #52), so a name resolves to at most
-  one node.
+- `list_projects(domain?)` returns each project's id, title, kind, and `is_root`
+  (whether it is a plan's own base rather than a sub-project), for resolving a
+  named project (for instance "the Pre-MCP project") to an id. Titles are
+  domain-unique by invariant (enforced on create, rename, and paste as of v1.3.2,
+  PR #52), so a name resolves to at most one node.
 - `find_flagged(domain?)` returns the flagged nodes; the `flagged` mark is set to
   select tasks for an assistant to work, so this serves "plan the flagged tasks."
-- `read_project(domain?, project_id?, include_notes=false)` returns the
+- `read_domain(domain?, include_notes=false)` returns every plan's outline plus a
+  structured node array for the whole domain.
+- `read_project(project, domain?, include_notes=false)` returns the
   `serializeProject` outline plus a structured node array (id, title, kind,
-  status, here, flagged, whether a note exists, and the next and branch links);
-  no `project_id` renders every top-level project, and a `project_id` scopes to
-  that project or sub-project's own extent: for a sub-project, the pair and its
-  body, ending at its close rather than running on up the trunk.
-- `read_note(node_id, domain?)` returns a node's markdown note.
-- `copy_project(node_id, domain?)` returns a serializable clip for
-  `paste_as_plan`: the node's extent, with no edge leaving it, so the clip is a
-  plan that stands alone.
+  status, here, flagged, whether a note exists, and the next and branch links),
+  bounded by the project's own extent: the pair and its body, ending at its close
+  rather than running on up the trunk. It also returns `enclosing_project_id` and
+  `root_project_id`.
+- `read_task(task, domain?, include_note=false)` returns one task, in the same
+  structured shape, with the same two context ids. Those two fields are why there
+  is no `read_plan`: one id reaches its scope and its plan in a single further call.
+- `read_note(node_id, domain?)` returns a node's markdown note, whatever kind
+  carries it. The one read that is legitimately kind-agnostic, since any kind may
+  hold a note.
+- `copy_project(project, domain?)` returns a serializable clip for
+  `paste_as_plan`: the project's extent, with no edge leaving it, so the clip is a
+  plan that stands alone. Only a project may be clipped, a clip being a plan.
+
+Deliberately absent: a run reader. To name a run's two ends one must already have
+read the structure containing them, at which point one holds what the run would
+return; the residual need, re-reading known ids, is `read_task`. Were it added, note
+that a read may report a run straddling a scope whilst `wrap_run` must refuse one.
 
 Read-write tier (on by default). *Amended for model v3:* the names follow the new
 vocabulary, since a domain holds plans rather than trees, and the three verbs of
@@ -202,8 +235,10 @@ verb because a branch is three things at once.
 - `set_title`, `set_status`, `cycle_status`, `set_note`, `delete_note`.
 - `make_here`, `clear_here`, `toggle_flag`, `convert_kind`.
 - `paste_as_plan(clip, domain?)`.
-- `move_node`, `move_subtree`, `move_into_line`, `detach_to_plan`,
-  `reorder_plan`, `move_up`, `move_down`.
+- `move_task`, `move_project`, `move_into_line`, `detach_to_plan`,
+  `reorder_plan`, `move_up`, `move_down`. The first two are named for the kind they
+  take and refuse the other's, a task travelling alone and a project travelling with
+  the plan it opens; the rest are one verb over any kind, as the app's menu is.
 
 Destructive tier (off unless enabled at startup):
 
