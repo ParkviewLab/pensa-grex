@@ -217,9 +217,9 @@ export function registerTools(server, deps, scope) {
 
   // ------- read-only -------
   server.registerTool('list_domains', {
-    description: 'List every domain in the library, as name and path. A domain holds any number of project plans.',
+    description: 'List every domain in the library, as name and path, either of which addresses it in the `domain` parameter every other tool takes. A domain holds any number of project plans.',
     inputSchema: {},
-  }, guard(async () => json(store.listDomains())))
+  }, guard(async () => json({ domains: store.listDomains().map((d) => ({ name: d.name, path: d.path })) })))
 
   server.registerTool('list_projects', {
     description: 'List the projects in a domain (id, title, kind, and is_root: whether it is a plan\'s own base rather than a sub-project), for resolving a named project to an id. Titles are domain-unique; a terminus has none, so a plan is named by its base.',
@@ -354,8 +354,8 @@ export function registerTools(server, deps, scope) {
 
   server.registerTool('create_plan', {
     description: 'Create a new project plan in a domain: a base project node carrying the name, and the terminus that closes it. An empty plan is a legal resting state, and this is how every plan begins; tasks are then inserted into the edge between the two.',
-    inputSchema: { name: z.string(), domain: z.string().optional() },
-  }, guard(async (a) => runWrite(taskService, dirOf(a), 'addTree', [a.name], null)))
+    inputSchema: { title: z.string(), domain: z.string().optional() },
+  }, guard(async (a) => runWrite(taskService, dirOf(a), 'addTree', [a.title], null)))
 
   server.registerTool('add_task', {
     description: 'Insert a task into an edge of a trunk. position "above" takes the edge rising from target_id; "below" takes the edge beneath it, which is refused only below a plan\'s base, nothing preceding it. Below a branch\'s first node is allowed: the new task takes that node\'s place as the foot of the branch. An insertion always names its edge. To start a parallel strand instead, use open_branch.',
@@ -491,11 +491,11 @@ export function registerTools(server, deps, scope) {
   }))
 
   server.registerTool('delete_domain', {
-    description: 'Move a whole domain (its plans and notes) to the Trash. Re-read (list_domains) to confirm the target before calling.',
-    inputSchema: { name_or_path: z.string() },
+    description: 'Move a whole domain (its plans and notes) to the Trash. `domain` is a name or a path, as everywhere else, and is required here rather than defaulting to the open one. Re-read (list_domains) to confirm the target before calling.',
+    inputSchema: { domain: z.string() },
   }, guard(async (a) => {
     let dir
-    try { dir = resolveDir(store, a.name_or_path) } catch (e) { return fail(e.message) }
+    try { dir = resolveDir(store, a.domain) } catch (e) { return fail(e.message) }
     const res = await store.deleteDomain(dir)
     if (res.error) return fail(res.error)
     notify('pensagrex:domains-changed', {})

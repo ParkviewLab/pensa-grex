@@ -77,11 +77,11 @@ describe('tools drive the task authority', () => {
   })
 
   it('list_domains returns the library', async () => {
-    expect(data(await s.call('list_domains')).map((d) => d.name)).toEqual(['HomeLab'])
+    expect(data(await s.call('list_domains')).domains.map((d) => d.name)).toEqual(['HomeLab'])
   })
 
   it('create_plan -> add_task -> set_status, each persisted', async () => {
-    const cp = data(await s.call('create_plan', { name: 'Overview' }))
+    const cp = data(await s.call('create_plan', { title: 'Overview' }))
     expect(cp.id).toBeTruthy()
     const lp = data(await s.call('list_projects', {}))
     expect(lp.projects.find((p) => p.title === 'Overview' && p.is_root)).toBeTruthy()
@@ -99,7 +99,7 @@ describe('tools drive the task authority', () => {
   })
 
   it('surfaces an invariant error (status on a project) as a tool error', async () => {
-    const cp = data(await s.call('create_plan', { name: 'P' }))
+    const cp = data(await s.call('create_plan', { title: 'P' }))
     const res = await s.call('set_status', { node_id: cp.id, status: 'completed' })
     expect(res.isError).toBe(true)
     // The refusal now names what does have a status rather than what does not, since
@@ -108,7 +108,7 @@ describe('tools drive the task authority', () => {
   })
 
   it('set_note writes the note file and read_note reads it back', async () => {
-    const cp = data(await s.call('create_plan', { name: 'Noted' }))
+    const cp = data(await s.call('create_plan', { title: 'Noted' }))
     await s.call('set_note', { node_id: cp.id, content: '# hello\n' })
     expect(data(await s.call('read_note', { node_id: cp.id })).content).toBe('# hello\n')
   })
@@ -117,7 +117,7 @@ describe('tools drive the task authority', () => {
     // One name per thing: note_file is what the note is called on disk, content is what it says.
     // They were both called "note" in different tools, so a client could hold a filename and a
     // markdown document under one key and reconcile neither.
-    const cp = data(await s.call('create_plan', { name: 'Noted' }))
+    const cp = data(await s.call('create_plan', { title: 'Noted' }))
     const first = data(await s.call('set_note', { node_id: cp.id, content: '# hello\n' }))
     expect(first.note_file).toMatch(/\.md$/) // reported on the write that created it, too
     const again = data(await s.call('set_note', { node_id: cp.id, content: '# hello again\n' }))
@@ -138,7 +138,7 @@ describe('tools drive the task authority', () => {
   })
 
   it('copy_project -> paste_as_plan duplicates the tree', async () => {
-    const cp = data(await s.call('create_plan', { name: 'Src' }))
+    const cp = data(await s.call('create_plan', { title: 'Src' }))
     const at = data(await s.call('add_task', { target_id: cp.id, position: 'above', title: 'A task' }))
     const clip = data(await s.call('copy_project', { project: cp.id }))
     // Termini: the subtree under a plan's base now includes the terminus closing it,
@@ -165,7 +165,7 @@ describe('tools drive the task authority', () => {
     // A plan whose trunk reads P -> Inner -> [Sub] -> Later -> close, with Sub wrapped
     // around Inner. Following `next` from Sub reaches Later and the plan's close as well;
     // both tools take the extent instead, so a client asking about Sub is told about Sub.
-    const cp = data(await s.call('create_plan', { name: 'Src' }))
+    const cp = data(await s.call('create_plan', { title: 'Src' }))
     const later = data(await s.call('add_task', { target_id: cp.id, position: 'above', title: 'Later' }))
     const inner = data(await s.call('add_task', { target_id: cp.id, position: 'above', title: 'Inner' }))
     await s.call('wrap_run', { from_id: inner.id, title: 'Sub' })
@@ -191,7 +191,7 @@ describe('tools drive the task authority', () => {
   // A plan whose trunk reads Src -> Inner -> [Sub] -> Later -> close, Sub wrapped around
   // Inner: a sub-project with work above its close, plus a task inside it and one outside.
   async function nested() {
-    const plan = data(await s.call('create_plan', { name: 'Src' }))
+    const plan = data(await s.call('create_plan', { title: 'Src' }))
     const later = data(await s.call('add_task', { target_id: plan.id, position: 'above', title: 'Later' }))
     const inner = data(await s.call('add_task', { target_id: plan.id, position: 'above', title: 'Inner' }))
     await s.call('wrap_run', { from_id: inner.id, title: 'Sub' })
@@ -271,7 +271,7 @@ describe('tools drive the task authority', () => {
     // operation falls through to deleting the whole plan. That is the right answer to "delete
     // this plan" and the wrong one to "unwrap this plan", which is what splice asks for, and
     // there is no undo anywhere in the app.
-    const cp = data(await s.call('create_plan', { name: 'Whole' }))
+    const cp = data(await s.call('create_plan', { title: 'Whole' }))
     await s.call('add_task', { target_id: cp.id, position: 'above', title: 'Inside' })
     const res = await s.call('delete_node', { node_id: cp.id, mode: 'splice' })
     expect(res.isError).toBe(true)
@@ -284,8 +284,8 @@ describe('tools drive the task authority', () => {
   it('reports the title a write ended with, which is not always the one asked for', async () => {
     // Titles are unique within a domain, so the second "P" becomes "P-1"; since a title also
     // addresses a node on the reads, a silent rename is a silently changed address.
-    const first = data(await s.call('create_plan', { name: 'P' }))
-    const second = data(await s.call('create_plan', { name: 'P' }))
+    const first = data(await s.call('create_plan', { title: 'P' }))
+    const second = data(await s.call('create_plan', { title: 'P' }))
     expect(first.title).toBe('P')
     expect(second.title).toBe('P-1')
     expect(data(await s.call('read_project', { project: 'P-1' })).id).toBe(second.id)
@@ -295,7 +295,7 @@ describe('tools drive the task authority', () => {
   })
 
   it('delete_node removes the node', async () => {
-    const cp = data(await s.call('create_plan', { name: 'D' }))
+    const cp = data(await s.call('create_plan', { title: 'D' }))
     const at = data(await s.call('add_task', { target_id: cp.id, position: 'above', title: 'gone' }))
     const del = data(await s.call('delete_node', { node_id: at.id, mode: 'subtree' }))
     expect(del.id).toBe(at.id)
@@ -304,7 +304,7 @@ describe('tools drive the task authority', () => {
   })
 
   it('find_flagged returns flagged nodes', async () => {
-    const cp = data(await s.call('create_plan', { name: 'F' }))
+    const cp = data(await s.call('create_plan', { title: 'F' }))
     const at = data(await s.call('add_task', { target_id: cp.id, position: 'above', title: 'flag me' }))
     await s.call('toggle_flag', { node_id: at.id })
     const ff = data(await s.call('find_flagged', {}))
@@ -314,7 +314,7 @@ describe('tools drive the task authority', () => {
   // The v3 verbs. A plan is created as a pair, so a fresh one already has an edge between
   // its base and its close, and that edge is what these name.
   it('open_branch creates a branch with a task inside it and a return of its own', async () => {
-    const cp = data(await s.call('create_plan', { name: 'Ship' }))
+    const cp = data(await s.call('create_plan', { title: 'Ship' }))
     const first = data(await s.call('add_task', { target_id: cp.id, position: 'above', title: 'Write it' }))
     const br = data(await s.call('open_branch', { edge_id: first.id, title: 'Review it' }))
     const nodes = data(await s.call('read_domain', {})).nodes
@@ -328,7 +328,7 @@ describe('tools drive the task authority', () => {
   })
 
   it('set_merge_point widens a branch, and the outline then says where it rejoins', async () => {
-    const cp = data(await s.call('create_plan', { name: 'Ship' }))
+    const cp = data(await s.call('create_plan', { title: 'Ship' }))
     const one = data(await s.call('add_task', { target_id: cp.id, position: 'above', title: 'One' }))
     const two = data(await s.call('add_task', { target_id: one.id, position: 'above', title: 'Two' }))
     const br = data(await s.call('open_branch', { edge_id: one.id, title: 'Aside' }))
@@ -337,7 +337,7 @@ describe('tools drive the task authority', () => {
   })
 
   it('set_merge_point refuses a merge below the branch point, and says so', async () => {
-    const cp = data(await s.call('create_plan', { name: 'Ship' }))
+    const cp = data(await s.call('create_plan', { title: 'Ship' }))
     const one = data(await s.call('add_task', { target_id: cp.id, position: 'above', title: 'One' }))
     const two = data(await s.call('add_task', { target_id: one.id, position: 'above', title: 'Two' }))
     const br = data(await s.call('open_branch', { edge_id: two.id, title: 'Aside' }))
@@ -347,7 +347,7 @@ describe('tools drive the task authority', () => {
   })
 
   it('open_branch refuses a plan\'s closing terminus, which has no edge above it', async () => {
-    await s.call('create_plan', { name: 'Ship' })
+    await s.call('create_plan', { title: 'Ship' })
     const close = data(await s.call('read_domain', {})).nodes.find((n) => n.kind === 'terminus')
     const res = await s.call('open_branch', { edge_id: close.id, title: 'Nowhere' })
     expect(res.isError).toBe(true)
@@ -355,7 +355,7 @@ describe('tools drive the task authority', () => {
   })
 
   it('wrap_run names a run as a sub-project, and unwrap_project takes it away again', async () => {
-    const cp = data(await s.call('create_plan', { name: 'Ship' }))
+    const cp = data(await s.call('create_plan', { title: 'Ship' }))
     const one = data(await s.call('add_task', { target_id: cp.id, position: 'above', title: 'One' }))
     const two = data(await s.call('add_task', { target_id: one.id, position: 'above', title: 'Two' }))
     const wrapped = data(await s.call('wrap_run', { from_id: one.id, to_id: two.id, title: 'Delivery' }))
@@ -374,14 +374,14 @@ describe('tools drive the task authority', () => {
   })
 
   it('unwrap_project refuses a plan\'s base, since that is the plan itself', async () => {
-    const cp = data(await s.call('create_plan', { name: 'Ship' }))
+    const cp = data(await s.call('create_plan', { title: 'Ship' }))
     const res = await s.call('unwrap_project', { node_id: cp.id })
     expect(res.isError).toBe(true)
     expect(res.content[0].text).toMatch(/cannot be unwrapped/)
   })
 
   it('detach_to_plan makes a sub-project a plan of its own', async () => {
-    const cp = data(await s.call('create_plan', { name: 'Ship' }))
+    const cp = data(await s.call('create_plan', { title: 'Ship' }))
     const one = data(await s.call('add_task', { target_id: cp.id, position: 'above', title: 'One' }))
     const wrapped = data(await s.call('wrap_run', { from_id: one.id, title: 'Delivery' }))
     await s.call('detach_to_plan', { node_id: wrapped.id })
@@ -412,7 +412,7 @@ describe('tools notify on changes the op path does not cover', () => {
     expect(s.events).toContain('pensagrex:domains-changed')
 
     store.setLastDomain('Work')
-    const cp = JSON.parse((await s.call('create_plan', { name: 'P' })).content[0].text)
+    const cp = JSON.parse((await s.call('create_plan', { title: 'P' })).content[0].text)
     await s.call('set_note', { node_id: cp.id, content: 'first' }) // records the note (a record change)
     s.events.length = 0
     await s.call('set_note', { node_id: cp.id, content: 'second' }) // note-only change
