@@ -140,9 +140,16 @@ export function solveHeights(model, sizes, metrics, slack) {
       if (isFoldedPair(model, id, node)) {
         // The two cards overlap rather than merely touch, by the greater of the metric and what
         // this pair's own heights need, so the seam between them is shut at every card size.
+        //
+        // The seam takes no repair slack, and the close is pinned to its own project node. A
+        // folded pair is one object: slack added to the close would come straight out of the
+        // overlap, prising the pair open by however much a lateral crossing the close asked for,
+        // and since nothing else marks a fold the drawing would then be indistinguishable from an
+        // open, empty scope with the conflict list empty. Pinning sends the lift to the project
+        // instead, which carries the close with it and keeps the seam exact.
         const seam = Math.max(m.foldSeam, hullSeamToClose(cardH(id), cardH(node.next)))
         airBelow.set(node.next, -(m.anchorGap + seam))
-        constrain(id, node.next, cardH(node.next) - seam + extra(node.next))
+        constrain(id, node.next, cardH(node.next) - seam, { hostId: id, fold: true })
         continue
       }
       const air = airOnEdge(m, {
@@ -181,7 +188,8 @@ export function solveHeights(model, sizes, metrics, slack) {
         u.set(edge.to, want)
         // Which constraint won matters to a repair pass: a node whose height came from a lateral
         // line cannot be lifted on its own without bending that line off twelve degrees, so the
-        // thing to lift is the branch's own host, which carries the whole lens with it.
+        // thing to lift is the branch's own host, which carries the whole lens with it. A folded
+        // pair's close pins to its project node for the same reason, the pair being one object.
         if (edge.branch) pinnedBy.set(edge.to, edge.branch)
         else pinnedBy.delete(edge.to)
       }

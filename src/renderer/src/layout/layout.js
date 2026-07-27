@@ -325,9 +325,23 @@ function placeOnce(model, sizes, o, slack) {
 // the case the argument misses; whatever is left rides out on `conflicts` rather than being
 // swallowed, because a drawing that quietly runs a line through a station is worse than one that
 // says it did.
+//
+// What comes back is the BEST placement, not the last one. A lift is not guaranteed to clear the
+// line it was asked to clear: it can move the card into the path of another, and a pass that buys
+// nothing still costs the height it added. Returning the last placement therefore let a handful
+// of futile passes inflate a trunk edge by hundreds of pixels and leave the conflicts standing.
+// Fewer conflicts wins; between two placements with the same number, the shorter drawing wins,
+// which is the un-repaired one when the repair can do nothing at all.
+function betterPlacement(a, b) {
+  if (!b) return true
+  if (a.conflicts.length !== b.conflicts.length) return a.conflicts.length < b.conflicts.length
+  return a.bounds.h < b.bounds.h
+}
+
 function repairAndPlace(model, sizes, o) {
   const slack = new Map()
   let placed = placeOnce(model, sizes, o, slack)
+  let best = placed
   for (let pass = 0; pass < o.repairPasses && placed.conflicts.length; pass++) {
     let grew = false
     for (const c of placed.conflicts) {
@@ -339,8 +353,9 @@ function repairAndPlace(model, sizes, o) {
     }
     if (!grew) break
     placed = placeOnce(model, sizes, o, slack)
+    if (betterPlacement(placed, best)) best = placed
   }
-  return placed
+  return best
 }
 
 export function computeDomainLayout(model, sizes, opts = {}) {

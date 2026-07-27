@@ -514,6 +514,28 @@ describe('solveHeights — a folded scope, drawn shut', () => {
     expect(cardTopY.get('T') + 58).toBeCloseTo(cardTopY.get('P') + need, 9)
   })
 
+  it('holds the seam against a repair, and sends the lift to the project node', () => {
+    // A folded pair is one object. Slack asked of the CLOSE would come straight out of the
+    // overlap, prising the pair open by whatever a lateral crossing the close asked for, and
+    // since nothing else marks a fold the result is indistinguishable from an open, empty
+    // scope. So the seam takes no slack, and the close is pinned to its own project node,
+    // which is what the repair walks to when it decides what to lift.
+    const slack = new Map([['T', 80]])
+    const { cardTopY, pinnedBy } = solveHeights(folded(), SIZES, METRICS, slack)
+    expect(cardTopY.get('T') + 40).toBe(cardTopY.get('P') + METRICS.foldSeam)
+    expect(pinnedBy.get('T')).toEqual({ hostId: 'P', fold: true })
+  })
+
+  it('carries the close with the project when the project itself is lifted', () => {
+    // The lift the repair actually performs, once redirected: the pair rises together and the
+    // seam is exactly what it was.
+    const plain = solveHeights(folded(), SIZES, METRICS)
+    const lifted = solveHeights(folded(), SIZES, METRICS, new Map([['P', 60]]))
+    const seamOf = (r) => (r.cardTopY.get('T') + 40) - r.cardTopY.get('P')
+    expect(seamOf(lifted)).toBe(seamOf(plain))
+    expect(lifted.cardTopY.get('P')).toBe(plain.cardTopY.get('P')) // a base has no incoming edge
+  })
+
   it('leaves the trunk above the fold at the ordinary minimum', () => {
     const { cardTopY } = solveHeights(folded(), SIZES, METRICS)
     expect(cardTopY.get('a')).toBe(cardTopY.get('T') - (METRICS.anchorGap + METRICS.minAir + 50))
