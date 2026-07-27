@@ -23,7 +23,7 @@
 //   - The full subtree is emitted regardless of collapse (the caller passes the
 //     unpruned record).
 
-import { branchChildrenOf, branchesIn, pairScopes, trunksOf } from '../model/validate.js'
+import { branchChildrenOf, branchesIn, extentOf, pairScopes, trunksOf } from '../model/validate.js'
 
 const INDENT = '  ' // two spaces per nesting level
 
@@ -39,6 +39,10 @@ function bulletFor(node) {
 export function serializeProject(record, rootId, notes = {}) {
   const out = []
   const seen = new Set()
+  // What the outline covers: the root's extent, which for a sub-project ends at its own
+  // close. Without the bound the walk would follow `next` past that close and write out the
+  // rest of the plan as though it were inside the project asked for.
+  const within = extentOf(record, rootId)
 
   // Where each branch rejoins, keyed by the node its return leaves, which is the top of
   // its own trunk. A branch that rejoins at the very edge it left says nothing the nesting
@@ -81,7 +85,7 @@ export function serializeProject(record, rootId, notes = {}) {
   // every fork nest at `depth + 1`.
   function emit(id, depth) {
     const node = record.nodes[id]
-    if (!node || seen.has(id)) return
+    if (!node || seen.has(id) || !within.has(id)) return
     seen.add(id)
 
     // A scope's close gets no bullet of its own: the outline's indentation already

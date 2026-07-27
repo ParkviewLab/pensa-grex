@@ -7,7 +7,7 @@ import {
   setTitle, uniqueTitle, setNote, toggleFlag, setStatus, cycleStatus, makeHere, clearHere, addTree, convertKind,
   addTaskAbove, addTaskBelow, addBranchAbove, addBranchBelow, openBranch, setMergePoint, deleteTask, pasteAsTree,
   moveTaskNode, moveSubtree, detachToTree, reorderRoot, moveIntoLine, moveUp, moveDown,
-  wrapRun, unwrapProject,
+  wrapRun, unwrapProject, clipNodes,
 } from './mutations.js'
 
 // A small valid record: project root r -> m1(here) -> m2 -> z, with a fork b1 -> b2
@@ -1072,6 +1072,108 @@ describe('detachToTree', () => {
     expect(out.nodes.r.next).toBe('m2') // the old trunk is joined across the gap
     expect(out.nodes[closeId].next).toBeNull() // the detached plan ends at its own close
     expect(out.nodes[subId].next).toBe('m1') // and keeps what was inside it
+    valid(out)
+  })
+})
+
+describe('scope-bounded operations — a sub-project with work above its close', () => {
+  // r -> Sub -> m1 -> zSub -> m2 -> z up the trunk, with b1 -> b2 hanging off m1 inside the
+  // scope. This is the shape base() and withSub() both lack, and the only one that puts the
+  // question: an unbounded walk from Sub takes m2 and the plan's own close with it, so the
+  // scope arrives somewhere else holding the enclosing plan's close and neither side is
+  // left a legal plan. Every operation here is bounded by extentOf instead.
+  function wrapped() {
+    const record = wrapRun(base(), 'm1', 'm1', 'Sub')
+    const subId = ids(record).find((id) => record.nodes[id].title === 'Sub')
+    const closeId = pairScopes(record, trunksOf(record)).pairs.get(subId)
+    return { record, subId, closeId }
+  }
+
+  it('starts from a plan whose sub-project has work above it', () => {
+    const { record, subId, closeId } = wrapped()
+    expect(record.nodes.r.next).toBe(subId)
+    expect(record.nodes[closeId].next).toBe('m2')
+    expect(record.nodes.m2.next).toBe('z')
+    valid(record)
+  })
+
+  it('drops a scope into a line and leaves what came after it', () => {
+    const { record, subId, closeId } = wrapped()
+    const out = moveIntoLine(record, subId, 'm2')
+    expect(out.nodes.r.next).toBe('m2') // the trunk it left is joined across the gap
+    expect(out.nodes.m2.next).toBe(subId) // the scope lands in the gap above m2
+    expect(out.nodes[subId].next).toBe('m1') // with its body
+    expect(out.nodes[closeId].next).toBe('z') // and its close carries the line on
+    valid(out)
+  })
+
+  it('grafts a scope onto a card and leaves what came after it', () => {
+    const { record, subId, closeId } = wrapped()
+    const out = moveSubtree(record, subId, 'm2')
+    expect(out.nodes.r.next).toBe('m2')
+    expect(out.nodes.m2.next).toBe('z') // m2 kept its own place on the trunk
+    expect(forks(out.nodes.m2).map((b) => b.child)).toContain(subId)
+    expect(out.nodes[closeId].next).toBeNull() // the branch ends at the scope's close
+    valid(out)
+  })
+
+  it('allows a drop that the unbounded reading called a descendant', () => {
+    // m2 is above the scope's close, so it is reachable from Sub by following next, and the
+    // old guard refused the drop as one onto Sub's own descendant. It is not in the scope,
+    // and dropping a scope there is exactly what a author moving work about wants.
+    const { record, subId } = wrapped()
+    expect(() => moveIntoLine(record, subId, 'm2')).not.toThrow()
+    expect(() => moveSubtree(record, subId, 'm2')).not.toThrow()
+  })
+
+  it('deletes a scope whole and keeps the trunk above it', () => {
+    const { record, subId } = wrapped()
+    const out = deleteTask(record, subId, 'subtree')
+    expect(ids(out)).toEqual(['m2', 'r', 'z']) // m1, b1, b2 and the scope's close went
+    expect(out.nodes.r.next).toBe('m2')
+    valid(out)
+  })
+
+  it('deletes a task up to the close of the scope it sits in, and no further', () => {
+    // m1 sits inside Sub, so removing what grows from it stops below Sub's close: m2 comes
+    // after the scope ends and is no business of m1's.
+    const { record, subId, closeId } = wrapped()
+    const out = deleteTask(record, 'm1', 'subtree')
+    expect(ids(out)).toEqual([closeId, 'm2', 'r', subId, 'z'].sort())
+    expect(out.nodes[subId].next).toBe(closeId) // the scope is emptied, not unclosed
+    expect(out.nodes[closeId].next).toBe('m2')
+    valid(out)
+  })
+
+  it('clips the scope as a plan that stands alone, and pastes it as one', () => {
+    // A clip is a plan, so no edge may leave it. The scope's close points at m2, which is
+    // not in the clip; carrying that edge into a paste would wire the pasted copy into the
+    // record it was taken from, and the paste would be refused as two incoming edges on m2.
+    const { record, subId, closeId } = wrapped()
+    const nodes = clipNodes(record, subId)
+    expect(Object.keys(nodes).sort()).toEqual([subId, 'b1', 'b2', 'm1', closeId].sort())
+    expect(nodes[closeId].next).toBeNull()
+
+    const { next: out } = pasteAsTree(record, { rootId: subId, nodes, notes: {} })
+    expect(out.planOrder).toHaveLength(2) // the plan it came from, and the pasted copy
+    valid(out)
+  })
+
+  it('leaves a branch that hung on the close behind, re-homed onto the edge it held', () => {
+    // The edge rising from a close belongs to whatever encloses the pair, not to the scope
+    // the pair delimits, so a branch there stays with the trunk and takes the predecessor's
+    // edge, which is the same position once the pair has gone. Its return goes with it, and
+    // is clamped to its new edge because the node it named left.
+    const { record, subId, closeId } = wrapped()
+    const withSide = addBranchAbove(record, closeId, 'Side', 'right')
+    const sideId = newId(record, withSide)
+    valid(withSide)
+
+    const out = detachToTree(withSide, subId)
+    expect(out.nodes[sideId]).toBeDefined()
+    expect(forks(out.nodes.r).map((b) => b.child)).toContain(sideId)
+    expect(forks(out.nodes[closeId])).toEqual([])
+    expect(out.nodes[sideId].mergePoint).toBe('r')
     valid(out)
   })
 })

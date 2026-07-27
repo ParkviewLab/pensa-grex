@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import JSON5 from 'json5'
 import fixtureRaw from './fixtures/homelab.record.json?raw'
-import { validateRecord, pairScopes, trunksOf, indexRecord, enclosingScopeOpen, scopeOf, reachableFrom } from './validate.js'
+import { validateRecord, pairScopes, trunksOf, indexRecord, enclosingScopeOpen, scopeOf, extentOf, reachableFrom } from './validate.js'
 
 // A task node with sensible defaults.
 function task(overrides) {
@@ -703,5 +703,61 @@ describe('reachableFrom and scopeOf — what belongs to a scope', () => {
     // From a node on a plan's trunk it runs to the top, which is the reading the fold had
     // to stop using.
     expect(reachableFrom(record(), 'P2').has('T')).toBe(true)
+  })
+})
+
+describe('extentOf — what an operation on a node takes with it', () => {
+  // The same plan as above: P a P2 b T2 c T up the trunk, with x on P2's own edge, y
+  // inside the scope, and z on the close, which is outside it.
+  const record = () => ({
+    schema: 3, id: 'd_1', title: 'D', planOrder: ['P'],
+    nodes: {
+      P: project({ id: 'P', next: 'a' }),
+      a: task({ id: 'a', next: 'P2' }),
+      P2: project({ id: 'P2', next: 'b', rightBranches: ['x1'] }),
+      b: task({ id: 'b', next: 'T2', rightBranches: ['y1'] }),
+      T2: terminus({ id: 'T2', next: 'c', rightBranches: ['z1'] }),
+      c: task({ id: 'c', next: 'T' }),
+      T: terminus({ id: 'T' }),
+      x1: task({ id: 'x1', next: 'x2' }),
+      x2: task({ id: 'x2', mergePoint: 'P2' }),
+      y1: task({ id: 'y1', mergePoint: 'b' }),
+      z1: task({ id: 'z1', mergePoint: 'T2' }),
+    },
+  })
+
+  it('gives a project node its own pair and body, and stops there', () => {
+    // What the drag, the delete, the copy and the export all move on: the scope, close
+    // included, and not the work that comes after the scope ends.
+    expect([...extentOf(record(), 'P2')].sort()).toEqual(['P2', 'T2', 'b', 'x1', 'x2', 'y1'])
+    for (const id of ['c', 'T', 'z1', 'a', 'P']) expect(extentOf(record(), 'P2').has(id)).toBe(false)
+  })
+
+  it('gives a task the run above it, stopping below the close of the scope it sits in', () => {
+    // b is inside P2, so its extent ends below T2; the nodes above that close belong to
+    // the enclosing plan, not to b.
+    expect([...extentOf(record(), 'b')].sort()).toEqual(['b', 'y1'])
+    // a sits in P's scope, so its extent takes the nested pair whole and stops below T.
+    expect([...extentOf(record(), 'a')].sort()).toEqual(['P2', 'T2', 'a', 'b', 'c', 'x1', 'x2', 'y1', 'z1'])
+  })
+
+  it('runs to the tip where no close encloses it, which is what a branch already is', () => {
+    expect([...extentOf(record(), 'x1')].sort()).toEqual(['x1', 'x2'])
+  })
+
+  it('answers for a terminus with the scope it closes, a pair having no half', () => {
+    expect([...extentOf(record(), 'T2')].sort()).toEqual([...extentOf(record(), 'P2')].sort())
+  })
+
+  it('is bracket-matched, so it can be lifted out or deleted whole', () => {
+    for (const id of Object.keys(record())) {
+      const r = record()
+      const depth = [...extentOf(r, id)].reduce((d, x) => d + (r.nodes[x].kind === 'project' ? 1 : r.nodes[x].kind === 'terminus' ? -1 : 0), 0)
+      expect(depth).toBe(0)
+    }
+  })
+
+  it('is empty for a node that is not there', () => {
+    expect([...extentOf(record(), 'nope')]).toEqual([])
   })
 })

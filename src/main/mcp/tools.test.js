@@ -129,6 +129,33 @@ describe('tools drive the task authority', () => {
     expect(pastedClose.id).not.toBe(close.id)
   })
 
+  it('reads and clips a sub-project as far as its own close, and no further', async () => {
+    // A plan whose trunk reads P -> Inner -> [Sub] -> Later -> close, with Sub wrapped
+    // around Inner. Following `next` from Sub reaches Later and the plan's close as well;
+    // both tools take the extent instead, so a client asking about Sub is told about Sub.
+    const cp = data(await s.call('create_plan', { name: 'Src' }))
+    const later = data(await s.call('add_task', { target_id: cp.id, position: 'above', title: 'Later' }))
+    const inner = data(await s.call('add_task', { target_id: cp.id, position: 'above', title: 'Inner' }))
+    await s.call('wrap_run', { from_id: inner.id, title: 'Sub' })
+    const all = data(await s.call('read_project', {})).nodes
+    const sub = all.find((n) => n.title === 'Sub')
+    expect(sub).toBeTruthy()
+
+    const scoped = data(await s.call('read_project', { project_id: sub.id }))
+    expect(scoped.nodes.map((n) => n.title || n.kind).sort()).toEqual(['Inner', 'Sub', 'terminus'])
+    expect(scoped.outline).toContain('Inner')
+    expect(scoped.outline).not.toContain('Later')
+
+    const clip = data(await s.call('copy_project', { node_id: sub.id }))
+    expect(Object.keys(clip.nodes)).toHaveLength(3) // the pair and what is between them
+    expect(Object.values(clip.nodes).some((n) => n.id === later.id)).toBe(false)
+    // and the clip is a whole plan, so it pastes as one
+    const pasteRes = await s.call('paste_as_plan', { clip })
+    if (pasteRes.isError) throw new Error('paste refused: ' + pasteRes.content[0].text)
+    const pasted = data(pasteRes)
+    expect(data(await s.call('read_project', { project_id: pasted.id })).outline).toContain('Inner')
+  })
+
   it('delete_task removes the node', async () => {
     const cp = data(await s.call('create_plan', { name: 'D' }))
     const at = data(await s.call('add_task', { target_id: cp.id, position: 'above', title: 'gone' }))
