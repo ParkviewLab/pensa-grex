@@ -374,8 +374,8 @@ export function registerTools(server, deps, scope) {
 
   server.registerTool('unwrap_project', {
     description: 'Undo a wrap: remove a sub-project node and the terminus that closes it, leaving what was inside on the trunk. Refused on a plan\'s base, since removing a plan\'s own scope is deleting the plan.',
-    inputSchema: { project_id: z.string(), domain: z.string().optional() },
-  }, guard(async (a) => runWrite(taskService, dirOf(a), 'unwrapProject', [a.project_id], a.project_id)))
+    inputSchema: { node_id: z.string(), domain: z.string().optional() },
+  }, guard(async (a) => runWrite(taskService, dirOf(a), 'unwrapProject', [a.node_id], a.node_id)))
 
   const write1 = (name, op, description) => server.registerTool(name, {
     description, inputSchema: { node_id: z.string(), domain: z.string().optional() },
@@ -439,16 +439,16 @@ export function registerTools(server, deps, scope) {
     inputSchema: { [keys[0]]: z.string(), [keys[1]]: keys[1] === 'index' ? z.number().int() : z.string(), domain: z.string().optional() },
   }, guard(async (a) => runWrite(taskService, dirOf(a), op, [a[keys[0]], a[keys[1]]], a[keys[0]])))
 
-  write2('move_task', 'moveTaskNode', ['task_id', 'target_id'], 'Move a task to hang as a new branch off the edge above a target node, leaving its own children behind. The new branch rejoins at that same edge; use set_merge_point to move the return. Refused where the target has no edge above it, and refused on a project (use move_project).')
-  write2('move_project', 'moveSubtree', ['project_id', 'target_id'], 'Move a project to hang as a new branch off the edge above a target node, with the same defaults and the same refusals as move_task. A project travels with the plan it opens, from the project itself to its own close; the work above that close stays where it is and the trunk is joined across the gap. Refused on a task (use move_task).')
-  write2('move_into_line', 'moveIntoLine', ['moved_id', 'below_id'], 'Splice a node into the gap above below_id on its line.')
-  write2('reorder_plan', 'reorderRoot', ['root_id', 'index'], 'Move a plan to a new left-to-right index among the domain\'s plans.')
+  write2('move_task', 'moveTaskNode', ['node_id', 'target_id'], 'Move a task to hang as a new branch off the edge above a target node, leaving its own children behind. The new branch rejoins at that same edge; use set_merge_point to move the return. Refused where the target has no edge above it, and refused on a project (use move_project).')
+  write2('move_project', 'moveSubtree', ['node_id', 'target_id'], 'Move a project to hang as a new branch off the edge above a target node, with the same defaults and the same refusals as move_task. A project travels with the plan it opens, from the project itself to its own close; the work above that close stays where it is and the trunk is joined across the gap. Refused on a task (use move_task).')
+  write2('move_into_line', 'moveIntoLine', ['node_id', 'below_id'], 'Splice a node into the gap above below_id on its line.')
+  write2('reorder_plan', 'reorderRoot', ['node_id', 'index'], 'Move a plan to a new left-to-right index among the domain\'s plans.')
 
   if (level < SCOPES.destructive) return
 
   // ------- destructive -------
-  server.registerTool('delete_task', {
-    description: 'Delete a node. mode subtree removes it and everything growing from it, sparing the terminus of any scope that survives; mode splice removes only it and reconnects its successor. Deleting a branch\'s last task takes the branch and its return with it. Re-read (read_project) to confirm the target id before calling; the domain may have changed since your last read.',
+  server.registerTool('delete_node', {
+    description: 'Delete a task or a project. mode subtree removes the node\'s extent, which is what grows from it within the scope it sits in, and for a project is the plan it opens, pair included; mode splice removes only the node and reconnects its successor. Deleting a branch\'s last task takes the branch and its return with it. A close cannot be deleted on its own, being one half of a pair: delete the project to remove the scope, or unwrap_project to keep what is inside. Re-read (read_domain, read_project) to confirm the target id before calling; the domain may have changed since your last read.',
     inputSchema: { node_id: z.string(), mode: z.enum(['subtree', 'splice']).optional(), domain: z.string().optional() },
   }, guard(async (a) => {
     const dir = dirOf(a)

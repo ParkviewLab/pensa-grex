@@ -51,7 +51,9 @@ const INSTRUCTIONS = [
   'The WRITES are one tool per verb over any kind, except where the kind decides what travels',
   '(move_task takes a task alone, move_project takes a project with the plan it opens), and they',
   'are id-only: every parameter ending in _id takes an id and nothing else, because a title can',
-  'move between your read and your write.',
+  'move between your read and your write. All three kinds share one id namespace, so the node a',
+  'tool acts on is always node_id, whatever kind it takes; a second node named in the same call',
+  'keeps its role (target_id, below_id, merge_point_id, edge_id, from_id, to_id).',
 ].join(' ')
 
 // Create the MCP service. `deps` = { taskService, store, version, notify }.
