@@ -12,6 +12,7 @@
 import { initTheme } from './theme/theme.js'
 import { createViewport } from './interaction/viewport.js'
 import { mountLayout } from './render/scene.js'
+import { renderCards } from './render/shapes.js'
 import { buildModel } from '../../shared/model/model.js'
 import { branchChildrenOf, isPlanClose, branchesIn, indexRecord, mergeErrors } from '../../shared/model/validate.js'
 import { measureDomain } from './layout/measure.js'
@@ -137,6 +138,10 @@ flagFilterBtn.addEventListener('click', () => {
   flaggedOnly = !flaggedOnly
   contentEl.classList.toggle('flagged-only', flaggedOnly)
   flagFilterBtn.setAttribute('aria-pressed', String(flaggedOnly))
+  // Hiding a card takes its box away, so a card revealed by turning the filter off has
+  // no silhouette to show until it is measured again. Repainting the cards is enough:
+  // it touches no coordinate, so the camera and the layout stand as they are.
+  renderCards(contentEl)
 })
 domainSel.addEventListener('change', () => {
   if (domainSel.value === NEW_DOMAIN) { createDomainFlow(); return }

@@ -8,11 +8,12 @@ SPDX-License-Identifier: CC-BY-4.0
 The canonical record of one design conversation. `model_v3_ideas.html` is its presentation and carries the
 drawn figures; when the two drift, this file wins and the page is regenerated from it.
 
-Nothing here is implemented in code; the running app is schema 2, in which forks never rejoin. The northstar
-amendment this design requires is set out in section 2, and it landed on 2026-07-26, so axiom numbers in this
-document are the amended ones: single entry and single exit is axiom 2, every fork returns is axiom 3, and what
-were axioms 3 through 8 are now 4 through 9. Section 2 keeps the pre-amendment numbers where it quotes what
-changed. All of it is scheduled as v3.0.0.
+All of this shipped as v3.0.0 on 2026-07-26, and the running app is schema 3. Where v3.1.0 changed how a domain
+is drawn, the paragraph or bullet is marked as amended and says what it replaced, since the reasoning that was
+superseded is part of the record. The northstar amendment this design required is set out in section 2 and landed
+on 2026-07-26, so axiom numbers in this document are the amended ones: single entry and single exit is axiom 2,
+every fork returns is axiom 3, and what were axioms 3 through 8 are now 4 through 9. Section 2 keeps the
+pre-amendment numbers where it quotes what changed.
 
 ## 1 The vocabulary
 
@@ -138,7 +139,8 @@ the difference is not academic: the naive answer can make a legal branch look un
 P, a, P2, b, T2, c, T from the base upward, a branch leaving above c has the plan's own scope as its bound, but
 the nearest ProjectNode below c is P2, whose terminus T2 sits below the branch point; taking P2 would make the
 constraint impossible to satisfy. So the walk descends the trunk, skipping the ProjectNode paired with every
-TerminusNode it passes, and at the foot of a branch trunk it hops to the parent trunk at that branch's point.
+TerminusNode it passes, and at the foot of a branch trunk it steps across to the parent trunk at that branch's
+point.
 The plan's base ProjectNode always terminates the search, so every position has exactly one innermost enclosing
 scope.
 
@@ -182,9 +184,9 @@ And the northstar's tension section says that when a layout choice and the data 
 layout accommodates it; the nesting invariant was that sentence inverted, with the model constrained to keep
 the picture planar.
 
-A crossing arises only where a lateral line reaches past a trunk nearer the spine than its own lane, which
-makes the crossing relation a strict order and therefore acyclic: the outer line hops the inner trunk, never
-the reverse.
+A crossing arises only where a lateral line reaches past a line nearer the spine than its own lane, which
+makes the crossing relation a strict order and therefore acyclic: the outer line passes behind the inner one,
+never the reverse.
 
 Order is stored per node, so one thing has to be settled that the arrays do not say: how two branches leaving
 different nodes of one trunk compare. The rule is that the higher branch point is the inner one, so a side's
@@ -211,6 +213,11 @@ tool can do is report what an ordering costs in crossings and let the author reo
 
 One geometric rule replaces the structural invariant: no crossing may fall in a node's space, meaning between
 the top of a node's dot and the bottom of its label shape.
+
+*Amended in v3.1.0.* Under the shared row grid this rule held by construction, and there was nothing to check;
+without the grid it is checked after the solve and repaired by lifting, and a residual is reported rather than
+drawn in silence. The rule is unchanged; its standing is now empirical rather than provable. Section 9 records
+what was traded for what, and `tree-layout.md` carries the mechanism.
 
 ## 8 The one nesting rule that stays
 
@@ -241,60 +248,75 @@ likes.
 This rule survives the decision in section 7 because it was never about crossings; a branch line runs beside a
 scope without touching it. It is about the promise axiom 3 makes, that a scope can be collapsed as a
 single block, and a return line landing inside a collapsed scope has nowhere to land. The two nesting rules had
-two different justifications, and only this one turns on something a hop cannot repair. It also holds on both
+two different justifications, and only this one turns on something no drawing convention can repair. It also holds on both
 sides of the trunk, since collapsibility has nothing to do with which half-plane a branch occupies.
 
 It follows that one reshaping still has to be refused rather than drawn. Extending a branch's merge point past
-a same-side neighbour is legal and merely costs a hop, so the question of what to do about that dissolves.
+a same-side neighbour is legal and merely costs a crossing, so the question of what to do about that
+dissolves.
 Extending it across the close of a scope the branch was opened outside does not: it breaks collapse. The honest
 handling is to refuse the move and name the two legal alternatives in the same breath, either merging below
 where that scope opens or above where it closes.
 
-## 9 What the layout engine would owe
+## 9 What the layout engine owes
 
-Today a branch costs the trunk nothing vertically. `buildRowGrid` sets each row's pitch from the tallest
-measured card in that row plus a fixed gap, plus a fixed extra where a fork junction sits below it, and
-`assignRows` is a plain depth-first walk: a branch occupies its own rows in its own lane while the trunk
-carries on up the same grid, and no two paths ever have to be reconciled.
+Before v3 a branch cost the trunk nothing vertically. Each row's pitch came from the tallest measured card in
+that row plus a fixed gap, plus a fixed extra where a fork junction sat below it, and row assignment was a plain
+depth-first walk: a branch occupied its own rows in its own lane while the trunk carried on up the same grid, and
+no two paths ever had to be reconciled.
 
-A merge ends that. A branch trunk of five nodes that leaves one edge and returns two rows higher either needs
-its return line to fall three rows, or needs the trunk to acquire room between the branch point and the merge
-point. Row assignment stops being a walk and becomes a constraint: a vertical band reserved on the parent for
-each branch spanning it, sized to that branch's height. The algorithmic shape is not new, since `assignLanes`
-already reserves a contiguous band of lanes wide enough for each branch's whole subtree and packs bands
-first-fit against the row ranges already placed; it is the same idea turned through ninety degrees. The pitch
-between the two trunk nodes grows to the branch's height, and the junctions sit where they always sit, against
-the nodes bounding the gap, so the required length of a stretched edge is a plain sum: clearance, the branch's
-height, clearance.
+A merge ends that. A branch trunk of five nodes that leaves one edge and returns just above it either needs its
+return line to fall, which it may not, or needs the trunk to acquire room between the branch point and the merge
+point. Row assignment stops being a walk and becomes a constraint: space reserved on the parent for each branch
+spanning it, sized to that branch's height. The algorithmic shape is not new, since `assignLanes` already
+reserves a contiguous band of lanes wide enough for each branch's whole subtree and packs bands first-fit against
+the extents already placed; it is the same idea turned through ninety degrees. The gap between the two trunk
+nodes grows to the branch's height, and the junctions sit where they always sit, against the nodes bounding the
+gap, so the required length of a stretched edge is a plain sum: clearance, the branch's height, clearance.
 
-Two further pieces, and the shared row grid makes both cheap. Row assignment becomes a longest-path
-computation: give every node an integer row subject to the "strictly above" constraints, which are a trunk's own
-order, a branch's foot above its branch point, and the parent node above a merge point above that branch's tip.
-Because the merge clauses forbid a merge below its own branch point, that constraint graph is acyclic, so the
-computation cannot fail; and edge lengths have no upper bound, so any clearance the drawing needs can be
-created. Infeasibility is not a risk here. Height is the only cost.
+Assignment becomes a longest-path computation: give every node a height subject to the "strictly above"
+constraints, which are a trunk's own order, a branch's foot above its branch point, and the node above a merge
+point above that branch's tip. Because the merge clauses forbid a merge below its own branch point, that
+constraint graph is acyclic, so the computation cannot fail; and no constraint puts a ceiling on an edge, so any
+clearance the drawing needs can be created. Infeasibility is not a risk here. Height is the only cost.
 
-Crossing avoidance then comes almost for free, which is the answer to whether the engine can always keep a
-crossing out of a node's space. `buildRowGrid` gives one y per row for every lane, so cards are aligned across
-trunks, and between two adjacent rows there is a clearance band free on every trunk at once; a lateral run
-placed in that band crosses trunk lines and nothing else, wherever it goes. Three details keep the guarantee. A
-run must be anchored to the row's band rather than to its own card's height, since a merge hanging under a
-short card would otherwise run at a height where a taller card in the same row still sits. Two runs wanting the
-same band on the same side of a trunk would lie on top of each other, which reads worse than a crossing, so
-they need separate bands, and that means one more row. And the band must be at least as tall as a hop, which
-puts a floor under `rowGap`.
+*Amended in v3.1.0.* The layering survived. The shared row grid it layered onto did not, and the paragraph that
+stood here defended that grid, so what it argued is worth keeping in view: one y per row for every lane leaves a
+clearance band free on every trunk at once, so a lateral run placed in that band crosses trunk lines and nothing
+else, wherever it goes. Crossing avoidance came free, which is what made the geometric rule in section 7
+provable. What it cost was the twelve-degree lateral, since a line that climbs cannot stay inside a band, and it
+cost the tight vertical packing with it: a row is as tall as the tallest card anywhere across it, and cards in
+unrelated plans were pinned to a shared y for no reason the author could see.
 
-## 10 The hop, and the height it costs
+Gary chose the angle over the guarantee, and on the evidence the exchange is favourable. The nine live domains
+and the two committed fixtures are shorter drawn in pixels than they were on the grid, 10,883 pixels of height
+against 11,096; every lateral leaves and arrives
+at exactly twelve degrees; and the invariant the grid guaranteed is met everywhere after a repair pass that
+closed every conflict it found. The unknown per node is now a real number of pixels rather than an integer row
+shared across lanes, a branch's return supplies a genuine inequality whose slack is the trunk drawn above the
+branch's last card, and the clearance an edge needs is derived from the angle rather than fixed.
+`tree-layout.md` carries the constraints, the derivation, and the repair.
+
+## 10 The underpass, and the height it costs
 
 A crossing must not be mistakable for a junction. A junction is marked in the gap between two stations, so a
 lateral line passing unmarked through that same band would still read as lines meeting, and the drawing would
-assert a join that does not exist. The remedy is the line hop, a small arc where the crossing line jumps the
-trunk, standard in subway and circuit drawing alike and cheap in SVG. The convention worth fixing now is which
-line hops: always the lateral one, so that a trunk runs unbroken from base to close and the eye can follow a
-spine without checking whether it has been interrupted. That is always well defined, since a lateral line
-crosses only trunks nearer the spine than its own lane; the outer line hops and the inner trunk carries on.
+assert a join that does not exist. The convention worth fixing is which line yields: always the lateral one, so
+that a trunk runs unbroken from base to close and the eye can follow a spine without checking whether it has
+been interrupted. That is always well defined, since a lateral line crosses only lines nearer the spine than its
+own lane; the outer line yields and the inner one carries on.
 
-The second cost of crossings is height. Corridors and merge constraints each add rows, so a plan carrying much
+The mark itself was first specified as a line hop, a small arc where the crossing line jumps the other, standard
+in subway and circuit drawing alike and cheap in SVG. *Amended in v3.1.0:* it is an **underpass**. The lateral is
+cut where it crosses, and each severed end carries a cap lying parallel to the line being passed under, so that
+the lateral reads as passing behind rather than as stopping. A lateral yields to a return as well as to a trunk,
+which is the commoner case: the live library has ten branch-crosses-return pairs against two
+branch-crosses-trunk. The hop was drawn as a quadratic hump and was gated on a flat segment, which a
+twelve-degree lateral never presents; an underpass works at any angle. Where the two lines meet shallowly the cut
+is made by clipping the lateral with a strip along the line it passes under, so the visible end is parallel to
+what runs on rather than square to the lateral's own direction.
+
+The second cost of crossings is height. Corridors and merge constraints each add height, so a plan carrying much
 parallel work is read zoomed out, where a 138-pixel card's title is illegible. That cost is real and is
 accepted; the remedy for it is deferred, and the two notes below record the thinking rather than commit to
 anything.
@@ -303,7 +325,7 @@ anything.
 labour the way axiom 6 asks: the shape carries the structure at any zoom, and a name is read on demand rather
 than shrunk past legibility. One constraint would keep it safe, and it is worth writing down now because it is
 easy to violate later: the magnification must be a paint-time transform and never a layout input, since a hover
-that changed a card's measured height would send `buildRowGrid` reflowing the plan under the pointer. Three
+that changed a card's measured height would send the height solve reflowing the plan under the pointer. Three
 limits go with it. Magnification is a probe rather than a survey, and a reader zoomed out usually wants to know
 what three parallel strands are, which hover answers one at a time. It is mouse-only, so selection would have
 to magnify identically for anyone driving from the keyboard. And at low zoom the magnified card is large
@@ -485,7 +507,8 @@ breaking, and only an empty set is broken.
 
 ## 15 Where this stands
 
-All of it is settled unless listed as open below, and the whole of it is scheduled as v3.0.0.
+All of it is settled unless listed as open below. Everything here shipped as v3.0.0, except where a bullet is
+marked as amended in v3.1.0, which changed how a domain is drawn and touched neither the record nor the model.
 
 ### Structure
 
@@ -510,21 +533,27 @@ All of it is settled unless listed as open below, and the whole of it is schedul
 
 ### Drawing
 
-- Branch and return lines may cross trunk lines. A crossing is drawn as a line hop in which the lateral line
-  hops and the trunk runs unbroken; no crossing may fall in a node's space, so lateral runs go in the clearance
-  band between rows.
+- Branch and return lines may cross trunk lines, and each other. The line nearer the spine runs unbroken and the
+  lateral yields. *Amended in v3.1.0:* the yield is drawn as an underpass, the lateral cut with a cap parallel to
+  the line it passes under, rather than as a hop over it; and a lateral yields to a return as well as to a trunk.
+- No crossing may fall in a node's space, meaning between the top of a node's dot and the bottom of its label
+  shape. *Amended in v3.1.0:* the rule stands, but without the shared row grid it is checked after the solve and
+  repaired by lifting rather than guaranteed by construction, with any residual reported on the layout.
 - Lateral order is the author's and is stored, innermost first, with a new branch landing innermost by default
   because a single-edge span costs no crossings there. Which side a branch hangs on stays stored.
 - A branch point is drawn just above the node below its edge and a merge point just below the node above its
   edge, unconditionally, measured from the label shape rather than from a bare dot.
-- Row assignment becomes a longest-path layering, which cannot fail because the merge clauses keep the
-  constraint graph acyclic. The height that crossings and corridors add is accepted as a cost.
-- The 12-degree branch tilt and the per-line lift that carried a branch's cards up along it are retired, since
-  the lift moved cards off the shared row grid and it is that grid which makes a clearance band empty at every
-  lane at once. Cards are aligned to their row and a lateral line is a horizontal run in the band plus a
-  vertical riser, which is what makes "no crossing in a node's space" hold rather than merely be hoped for.
-  A tilt confined to the band would have had to flatten for a distant lane, losing the single ray it existed
-  for. See `tree-layout.md`.
+- Height assignment is a longest-path layering, which cannot fail because the merge clauses keep the constraint
+  graph acyclic. The height that crossings and corridors add is accepted as a cost.
+- *Amended in v3.1.0.* v3.0.0 retired the 12-degree branch tilt in favour of a shared row grid, on which a
+  lateral line was a horizontal run in a clearance band plus a vertical riser. Gary reversed that: the angle is
+  back at both ends of every lateral and the grid is gone. A node's height is solved in pixels, so nothing is
+  aligned across lanes and consecutive cards sit at their minimum, 25 pixels from a card's bottom edge to the
+  centre of the circle beneath it, wherever nothing forces them apart;
+  a lateral departs a fixed clearance above a circle and arrives a fixed clearance below a card's bottom edge;
+  and over a span wider than one lane it is a ramp, a flat run, and a ramp, so every lateral in the drawing
+  climbs the same total and a one-lane branch is a single straight diagonal. Section 9 records what was traded;
+  `tree-layout.md` carries the mechanism.
 
 ### Vocabulary and file
 
@@ -543,7 +572,10 @@ All of it is settled unless listed as open below, and the whole of it is schedul
 - A note file is named for its node id plus a twelve-character slug of the title, sanitized and decorative,
   refreshed best-effort on a retitle.
 - A bookmark is `{name, collapsed[], nodes[]}` in the sidecar, with no zoom and no anchor chain; the client
-  frames the surviving nodes under a maximum scale and a minimum padding.
+  frames the surviving nodes under a maximum scale and a minimum padding. *Specified, and only half shipped:*
+  the record and the migration write that shape, but the renderer still writes and reads the schema-2
+  `{name, collapsed, zoom, anchor}`, so a migrated bookmark has no anchor to resolve and reports that its
+  location is gone. Newly made ones work. The defect is v3.0.0's and wants its own fix.
 - Migration fabricates one thing only: each schema-2 branch merges at the edge level with its current top,
   clamped to the highest legal edge, which preserves today's geometry and is corrected by a drag. The closes are
   faithful, and the pass writes `domains/` while leaving `forests/` untouched.
