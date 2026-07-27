@@ -4,6 +4,24 @@ All notable changes to this project are recorded here.
 
 ## [Unreleased]
 
+## [v3.1.0] - 2026-07-26
+
+### Highlights
+
+Domain trees are now drawn by a pixel solve rather than a row grid: every lateral leaves its spine at exactly twelve degrees, each pair of cards packs by its own heights, and where one line crosses another the crossed line runs unbroken while the other breaks with a short cap on each side in place of the old hop. A rendering bug is also fixed where toggling "Show only flagged" could leave revealed cards with a label but no hull or background until the next repaint, and the changelog no longer carries a spurious "docs" entry for the previous release's own closing commit. The section 15 documentation is corrected to note that the v3 bookmark shape is only half shipped, so migrated bookmarks still report their location as gone.
+
+### Bug fixes
+
+- Keep a hidden card's silhouette instead of painting a zero box (d8f9d8e)
+
+### Docs
+
+- Say plainly that the v3 bookmark shape is only half shipped (baab775)
+
+### Features
+
+- The twelve-degree lateral, and node positions in pixels (#70) (d5484c4)
+
 ## [v3.0.0] - 2026-07-26
 
 ### Highlights
