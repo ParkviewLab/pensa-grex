@@ -1083,7 +1083,7 @@ describe('moveSubtree', () => {
     // The two moves are named for the two kinds, and each names the other: a project takes
     // the plan it opens, a task takes nothing. Refusing here rather than in the tool layer
     // means the tool surface and the app get the same answer.
-    expect(() => moveSubtree(withSub(), 's1', 'f1')).toThrow(/use moveTaskNode for a task/)
+    expect(() => moveSubtree(withSub(), 's1', 'f1')).toThrow(/a task travels alone, and has its own move/)
   })
 })
 
@@ -1234,6 +1234,52 @@ describe('scope-bounded operations — a sub-project with work above its close',
     expect(forks(out.nodes.r).map((b) => b.child)).toContain(sideId)
     expect(forks(out.nodes[closeId])).toEqual([])
     expect(out.nodes[sideId].mergePoint).toBe('r')
+    valid(out)
+  })
+})
+
+describe('a close does not move on its own', () => {
+  // r -> Sub -> m1 -> zSub -> m2 -> z. Moving zSub alone would quietly resize Sub: down, and m1
+  // falls outside it; up, and m2 falls inside. Both leave the trunk bracket-matched, so nothing
+  // downstream would object, which is why the refusal has to be here.
+  function wrapped() {
+    const record = wrapRun(base(), 'm1', 'm1', 'Sub')
+    const subId = ids(record).find((id) => record.nodes[id].title === 'Sub')
+    return { record, subId, closeId: pairScopes(record, trunksOf(record)).pairs.get(subId) }
+  }
+
+  it('refuses to move a close up, down, or into a line', () => {
+    const { record, closeId } = wrapped()
+    for (const move of [() => moveUp(record, closeId), () => moveDown(record, closeId), () => moveIntoLine(record, closeId, 'm2')]) {
+      expect(move).toThrow(/a close cannot be moved on its own/)
+    }
+  })
+
+  it('moves the scope by its project node instead, which carries its close', () => {
+    const { record, subId, closeId } = wrapped()
+    const out = moveIntoLine(record, subId, 'm2')
+    expect(out.nodes.m2.next).toBe(subId)
+    expect(out.nodes[closeId].next).toBe('z')
+    valid(out)
+  })
+
+  it('still moves an ordinary node by either verb', () => {
+    // The guard is about the close, and must not have caught the ordinary cases with it.
+    expect(() => moveUp(base(), 'm1')).not.toThrow()
+    expect(() => moveDown(base(), 'm2')).not.toThrow()
+  })
+
+  it('leaves the neighbouring swap alone, which is an open question and not this fix', () => {
+    // moveUp swaps a node with its successor and moveDown with its predecessor, so a node
+    // NEXT TO a close still moves that close, and with it the scope's membership: here m1
+    // leaves Sub and Sub is left empty. The app offers this ("Move up" on any node with a
+    // successor), so refusing it would change what a person can do, not merely what an agent
+    // can; it is recorded here as behaviour rather than corrected in a fix aimed at the
+    // operand. The explicit way to say the same thing is moveIntoLine.
+    const { record, subId, closeId } = wrapped()
+    const out = moveUp(record, 'm1')
+    expect(out.nodes[subId].next).toBe(closeId) // Sub now closes immediately: it is empty
+    expect(out.nodes[closeId].next).toBe('m1')
     valid(out)
   })
 })

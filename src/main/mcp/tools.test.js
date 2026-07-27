@@ -234,10 +234,40 @@ describe('tools drive the task authority', () => {
       expect(res.content[0].text).toMatch(new RegExp(`one half of a pair.*read_project\\("${sub}"\\)`))
     }
 
-    // And a clip is a plan, so only a project may be clipped.
+    // And a clip is a plan, so only a project may be clipped. Its refusal is its own: neither
+    // read tool clips, so pointing at one would send the caller nowhere useful.
     const clip = await s.call('copy_project', { project: inner })
     expect(clip.isError).toBe(true)
-    expect(clip.content[0].text).toMatch(/is a task; use read_task/)
+    expect(clip.content[0].text).toMatch(/only a project can be clipped/)
+    expect(clip.content[0].text).not.toMatch(/use read_task/) // it names the project to clip, not a tool that cannot
+  })
+
+  it('refuses to splice a plan\'s base, where the mode would be ignored and the plan would go', async () => {
+    // Nothing precedes a base, so there is no predecessor to reconnect its successor to and the
+    // operation falls through to deleting the whole plan. That is the right answer to "delete
+    // this plan" and the wrong one to "unwrap this plan", which is what splice asks for, and
+    // there is no undo anywhere in the app.
+    const cp = data(await s.call('create_plan', { name: 'Whole' }))
+    await s.call('add_task', { target_id: cp.id, position: 'above', title: 'Inside' })
+    const res = await s.call('delete_node', { node_id: cp.id, mode: 'splice' })
+    expect(res.isError).toBe(true)
+    expect(res.content[0].text).toMatch(/cannot be spliced/)
+    expect(res.content[0].text).toMatch(/unwrap_project/)
+    // and nothing was touched
+    expect(data(await s.call('read_domain', {})).nodes.map((n) => n.title)).toContain('Inside')
+  })
+
+  it('reports the title a write ended with, which is not always the one asked for', async () => {
+    // Titles are unique within a domain, so the second "P" becomes "P-1"; since a title also
+    // addresses a node on the reads, a silent rename is a silently changed address.
+    const first = data(await s.call('create_plan', { name: 'P' }))
+    const second = data(await s.call('create_plan', { name: 'P' }))
+    expect(first.title).toBe('P')
+    expect(second.title).toBe('P-1')
+    expect(data(await s.call('read_project', { project: 'P-1' })).project).toBe(second.id)
+    // and a rename reports it too
+    const renamed = data(await s.call('set_title', { node_id: second.id, title: 'P' }))
+    expect(renamed.title).toBe('P-1')
   })
 
   it('delete_node removes the node', async () => {
