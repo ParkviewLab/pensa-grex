@@ -4,6 +4,16 @@ All notable changes to this project are recorded here.
 
 ## [Unreleased]
 
+## [v3.2.2] - 2026-07-26
+
+### Highlights
+
+Operations on a node are now bounded by the scope containing it, so moving, copying, exporting or deleting a sub-project no longer pulls in the work that follows its close, and pasted sub-projects can no longer remain wired to the record they came from. The MCP delete_task tool now refuses to delete a scope's close on its own, since with the new bound that would silently remove the whole scope. Documentation is updated to describe the extent rule in place of the older unbounded reading.
+
+### Bug fixes
+
+- Bound every operation by the scope it acts on (#75) (72d7c3f)
+
 ## [v3.2.1] - 2026-07-26
 
 ### Highlights
