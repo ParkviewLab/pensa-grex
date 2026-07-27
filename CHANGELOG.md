@@ -4,6 +4,16 @@ All notable changes to this project are recorded here.
 
 ## [Unreleased]
 
+## [v3.2.1] - 2026-07-26
+
+### Highlights
+
+The map's two status colours are swapped, so teal now marks a project node and its close while violet marks a completed task, with scope panels tinted to match; project cards also gain vertical padding and a capped hull curve so a project's own name no longer collides with its outline at any line count, and a folded pair's close no longer clips its label. The download page carries a fresh screenshot from the current schema with a new caption, and the third feature card now describes the built-in MCP server rather than a list of things the app does not do.
+
+### Features
+
+- Swap the two map colours, and give a project's name room (#74) (590ab9a)
+
 ## [v3.2.0] - 2026-07-26
 
 ### Highlights
