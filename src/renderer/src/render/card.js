@@ -106,12 +106,16 @@ export function buildCard(task, { isCursor } = {}) {
 // is. It carries no title, no status glyph and no tag, so the hull is empty, and it
 // is sized to match an empty project card so the mirror is exact.
 //
-// A terminus may hold a note in the record, but the interface does not offer one for
-// now, so nothing is drawn for it here either.
+// A terminus carries one thing of its own, a note, and the way to a note is the same on
+// every kind: the same class, the same memo-pad glyph in the same corner, opening the same
+// editor on the same click. That costs the exact mirror between a project's hull and its
+// close, since a noted close carries ink its opening may not; one vocabulary for one fact is
+// worth more than the symmetry.
 function buildTerminus(node) {
   const card = document.createElement('div')
-  card.className = 'card terminus'
+  card.className = 'card terminus' + (node.note ? ' note' : '')
   card.dataset.taskId = node.id
+  if (node.note) card.appendChild(noteIconEl())
   return card
 }
 

@@ -70,9 +70,18 @@ const noteEditor = createNoteEditor({
   notify: (msg) => { chooseAction({ title: 'Note', message: msg, actions: [{ label: 'OK', value: null }] }) },
 })
 
+// The header's label: a node's own title, or for a close the pair it ends, which is the one
+// kind with nothing of its own to show.
+function noteLabel(node) {
+  if (node.kind !== 'terminus') return node.title
+  const opened = pairScopes(currentRecord, trunksOf(currentRecord)).closes.get(node.id)
+  const of = opened && currentRecord.nodes[opened] ? currentRecord.nodes[opened].title : null
+  return of ? 'the close of “' + of + '”' : 'a close'
+}
+
 function openNote(taskId) {
   const t = currentRecord && currentRecord.nodes[taskId]
-  if (t) noteEditor.open(t, currentDomainPath)
+  if (t) noteEditor.open(t, currentDomainPath, noteLabel(t))
 }
 
 // A failed edit must not be silent — the change is on screen but the authority
@@ -708,17 +717,30 @@ function openTaskMenu(x, y, taskId) {
   const isRoot = isRootId(currentRecord, taskId)
   const items = []
 
-  // A scope's close has almost no menu of its own: no title to rename, no status, no
-  // flag, no kind to change, and it cannot be moved or deleted on its own, since it
-  // is one half of a pair. A note is not offered for now, by decision, though the
-  // record still allows one. What is left is the edge above it, unless it closes a
-  // plan, in which case there is no edge and so no menu at all.
+  // A scope's close has little menu of its own: no title to rename, no status, no flag, no
+  // kind to change, and it cannot be moved or deleted on its own, since it is one half of a
+  // pair. Three things it does have. The edge above it, unless it closes a plan, where there
+  // is none. Its note, because every kind of node may carry one and the way to a note is the
+  // same on every kind. And the fold, because the pair is one object and a shut scope draws
+  // its close ON the project's card, so the close is as likely a target as the project is.
   if (task.kind === 'terminus') {
-    if (isPlanClose(currentRecord, taskId)) return
-    items.push({ label: 'Add task above', onClick: () => addTaskFlow('above', taskId) })
-    items.push({ label: 'Add branch above', onClick: () => addBranchFlow('above', taskId) })
-    const closeMerges = mergeCandidates(taskId)
-    if (closeMerges.length) items.push({ label: 'Merge a branch here', submenu: closeMerges })
+    if (!isPlanClose(currentRecord, taskId)) {
+      items.push({ label: 'Add task above', onClick: () => addTaskFlow('above', taskId) })
+      items.push({ label: 'Add branch above', onClick: () => addBranchFlow('above', taskId) })
+      const closeMerges = mergeCandidates(taskId)
+      if (closeMerges.length) items.push({ label: 'Merge a branch here', submenu: closeMerges })
+      items.push({ separator: true })
+    }
+    // The fold is recorded against the project node, so acting from this end resolves the pair
+    // first; which end was clicked makes no difference to what happens.
+    const opened = pairScopes(currentRecord, trunksOf(currentRecord)).closes.get(taskId)
+    if (opened) {
+      items.push(collapsedSet.has(opened)
+        ? { label: 'Expand', onClick: () => toggleCollapse(opened) }
+        : { label: 'Collapse', onClick: () => toggleCollapse(opened) })
+    }
+    items.push({ label: 'Edit note…', onClick: () => openNote(taskId) })
+    if (task.note) items.push({ label: 'Delete note…', onClick: () => deleteNoteFlow(taskId) })
     openContextMenu(x, y, items)
     return
   }

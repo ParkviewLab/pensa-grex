@@ -365,13 +365,16 @@ export function createNoteEditor({ readNote, writeNote, openExternal, onFirstWri
     }
   })
 
-  async function open(task, dir) {
+  // `label` is what the header shows. Every kind may carry a note, and a close has no title of
+  // its own by the grammar, so the caller names it: "the close of X", the phrase the markdown
+  // export uses for the same node.
+  async function open(task, dir, label) {
     taskId = task.id
     domainPath = dir
     file = task.note || noteFileName(task.id, task.title)
     recorded = !!task.note
     conflictWarned = false
-    title.textContent = task.title
+    title.textContent = label || task.title || ''
     const res = await readNote(domainPath, file)
     raw = res && typeof res.content === 'string' ? res.content : ''
 
