@@ -38,6 +38,12 @@ tag_pattern = "v[0-9]+\\.[0-9]+\\.[0-9]+"
 
 # Conventional Commit prefix → group. Order matters: first match wins.
 commit_parsers = [
+    # The release job's own bookkeeping commit, `docs(changelog): <tag> [skip ci]`, lands on
+    # main AFTER the tag it documents, so it falls inside the NEXT release's range and the
+    # generic ^docs rule below files it as a documentation change of that next release. This
+    # must therefore be dropped before ^docs is reached. Ten of pensa-grex's eleven released
+    # sections carry the artefact (for instance "V2.1.0 [skip ci]" inside v3.0.0's Docs).
+    { message = "^docs\\(changelog\\)", skip = true },
     { message = "^feat",     group = "Features" },
     { message = "^fix",      group = "Bug fixes" },
     { message = "^perf",     group = "Performance" },
