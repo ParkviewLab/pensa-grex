@@ -4,6 +4,21 @@ All notable changes to this project are recorded here.
 
 ## [Unreleased]
 
+## [v3.2.0] - 2026-07-26
+
+### Highlights
+
+Folding a project node now hides only what lies between it and its own close, leaving the trunk above intact, and the remaining pair is drawn shut with the close overlapping the project's card by 22 pixels, tinted in project violet, with the shadow retired and "Add task above", "Add branch above" and the merge submenu withheld until the scope is expanded. The terminus hull is rotated a half turn rather than mirrored horizontally, so a scope's two ends read as one shape and its point reflection. Two layout defects are fixed: a folded pair could be pried open by the repair pass and now stays shut, and the repair no longer inflates the drawing over passes that clear no conflicts, keeping the best placement it has seen instead of the last.
+
+### Bug fixes
+
+- Keep a folded pair shut, and stop the repair inflating the drawing (#73) (798951d)
+
+### Features
+
+- Turn the terminus hull through half a turn (#71) (aa9b57f)
+- Fold a scope to its own pair, drawn shut (#72) (16d3ab9)
+
 ## [v3.1.0] - 2026-07-26
 
 ### Highlights
