@@ -196,13 +196,31 @@ export function buildTrack(track) {
   return el('path', { class: 'track ' + cls, d: trackPath(points) })
 }
 
-// The small diamond marking a fork junction, centered at (cx,cy).
-export function buildForkMarker(cx, cy, size = 8) {
-  return el('rect', {
+// The small diamond marking a junction, centered at (cx,cy). Given a junction record
+// (kind, edgeBelowId, footIds) it becomes an interactive object: a group holding the
+// diamond and a transparent hit halo, since 8px of ink is no target for a finger or a
+// zoomed-out pointer. The halo carries the junction's address for the drag layer, on its
+// OWN attributes: data-node-id belongs to cards, and borrowing it here would hand the
+// halo to the card paths (menus, clicks, selector lookups) that key on it. A shared
+// diamond (several feet at one point) gets no halo: a drag must name one branch, and the
+// menu is the surface that can, so the shared case stays menu-only.
+//
+// The whole SVG layer is hidden in the flagged-only mode, which is what keeps these
+// handles out of that read-only view without a rule of their own.
+export function buildForkMarker(cx, cy, size = 8, jx = null) {
+  const diamond = el('rect', {
     class: 'fork',
     x: cx - size / 2, y: cy - size / 2, width: size, height: size,
     transform: 'rotate(45 ' + cx + ' ' + cy + ')',
   })
+  if (!jx || !jx.kind || !Array.isArray(jx.footIds) || jx.footIds.length !== 1) return diamond
+  const g = el('g', { class: 'jx jx-' + jx.kind })
+  g.appendChild(diamond)
+  g.appendChild(el('circle', {
+    class: 'jx-hit', cx, cy, r: 13,
+    'data-jx-kind': jx.kind, 'data-jx-edge': jx.edgeBelowId, 'data-jx-foot': jx.footIds[0],
+  }))
+  return g
 }
 
 // The "here" mark. Its colour comes from .cursor-mark (var(--ink): near-black on the

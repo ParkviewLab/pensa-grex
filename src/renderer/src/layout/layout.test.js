@@ -193,6 +193,20 @@ describe('computeDomainLayout — the HomeLab fixture', () => {
     expect(layout.junctions).toHaveLength(6)
   })
 
+  it('a junction is an address: its kind, the node whose edge holds it, and its branches', () => {
+    const { layout } = loadFixtureLayout()
+    const forks = layout.junctions.filter((j) => j.kind === 'fork')
+    const merges = layout.junctions.filter((j) => j.kind === 'merge')
+    expect(forks).toHaveLength(3)
+    expect(merges).toHaveLength(3)
+    // A shared point accumulates every foot that meets it, so the one diamond still says
+    // which branches it stands for: k_migrate's two forks, and the two returns at k_backups.
+    const shared = forks.find((j) => j.edgeBelowId === 'k_migrate')
+    expect([...shared.footIds].sort()).toEqual(['k_btrfs', 'k_plex'])
+    const joined = merges.find((j) => j.edgeBelowId === 'k_backups')
+    expect([...joined.footIds].sort()).toEqual(['k_btrfs', 'k_plex'])
+  })
+
   it('places each junction strictly between the two real cards it connects', () => {
     const { layout } = loadFixtureLayout()
     const byId = new Map(layout.stations.map((s) => [s.id, s]))

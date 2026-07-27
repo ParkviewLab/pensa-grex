@@ -70,6 +70,7 @@ describe('tool registration by scope tier', () => {
     const s = fakeServer('read-write')
     expect(s.has('add_task')).toBe(true)
     expect(s.has('create_plan')).toBe(true)
+    expect(s.has('set_branch_point')).toBe(true) // the sibling of set_merge_point, same tier
     expect(s.has('delete_node')).toBe(false)
     expect(s.has('delete_domain')).toBe(false)
   })
@@ -356,6 +357,29 @@ describe('tools drive the task authority', () => {
     const res = await s.call('set_merge_point', { branch_id: br.id, merge_point_id: one.id })
     expect(res.isError).toBe(true)
     expect(res.content[0].text).toMatch(/below its own branch point/)
+  })
+
+  it('set_branch_point moves the attachment, the branch and its return intact', async () => {
+    const cp = data(await s.call('create_plan', { title: 'Ship' }))
+    const one = data(await s.call('add_task', { target_id: cp.id, position: 'above', title: 'One' }))
+    const two = data(await s.call('add_task', { target_id: one.id, position: 'above', title: 'Two' }))
+    const br = data(await s.call('open_branch', { position: 'above', node_id: one.id, title: 'Aside' }))
+    await s.call('set_merge_point', { branch_id: br.id, merge_point_id: two.id })
+    const moved = data(await s.call('set_branch_point', { branch_id: br.id, branch_point_id: two.id }))
+    expect(moved.id).toBe(br.id)
+    const nodes = data(await s.call('read_domain', {})).nodes
+    expect(nodes.find((n) => n.id === two.id).branches.map((b) => b.child)).toEqual([br.id])
+    expect(nodes.find((n) => n.id === one.id).branches).toEqual([])
+  })
+
+  it('set_branch_point refuses an attachment above the merge, blaming the moved end', async () => {
+    const cp = data(await s.call('create_plan', { title: 'Ship' }))
+    const one = data(await s.call('add_task', { target_id: cp.id, position: 'above', title: 'One' }))
+    const two = data(await s.call('add_task', { target_id: one.id, position: 'above', title: 'Two' }))
+    const br = data(await s.call('open_branch', { position: 'above', node_id: one.id, title: 'Aside' }))
+    const res = await s.call('set_branch_point', { branch_id: br.id, branch_point_id: two.id })
+    expect(res.isError).toBe(true)
+    expect(res.content[0].text).toMatch(/cannot move the branch point/)
   })
 
   it('opens a branch below a node as well as above it, as the app does', async () => {

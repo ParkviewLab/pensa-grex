@@ -5,7 +5,7 @@ import { describe, it, expect } from 'vitest'
 import { validateRecord, pairScopes, trunksOf } from './validate.js'
 import {
   setTitle, uniqueTitle, setNote, toggleFlag, setStatus, cycleStatus, makeHere, clearHere, addPlan, convertKind,
-  addTaskAbove, addTaskBelow, addBranchAbove, addBranchBelow, openBranch, setMergePoint, deleteTask, pasteAsPlan,
+  addTaskAbove, addTaskBelow, addBranchAbove, addBranchBelow, openBranch, setMergePoint, setBranchPoint, deleteTask, pasteAsPlan,
   moveTaskNode, moveSubtree, detachProject, reorderRoot, moveIntoLine, moveUp, moveDown,
   wrapRun, unwrapProject, clipNodes, wrapCandidates,
 } from './mutations.js'
@@ -527,6 +527,65 @@ describe('setMergePoint', () => {
     // the trunk the branch left.
     expect(() => setMergePoint(base(), 'b2', 'm2')).toThrow(/not the foot of a branch/)
     expect(() => setMergePoint(base(), 'm2', 'm2')).toThrow(/not the foot of a branch/)
+  })
+})
+
+describe('setBranchPoint', () => {
+  // The other end of the same object: setMergePoint moves where a branch rejoins,
+  // this moves where it hangs, and the branch itself travels intact between them.
+  const wide = () => setMergePoint(base(), 'b1', 'm2')
+
+  it('moves the attachment, the branch travelling intact', () => {
+    // The branch leaves m1 and rejoins above m2; moving its attachment up to m2 makes
+    // it a bubble on the join edge. Contents, side and merge point all stay.
+    const out = setBranchPoint(wide(), 'b1', 'm2')
+    expect(out.nodes.m1.leftBranches).toEqual([])
+    expect(out.nodes.m2.leftBranches).toEqual(['b1'])
+    expect(out.nodes.b1.next).toBe('b2') // the branch's own trunk untouched
+    expect(out.nodes.b2.mergePoint).toBe('m2') // and its return where the author put it
+    valid(out)
+  })
+
+  it('lands innermost on its new host, the new-attachment default', () => {
+    const two = openBranch(wide(), 'm2', 'N') // m2 now hosts its own branch
+    const out = setBranchPoint(two, 'b1', 'm2')
+    expect(out.nodes.m2.leftBranches[0]).toBe('b1') // the moved branch takes the inner lane
+    valid(out)
+  })
+
+  it('is a no-op on the host it already hangs on, leaving lane order alone', () => {
+    // Alternation puts the second branch right, the third left and innermost, so b1 sits
+    // outermost on the left. Re-hosting it "to m1" must not quietly hand it the inner lane.
+    const two = openBranch(base(), 'm1', 'N')
+    const three = openBranch(two, 'm1', 'N2')
+    const n2 = newId(two, three)
+    const out = setBranchPoint(three, 'b1', 'm1')
+    expect(out.nodes.m1.leftBranches).toEqual([n2, 'b1']) // untouched, not re-added innermost
+  })
+
+  it('refuses the crossings the merge rules refuse, blaming the moved end', () => {
+    // Strictly above its own merge point is a loop; meeting it is the bubble and legal.
+    expect(() => setBranchPoint(base(), 'b1', 'm2')).toThrow(/cannot move the branch point: .*loop rather than a return/)
+    // The top of a trunk has no rising edge to hang on.
+    expect(() => setBranchPoint(wide(), 'b1', 'z')).toThrow(/cannot move the branch point: .*top of its trunk/)
+    // Another trunk entirely: the return stays behind, and a branch rejoins the trunk it left.
+    expect(() => setBranchPoint(wide(), 'b1', 'b1')).toThrow(/cannot move the branch point: .*not on the trunk it left/)
+    expect(() => setBranchPoint(base(), 'm2', 'm1')).toThrow(/not the foot of a branch/)
+  })
+
+  it('refuses a scope crossing in either direction', () => {
+    // nested() runs r -> a -> SP -> s1 -> zs -> zr. A branch opened outside SP may not
+    // hang inside it whilst its return stays outside, and one opened inside may not
+    // reach out: departure and return sit inside exactly the same scopes.
+    const outside = openBranch(nested(), 'a', 'B')
+    const footO = newId(nested(), outside)
+    const wide2 = setMergePoint(outside, footO, 'zs') // spans the whole sub-project
+    expect(() => setBranchPoint(wide2, footO, 's1')).toThrow(/cannot move the branch point: /)
+
+    const inside = openBranch(nested(), 's1', 'C') // opened and closed inside SP
+    const footI = newId(nested(), inside)
+    expect(() => setBranchPoint(inside, footI, 'a')).toThrow(/cannot move the branch point: /)
+    valid(inside)
   })
 })
 
@@ -1406,6 +1465,78 @@ describe('moveIntoLine', () => {
     expect(out.nodes.m1.here).toBe(false) // cleared
     expect(out.nodes.b2.here).toBe(true) // kept (tip-most)
     valid(out)
+  })
+})
+
+describe('moveIntoLine: carrying the junctions of the gap', () => {
+  // The gap above a node can hold junctions: departures of branches hanging on it,
+  // arrivals of returns merging at it. A drop into that gap says, by its position, which
+  // junctions the node landed below; the carry names those, and they follow it up.
+  const wide = () => setMergePoint(base(), 'b1', 'm2') // branch on m1, rejoining above m2
+  // A node to move, on a second plan so the moves read cleanly. The fixture builders
+  // return fresh records, so adding to the one handed in is safe.
+  const withX = (r2) => {
+    r2.nodes.p2 = { id: 'p2', title: 'P2', kind: 'project', createdAt: 'x', note: null, next: 'x1', leftBranches: [], rightBranches: [] }
+    r2.nodes.x1 = { id: 'x1', title: 'X', kind: 'task', status: 'todo', createdAt: 'x', completedAt: null, note: null, here: false, next: 'z2', leftBranches: [], rightBranches: [] }
+    r2.nodes.z2 = { id: 'z2', kind: 'terminus', createdAt: 'x', note: null, next: null, leftBranches: [], rightBranches: [] }
+    r2.planOrder = [...r2.planOrder, 'p2']
+    return r2
+  }
+
+  it('a carried merge lands on the moved card: the card is now inside the span', () => {
+    const before = withX(wide())
+    const out = moveIntoLine(before, 'x1', 'm2', { mergeFeet: ['b1'] })
+    expect(out.nodes.m2.next).toBe('x1') // spliced above m2...
+    expect(out.nodes.b2.mergePoint).toBe('x1') // ...and the return now rejoins above it
+    valid(out)
+  })
+
+  it('a carried branch hangs on the moved card: the card is now below the departure', () => {
+    const before = withX(wide())
+    const out = moveIntoLine(before, 'x1', 'm1', { branchFeet: ['b1'] })
+    expect(out.nodes.m1.leftBranches).toEqual([])
+    expect(out.nodes.x1.leftBranches).toEqual(['b1'])
+    expect(out.nodes.b2.mergePoint).toBe('m2') // the return stayed where the author put it
+    valid(out)
+  })
+
+  it('a whole bubble carried moves onto the moved card', () => {
+    const before = withX(base()) // bubble: branch on m1, merging at m1, both junctions in one gap
+    const out = moveIntoLine(before, 'x1', 'm1', { branchFeet: ['b1'], mergeFeet: ['b1'] })
+    expect(out.nodes.x1.leftBranches).toEqual(['b1'])
+    expect(out.nodes.b2.mergePoint).toBe('x1')
+    valid(out)
+  })
+
+  it('a moved project takes carried junctions onto its own close', () => {
+    // The whole scope lands in the gap, so "above the card" means above the pair: the
+    // edge rising from its close, which belongs to the trunk, not to the scope.
+    const before = withX(wide())
+    const out = moveIntoLine(before, 'p2', 'm2', { mergeFeet: ['b1'] })
+    expect(out.nodes.m2.next).toBe('p2')
+    expect(out.nodes.z2.next).toBe('z')
+    expect(out.nodes.b2.mergePoint).toBe('z2') // on the close: outside the scope, above the card
+    valid(out)
+  })
+
+  it('refuses a carry that is not in that gap, and one on the moved node\'s own branch', () => {
+    const before = withX(wide())
+    expect(() => moveIntoLine(before, 'x1', 'm1', { mergeFeet: ['b1'] }))
+      .toThrow(/not the foot of a branch merging at "m1"/) // it merges at m2
+    expect(() => moveIntoLine(before, 'x1', 'm2', { branchFeet: ['b1'] }))
+      .toThrow(/not the foot of a branch hanging on "m2"/) // it hangs on m1
+    expect(() => moveIntoLine(before, 'x1', 'm1', { branchFeet: ['nope'] }))
+      .toThrow(/not the foot of a branch/)
+    expect(() => moveIntoLine(wide(), 'b2', 'm1', { branchFeet: ['b1'] }))
+      .toThrow(/drop the node first, then move the junction/)
+  })
+
+  it('refuses loudly a carry that would break the merge rules, rather than clamping', () => {
+    // A fork carried without its bubble's merge would leave the attachment above the
+    // return: the clamp in normalizeReturns must never be what answers a bad carry.
+    const before = withX(base())
+    expect(() => moveIntoLine(before, 'x1', 'm1', { branchFeet: ['b1'] }))
+      .toThrow(/cannot carry the junction: /)
   })
 })
 

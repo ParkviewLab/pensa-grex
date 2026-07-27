@@ -36,7 +36,7 @@ export function mountLayout(contentEl, layout, model) {
   ensureDefs(svg)
 
   for (const t of layout.tracks) svg.appendChild(buildTrack(t))
-  for (const j of layout.junctions) svg.appendChild(buildForkMarker(j.x, j.y))
+  for (const j of layout.junctions) svg.appendChild(buildForkMarker(j.x, j.y, 8, j))
   for (const c of layout.cursors) svg.appendChild(buildCursorMark(c.x, c.y))
   contentEl.appendChild(svg)
 
