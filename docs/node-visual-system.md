@@ -49,11 +49,11 @@ straight-edged or bezier, without a second hand-drawn path.
 The mapping is policy, set in `renderCard`, not a property of the shapes:
 
 - task → **screen**, coloured by status (`--c-todo` / `--c-prog` / `--c-done` /
-  `--c-cancel`);
+  `--c-cancel`), where done is the violet;
 - task marked "here" → **marquee** (in the status colour) + the **Atomic Starburst**
   (in the ink colour, `var(--ink)`);
-- project node → **hull**, in the reserved project colour `--c-project` (a violet:
-  `#7d54a6` on the azure ground, `#bd93e6` on navy);
+- project node → **hull**, in the reserved project colour `--c-project` (the teal:
+  `#1f8f8a` on the azure ground, `#37c2ba` on navy);
 - terminus node (the close of a scope, schema 3) → the same **hull** in the same violet,
   turned through half a turn: mirrored about both of the card's axes, so the pair reads as
   one shape and its reflection, and the inversion says which end of the scope this is. It
@@ -61,15 +61,37 @@ The mapping is policy, set in `renderCard`, not a property of the shapes:
 - any **flagged** node → the **orbits**, in the node's own colour (its status colour
   for a task, the project violet for a project);
 - a project node and its terminus → the panel is `--c-project-tint`, a tint of the
-  project violet, in place of the `--panel` colour every task wears, so a scope's two
-  ends read as one material;
-- a **collapsed** project node → nothing additional. Its close is placed flush on its
-  card instead (see below), which is what says the scope is shut.
+  scope teal (`#cbe6e4` on azure, `#356e69` on navy), in place of the `--panel` colour
+  every task wears, so a scope's two ends read as one material;
+- a **collapsed** project node → nothing additional. Its close is placed on its card
+  instead (see below), which is what says the scope is shut; the card takes a little more
+  padding at the top so its label clears the close's ink.
 
 A project node shows no status glyph and no tag and can never be the cursor, so the
 violet and the hull shape read unambiguously as "this is a project, not a task." The
 orbits are no longer tied to project-ness: they mark the flagged state, toggled by
 double-clicking a node (see `docs/interaction_model.md`).
+
+## The hull's curve, and room for a label
+
+The hull bows into its own card at top and bottom where a task's rounded rectangle does
+not, and until 3.2.1 that bow was scaled by the card's height: the top edge dipped by
+0.1424 of h. A project node's label is centred, so its first line sits at
+`(h - lines * 18) / 2` from the top, and the curve descended faster than the text did. At
+one line the card is held at its 58-pixel minimum and the text starts at 20, clear of a dip
+of 11.7; at two lines the text starts at 11 and the dip is 11.7, so they touch; at five
+lines the text still started at 11 while the dip had reached 19.6, and the first line was
+half swallowed.
+
+Two things fix it, and both are needed. The curve is scaled by `Math.min(h, capHeight)`
+with `capHeight` the project card's own 58, so the dip stops at 8.3 pixels on the outer
+path and about 13.8 on the panel's edge whatever the card's height. And `.card.project`
+takes 16 pixels of vertical padding rather than the 11 a task takes, which, the label being
+centred, does not move the text within a card of a given height but makes the card taller,
+so the label lands 16 from the top and 16 from the bottom at every line count above one.
+
+A pleasant consequence: with the curve capped, the overlap a folded pair needs to shut its
+seam is a constant 19.5 at every card size, so the `foldSeam` metric of 22 always governs.
 
 ## A folded scope, drawn shut
 
@@ -110,13 +132,27 @@ overflow the card box. Two are in use; the third, the shadow, is retired.
   than the def. (The older four-plus spoke `#starburst` remains in the defs but is not
   the cursor mark.)
 
-## Reserved colour
+## The two hues, and which meaning each carries
 
-`--c-project` is reserved for project nodes and used nowhere else, in both grounds
-(azure and navy). Reserving one hue for one meaning is what lets the eye read
-"project" from colour alone, before any label. See
-[`src/renderer/src/style.css`](../src/renderer/src/style.css) for the two-ground
-token definitions.
+The map gives meaning to two colours: **teal marks the structure of a plan**, a project
+node and its close, and **violet marks a task that is done**. Reserving one hue for one
+meaning is what lets the eye read a card's kind from colour alone, before any label.
+
+They were the other way round until 3.2.1. Completed tasks are numerous and small while
+scopes are few and large, a folded pair being the largest single object in a drawing, so
+the palette was giving the loud colour to the count and the quiet one to the mass.
+
+`style.css` therefore names each hue twice: once by hue (`--accent-teal`,
+`--accent-violet`) and once by role (`--c-project`, `--c-done`, which are defined in terms
+of the first pair). The role names are what the map uses, so exchanging the roles is one
+line per ground. The hue names exist for the handful of surfaces outside the map that want
+a particular colour rather than a particular meaning: the MCP status dot, a link inside a
+note, and the note editor's syntax colours. Those do not move when the roles do.
+
+The scope colour also has a panel tint, `--c-project-tint`, which every project node and
+close wears in place of `--panel`. See
+[`src/renderer/src/style.css`](../src/renderer/src/style.css) for the two-ground token
+definitions.
 
 ## Label hyphenation
 
