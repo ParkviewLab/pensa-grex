@@ -384,6 +384,10 @@ function resolveDropIntent(sourceId, clientX, clientY) {
   for (const [pid, p] of Object.entries(currentRecord.nodes)) {
     const ps = byId.get(pid)
     if (!ps || Math.abs(wx - ps.x) > CARET_HALF) continue
+    // The open band above a line's tip is a real target on a branch (the drop becomes
+    // the branch's new top) and a trap on a plan's close: nothing may sit above one, the
+    // authority refuses the splice, and a caret here would promise what a drop cannot do.
+    if (!p.next && isPlanClose(currentRecord, pid)) continue
     const q = p.next ? byId.get(p.next) : null
     const yBot = ps.cardTop
     const yTop = q ? q.cardTop + q.cardH : ps.cardTop - TIP_GAP

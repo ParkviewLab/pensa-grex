@@ -566,6 +566,21 @@ describe('returns: where a structural edit leaves a merge point', () => {
     valid(out)
   })
 
+  it('a node spliced out of one branch does not carry its return address into another', () => {
+    // n is the tip of its own single-node branch off m2, so it stores that branch's
+    // merge point. Moved onto the b-branch's trunk above b2, it becomes THAT branch's
+    // tip; if the stale address travelled with it, relocateReturns' topmost-wins sweep
+    // would read it as the b branch's return and silently rewrite m1 to m2. The address
+    // stays with the trunk it described, not with the node that happened to hold it.
+    const before = openBranch(base(), 'm2', 'X')
+    const n = newId(base(), before)
+    expect(before.nodes[n].mergePoint).toBe('m2')
+    const out = moveIntoLine(before, n, 'b2')
+    expect(out.nodes.b2.next).toBe(n) // n sits above b2, the b branch's new tip...
+    expect(out.nodes[n].mergePoint).toBe('m1') // ...and the branch keeps ITS return, not n's old one
+    valid(out)
+  })
+
   it('clamps a branch to its own edge when the node its return named is deleted', () => {
     // Clamping is the only answer available where the named edge has gone with m2, and
     // the smallest legal branch is the one every branch begins as.
