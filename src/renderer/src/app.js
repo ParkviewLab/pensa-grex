@@ -14,7 +14,7 @@ import { createViewport } from './interaction/viewport.js'
 import { mountLayout } from './render/scene.js'
 import { renderCards } from './render/shapes.js'
 import { buildModel } from '../../shared/model/model.js'
-import { clipNodes } from '../../shared/model/mutations.js'
+import { clipNodes, wrapCandidates } from '../../shared/model/mutations.js'
 import { branchChildrenOf, isPlanClose, branchesIn, indexRecord, mergeErrors, pairScopes, trunksOf, scopeOf, extentOf, reachableFrom } from '../../shared/model/validate.js'
 import { measureDomain } from './layout/measure.js'
 import { computeDomainLayout } from './layout/layout.js'
@@ -608,6 +608,47 @@ async function addBranchFlow(dir, taskId) {
   applyOp(dir === 'above' ? 'addBranchAbove' : 'addBranchBelow', taskId, title)
 }
 
+// The runs starting at `taskId` that may be named as a sub-project, as a menu of their last
+// node. Wrapping takes two nodes to be named and there is no selection mechanism, so the
+// click names the run's base and the submenu names its top, exactly as "Merge a branch here"
+// resolves the same problem. The candidates come from wrapCandidates, which asks wrapRun
+// itself, so the menu cannot offer a run the authority will refuse.
+function wrapRunFlow(fromId, toId) {
+  const of = (id) => (currentRecord.nodes[id].kind === 'terminus' ? 'the close' : currentRecord.nodes[id].title)
+  const suggestion = fromId === toId ? of(fromId) : of(fromId) + ' to ' + of(toId)
+  promptText({ title: 'Wrap as sub-project', label: 'Name', value: suggestion }).then((title) => {
+    if (title === null || !title.trim()) return
+    applyOp('wrapRun', fromId, toId, title.trim())
+  })
+}
+
+function wrapCandidateMenu(taskId) {
+  return wrapCandidates(currentRecord, taskId).map((toId, i) => ({
+    label: i === 0
+      ? 'Just this one'
+      : 'Up to “' + (currentRecord.nodes[toId].kind === 'terminus' ? 'the close' : currentRecord.nodes[toId].title) + '”',
+    onClick: () => wrapRunFlow(taskId, toId),
+  }))
+}
+
+// Remove a node's note: the file and the record's reference to it, in that order, as
+// delete_note does over MCP. The editor is closed first if it is open on that note, since
+// what it holds is about to stop existing.
+async function deleteNoteFlow(taskId) {
+  const task = currentRecord.nodes[taskId]
+  if (!task || !task.note) return
+  const confirm = await chooseAction({
+    title: 'Delete note',
+    message: 'Delete the note on “' + (task.title || taskId) + '”? The text is not recoverable.',
+    actions: [{ label: 'Cancel', value: null }, { label: 'Delete note', value: 'del', kind: 'danger' }],
+  })
+  if (confirm !== 'del') return
+  noteEditor.closeIfOpen(taskId)
+  const res = await api.deleteNote(currentDomainPath, task.note)
+  if (res && res.error) { reportEditError(res.error); return }
+  applyOp('setNote', taskId, null)
+}
+
 // The branches that could legally rejoin the trunk at the edge above `taskId`, as a menu
 // of their feet. A branch's return is stored on the branch, so moving one takes two things
 // to be named, the branch and the target; there being no selection mechanism, the click
@@ -703,6 +744,13 @@ function openTaskMenu(x, y, taskId) {
       ? { label: 'Make task', onClick: () => applyOp('convertKind', taskId) }
       : { label: 'Make sub-project', onClick: () => applyOp('convertKind', taskId) })
   }
+  // Name a run of this trunk as a sub-project, the click naming its base and the submenu
+  // its top. Withheld from a plan's base, whose scope is the plan itself and which cannot
+  // be the base of a run inside it.
+  if (!isRoot) {
+    const wraps = wrapCandidateMenu(taskId)
+    if (wraps.length) items.push({ label: 'Wrap as sub-project', submenu: wraps })
+  }
   // Collapse/expand folds a project node's subtree (client-local view state).
   if (isProject) {
     items.push(collapsedSet.has(taskId)
@@ -738,6 +786,8 @@ function openTaskMenu(x, y, taskId) {
   if (merges.length) items.push({ label: 'Merge a branch here', submenu: merges })
   items.push({ separator: true })
   items.push({ label: 'Edit note…', onClick: () => openNote(taskId) })
+  // Offered only where there is one to delete, so the item's presence says a note exists.
+  if (task.note) items.push({ label: 'Delete note…', onClick: () => deleteNoteFlow(taskId) })
   items.push({ separator: true })
   items.push({ label: 'Delete…', onClick: () => deleteTaskFlow(taskId) })
 
