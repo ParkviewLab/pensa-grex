@@ -503,15 +503,16 @@ describe('solveHeights — a folded scope, drawn shut', () => {
     expect(airBelow.get('T')).toBe(-(METRICS.anchorGap + seam))
   })
 
-  it('takes more than the metric where a taller project card needs it', () => {
-    // The hull's edges bow away from the seam in proportion to their own card's height, so a
-    // tall project card would reopen a lens at a fixed overlap. 90 by 40 needs 21.5... and 22
-    // still covers it; 120 by 58 does not, so the pair takes what it needs.
-    const tall = sizesOf({ P: [188, 120], T: [188, 58], a: [188, 50] })
-    const need = hullSeamToClose(120, 58)
-    expect(need).toBeGreaterThan(METRICS.foldSeam)
+  it('shuts by the same amount at every card size, the curve no longer growing with height', () => {
+    // The hull's curve is scaled by the card's height only up to the project card's minimum
+    // (render/shapes.js hullCurveHeight), so what the seam needs is the same for any pair:
+    // 19.5, which the metric's 22 covers. Before the cap the curve deepened with the card and
+    // a tall project would have reopened the lens at a fixed overlap.
+    expect(hullSeamToClose(58, 58)).toBeCloseTo(hullSeamToClose(300, 58), 9)
+    expect(hullSeamToClose(300, 58)).toBeLessThan(METRICS.foldSeam)
+    const tall = sizesOf({ P: [188, 122], T: [188, 58], a: [188, 50] })
     const { cardTopY } = solveHeights(folded(), tall, METRICS)
-    expect(cardTopY.get('T') + 58).toBeCloseTo(cardTopY.get('P') + need, 9)
+    expect(cardTopY.get('T') + 58).toBe(cardTopY.get('P') + METRICS.foldSeam)
   })
 
   it('holds the seam against a repair, and sends the lift to the project node', () => {

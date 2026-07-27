@@ -65,7 +65,19 @@ const BORDERS = {
 // quadratic from `start` of the card's height at the left corner, through a control point at
 // `control`, to the top edge itself at the right corner. A folded pair's seam depends on both
 // figures, so they are named here rather than restated wherever the seam is computed.
-export const HULL = { margin: 1.5, top: { start: 0.10, control: 0.22 } }
+//
+// The curve is scaled by the card's height only up to `capHeight`, the project card's own
+// minimum. Past that it stops growing. A project node's label is centred, so its first line
+// sits at (h - lines * lineHeight) / 2 from the top while an uncapped curve descends at
+// `dip` of h: the curve outruns the text, and a card of five lines swallowed its own first
+// line. Capping also keeps the silhouette one shape rather than one that grows more
+// extravagant the more one types.
+export const HULL = { margin: 1.5, top: { start: 0.10, control: 0.22 }, bottom: 0.05, capHeight: 58 }
+
+// The height the hull's curve is drawn at: its own, until the cap.
+export function hullCurveHeight(h) {
+  return Math.min(h, HULL.capHeight)
+}
 
 // How far below its card's top the hull's top edge reaches at its lowest, as a fraction of the
 // card's height. A quadratic from a, through control b, to 0 has its extreme at
@@ -82,7 +94,7 @@ export const HULL_DIP = (() => {
 // the seam by up to HULL_DIP of its own card's height. Less than this and a lens of the ground
 // shows through the middle; the layout takes the greater of this and its own `foldSeam`.
 export function hullSeamToClose(hProject, hClose) {
-  return 2 * HULL.margin + HULL_DIP * (hProject + hClose)
+  return 2 * HULL.margin + HULL_DIP * (hullCurveHeight(hProject) + hullCurveHeight(hClose))
 }
 
 // The outer silhouette path for a shape at size w x h (margin m off the edges).
@@ -110,9 +122,10 @@ function outerPath(shape, w, h) {
   if (shape === 'hull') {
     // Wide, slightly concave top; sides taper inward; convex bottom.
     const inset = 0.13 * w
-    return `M${x0},${(y0 + HULL.top.start * h).toFixed(1)} Q${cx},${(y0 + HULL.top.control * h).toFixed(1)} ${x1},${y0}` +
-      ` L${(x1 - inset).toFixed(1)},${(y1 - 0.05 * h).toFixed(1)}` +
-      ` Q${cx},${y1} ${(x0 + inset).toFixed(1)},${(y1 - 0.05 * h).toFixed(1)} Z`
+    const ch = hullCurveHeight(h)
+    return `M${x0},${(y0 + HULL.top.start * ch).toFixed(1)} Q${cx},${(y0 + HULL.top.control * ch).toFixed(1)} ${x1},${y0}` +
+      ` L${(x1 - inset).toFixed(1)},${(y1 - HULL.bottom * ch).toFixed(1)}` +
+      ` Q${cx},${y1} ${(x0 + inset).toFixed(1)},${(y1 - HULL.bottom * ch).toFixed(1)} Z`
   }
   // screen
   const R = Math.min(14, (h - 2 * m) / 2, (w - 2 * m) / 2)

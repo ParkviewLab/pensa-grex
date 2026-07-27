@@ -24,14 +24,19 @@ SPDX-License-Identifier: CC-BY-4.0
 :root[data-ground="azure"]{
   --ground:#d3e6ef; --panel:#f8f3e8; --ink:#173242; --line:#365b6c; --muted:#5f7d8b;
   --grid:rgba(23,50,66,.10);
-  --c-done:#1f8f8a; --c-prog:#d75f2e; --c-todo:#d9a53a; --c-cancel:#8aa0ab; --c-project:#7d54a6; --cursor:#d75f2e;
-  --burst-a:#1f8f8a; --burst-b:#d9a53a; --here-ink:var(--ink);
+  /* The page draws no map, so these are accents rather than the statuses they are in the
+     app: the four download tiles take one each, and the teal carries links, the key words in
+     the trio and the MCP dot. Named by hue for that reason. In 3.2.1 the app exchanged what
+     its teal and violet MEAN (teal now marks a plan's structure, violet a finished task);
+     nothing here changed colour, because nothing here carries a meaning to exchange. */
+  --accent-teal:#1f8f8a; --accent-orange:#d75f2e; --accent-amber:#d9a53a; --accent-violet:#7d54a6;
+  --here-ink:var(--ink);
 }
 :root[data-ground="navy"]{
   --ground:#0f2334; --panel:#1a3a54; --ink:#e8f1f6; --line:#6fb6c9; --muted:#93b3c2;
   --grid:rgba(111,182,201,.13);
-  --c-done:#37c2ba; --c-prog:#f27a44; --c-todo:#f0bd55; --c-cancel:#7590a0; --c-project:#bd93e6; --cursor:#f27a44;
-  --burst-a:#37c2ba; --burst-b:#f0bd55; --here-ink:var(--ground);
+  --accent-teal:#37c2ba; --accent-orange:#f27a44; --accent-amber:#f0bd55; --accent-violet:#bd93e6;
+  --here-ink:var(--ground);
 }
 
 *{box-sizing:border-box;}
@@ -42,7 +47,7 @@ body{
   background-size:40px 40px;
   min-height:100vh; line-height:1.55;
 }
-a{color:var(--c-done);}
+a{color:var(--accent-teal);}
 
 /* Top bar echoing the app's chrome. */
 .topbar{display:flex; align-items:center; justify-content:space-between; gap:12px;
@@ -56,7 +61,7 @@ a{color:var(--c-done);}
 .seg button.on{background:var(--ink); color:var(--ground);}
 .mcp-chip{display:inline-flex; align-items:center; gap:7px; font-size:12px; color:var(--muted);
   border:1px solid var(--line); border-radius:5px; padding:5px 10px;}
-.mcp-dot{width:8px; height:8px; border-radius:50%; background:var(--c-done);
+.mcp-dot{width:8px; height:8px; border-radius:50%; background:var(--accent-teal);
   box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--ink) 25%, transparent);}
 
 .wrap{max-width:1040px; margin:0 auto; padding:0 20px;}
@@ -69,7 +74,7 @@ a{color:var(--c-done);}
 :root[data-ground="navy"] .hero-mark .icon-day{display:none;}
 :root[data-ground="navy"] .hero-mark .icon-night{display:block;}
 .wordmark{font-family:var(--font-display); font-size:clamp(46px,8vw,84px); line-height:.98; letter-spacing:.01em; margin:0 0 6px; color:var(--ink);}
-.tagline{font-family:var(--font-display); font-size:clamp(20px,3.2vw,30px); color:var(--c-prog); margin:0 0 16px; letter-spacing:.01em;}
+.tagline{font-family:var(--font-display); font-size:clamp(20px,3.2vw,30px); color:var(--accent-orange); margin:0 0 16px; letter-spacing:.01em;}
 .lede{font-size:16px; color:var(--ink); max-width:46ch; margin:0 0 26px;}
 .lede .muted{color:var(--muted);}
 
@@ -77,7 +82,7 @@ a{color:var(--c-done);}
 .dl-head{display:flex; align-items:baseline; gap:12px; margin:0 0 14px;}
 .dl-head h2{font-family:var(--font-display); font-weight:400; font-size:22px; letter-spacing:.02em; margin:0; color:var(--ink);}
 .verbadge{font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--here-ink);
-  background:var(--c-done); padding:2px 8px; border-radius:3px; font-weight:800;}
+  background:var(--accent-teal); padding:2px 8px; border-radius:3px; font-weight:800;}
 .tiles{display:grid; grid-template-columns:repeat(2,1fr); gap:12px;}
 .tile{display:flex; align-items:center; gap:11px; text-decoration:none; color:var(--ink);
   background:var(--panel); border:3px solid var(--accent); border-bottom-width:5px; border-radius:15px;
@@ -87,8 +92,8 @@ a{color:var(--c-done);}
 .tile .glyph{width:13px; height:13px; border-radius:50%; background:var(--accent); flex:none;}
 .tile .t-os{font-family:var(--font-display); font-size:18px; line-height:1.05; color:var(--ink);}
 .tile .t-kind{font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin-top:2px;}
-.tile.mac{--accent:var(--c-done);} .tile.win{--accent:var(--c-prog);}
-.tile.lin-appimage{--accent:var(--c-todo);} .tile.lin-deb{--accent:var(--c-project);}
+.tile.mac{--accent:var(--accent-teal);} .tile.win{--accent:var(--accent-orange);}
+.tile.lin-appimage{--accent:var(--accent-amber);} .tile.lin-deb{--accent:var(--accent-violet);}
 .dl-note{font-size:12px; color:var(--muted); margin:12px 0 0;}
 .dl-note a{color:var(--muted); text-decoration:underline;}
 
@@ -105,7 +110,7 @@ a{color:var(--c-done);}
 .trio{display:grid; grid-template-columns:repeat(3,1fr); gap:20px; padding:8px 0 20px;}
 .pt h3{font-family:var(--font-display); font-weight:400; font-size:20px; letter-spacing:.02em; margin:0 0 6px; color:var(--ink);}
 .pt p{font-size:14px; color:var(--muted); margin:0;}
-.pt .k{color:var(--c-done);}
+.pt .k{color:var(--accent-teal);}
 
 /* Connect-to-Claude-Code section. */
 .connect{margin:8px 0 48px;}
@@ -114,7 +119,7 @@ a{color:var(--c-done);}
 .steps{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:18px;}
 .steps > li{display:flex; gap:14px; align-items:flex-start;}
 .step-n{flex:none; width:30px; height:30px; border-radius:50%; display:grid; place-items:center;
-  background:var(--c-done); color:var(--here-ink); font-family:var(--font-display); font-size:17px; line-height:1;}
+  background:var(--accent-teal); color:var(--here-ink); font-family:var(--font-display); font-size:17px; line-height:1;}
 .step-body{min-width:0;}
 .steps h3{font-family:var(--font-display); font-weight:400; font-size:18px; letter-spacing:.01em; margin:3px 0 3px; color:var(--ink);}
 .steps p{font-size:14px; color:var(--muted); margin:0 0 8px;}
@@ -127,7 +132,7 @@ a{color:var(--c-done);}
 .copy{flex:none; font:inherit; font-size:11px; letter-spacing:.06em; text-transform:uppercase; cursor:pointer;
   border:1px solid var(--line); background:var(--panel); color:var(--muted); border-radius:5px; padding:6px 11px;}
 .copy:hover{color:var(--ink); border-color:var(--ink);}
-.copy.done{color:var(--c-done); border-color:var(--c-done);}
+.copy.done{color:var(--accent-teal); border-color:var(--accent-teal);}
 
 footer{border-top:1px solid var(--line); padding:26px 0 40px; font-size:12.5px; color:var(--muted);}
 footer .wrap{display:flex; flex-wrap:wrap; justify-content:space-between; gap:10px;}
@@ -163,8 +168,8 @@ footer a{color:var(--muted); text-decoration:underline;}
     <div class="hero-copy">
       <h1 class="wordmark">PensaGrex</h1>
       <p class="tagline">Keep track of what you &amp; your AI are doing</p>
-      <p class="lede">Build branching trees of tasks in cooperation with your AI. You and your AI can
-        add and edit markdown notes for any task. Drag &amp; drop tasks and trees of tasks to wherever
+      <p class="lede">Build branching plans of tasks in cooperation with your AI. You and your AI can
+        add and edit markdown notes for any task. Drag &amp; drop tasks and whole plans to wherever
         you want. Flag the tasks you want your AI to focus on. Let your AI change tasks
         as it works on them, and you&rsquo;ll see it all happen, as it happens, in PensaGrex.</p>
 
@@ -202,13 +207,13 @@ footer a{color:var(--muted); text-decoration:underline;}
            onerror="this.style.display='none'; document.getElementById('shot-ph').style.display='block';">
       <div class="shot-ph" id="shot-ph" style="display:none;">The app screenshot goes here.</div>
     </div>
-    <p class="shot-cap">A domain of project plans, live.</p>
+    <p class="shot-cap">Create multiple domains of project plans. Add markdown notes to any task. Watch live as your AI edits and updates plans.</p>
   </section>
 
   <section class="trio">
     <div class="pt"><h3><span class="k">The structure</span> is the model.</h3><p>Projects, tasks, branches. A plan opens and closes, and work that runs alongside comes back: the shape is the work, not a decoration on a flat list.</p></div>
     <div class="pt"><h3><span class="k">Legible</span> at a glance.</h3><p>Status is colour, a fork is a junction, and the leaning marquee shows where you are before you read a word.</p></div>
-    <div class="pt"><h3><span class="k">Yours</span>, and local.</h3><p>One JSON file per domain, in a directory beside its markdown notes. Grep it, diff it, sync it, keep it.</p></div>
+    <div class="pt"><h3><span class="k">For you</span> <em>and</em> your AI.</h3><p>It is an MCP server while it runs, so Claude Code can read a plan, add tasks and mark them done while you watch the map change.</p></div>
   </section>
 
   <section class="connect">
