@@ -195,22 +195,34 @@ export function registerTools(server, deps, scope) {
   const record = (dir) => readRecordOrThrow(taskService, dir)
 
   // A prompt (a client "workflow") baking in the re-read-first discipline for the
-  // common "work the flagged tasks" case; exposed in every scope tier.
+  // common "work the flagged nodes" case; exposed in every scope tier.
+  //
+  // A prompt is the one place this surface can state an ORDER rather than a rule, so it
+  // restates the tools' own vocabulary and can fall behind them. Two things keep it honest.
+  // Every tool it names is written with parentheses, which is the convention tools.test.js
+  // enforces in both directions, so a rename that misses this file fails a test instead of
+  // shipping a prompt that instructs a call no longer on the surface. And the same test walks
+  // the steps below against the real surface, which is what a name check alone cannot do:
+  // v3.3.0 made the reads strict about kind, whereupon "read_project for context" instructed a
+  // refusal, a flagged node ordinarily being a task. Step 2 passes the enclosing project's id
+  // for exactly that reason, and find_flagged now reports it.
   server.registerPrompt('work_flagged', {
-    title: 'Work the flagged tasks',
-    description: 'Plan and work the tasks flagged for an assistant, re-reading current state before each step.',
+    title: 'Work the flagged nodes',
+    description: 'Plan and work the nodes flagged for an assistant, re-reading current state before each step.',
     argsSchema: { domain: z.string().optional() },
   }, (a) => ({
     messages: [{
       role: 'user',
       content: {
         type: 'text',
-        text: 'Work the flagged tasks in ' + (a && a.domain ? '"' + a.domain + '"' : 'the open domain') + '. '
+        text: 'Work the flagged nodes in ' + (a && a.domain ? '"' + a.domain + '"' : 'the open domain') + '. '
+          + 'The flag marks what the user selected for an assistant; it sits on tasks and on projects alike, never on a close. '
           + 'The domain is live and can change under you, so: '
-          + '(1) call find_flagged NOW to get the current flagged tasks, never trusting an earlier read; '
-          + '(2) for each, read_note for what is asked and read_project for context; '
-          + '(3) do the work, then set_status / set_note, re-reading (find_flagged / read_project) immediately before each write to confirm the target still exists and is still the one you mean; '
-          + '(4) set a task to completed when it is done.',
+          + '(1) call find_flagged() NOW for the current flagged nodes, never trusting an earlier read; '
+          + '(2) each hit reports where it sits and what it carries: read_note(node_id) where has_note is true, and read_project(enclosing_project_id) for the plan around it, passing THAT id, since read_project() reads a project and refuses a task; '
+          + '(3) a flagged project is a scope to work through, which read_project() reads by its own id; a flagged task is one thing to do; '
+          + '(4) do the work, then set_note() and set_status(), re-reading the node itself immediately before each write, with read_task() or read_project() as its kind requires, to confirm it still exists and is still the one you mean; '
+          + '(5) only a task carries a status, so set a task to completed when it is done, and finish a flagged project by completing the tasks inside it.',
       },
     }],
   }))
