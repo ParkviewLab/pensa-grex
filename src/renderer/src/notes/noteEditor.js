@@ -75,7 +75,7 @@ function elem(tag, className, text) {
   return el
 }
 
-// readNote/writeNote/openExternal come from bridge/api.js; onFirstWrite(taskId,
+// readNote/writeNote/openExternal come from bridge/api.js; onFirstWrite(nodeId,
 // filename) lets the caller record the note filename on a task once its note
 // first gains content (so the .card.note dot appears and the name is persisted).
 export function createNoteEditor({ readNote, writeNote, openExternal, onFirstWrite, notify }) {
@@ -105,7 +105,7 @@ export function createNoteEditor({ readNote, writeNote, openExternal, onFirstWri
   document.body.append(backdrop)
 
   let domainPath = null
-  let taskId = null
+  let nodeId = null
   let file = null
   let raw = ''
   let editMode = false
@@ -148,11 +148,11 @@ export function createNoteEditor({ readNote, writeNote, openExternal, onFirstWri
   }
 
   // Snapshot the target before the await: close() may reset the module state
-  // (domainPath/taskId/file/raw) while this write is in flight, so reading them
+  // (domainPath/nodeId/file/raw) while this write is in flight, so reading them
   // afterward for the onFirstWrite bookkeeping would use the cleared values.
   async function save() {
     if (file === null) return
-    const dir = domainPath, f = file, id = taskId, text = raw
+    const dir = domainPath, f = file, id = nodeId, text = raw
     const firstWrite = !recorded && text.trim().length > 0
     const r = await writeNote(dir, f, text)
     if (r && r.error) { console.warn('[note save]', r.error); return }
@@ -170,7 +170,7 @@ export function createNoteEditor({ readNote, writeNote, openExternal, onFirstWri
   // record; `raw` in this module is the editor's own text.
   async function reconcile(dir, record) {
     if (!isOpen() || domainPath !== dir || file === null) return
-    const taskExists = !!(record && record.nodes[taskId])
+    const taskExists = !!(record && record.nodes[nodeId])
     if (!taskExists) {
       close()
       if (notify) notify('The task whose note you were editing was removed by another writer, so the note was closed.')
@@ -369,7 +369,7 @@ export function createNoteEditor({ readNote, writeNote, openExternal, onFirstWri
   // its own by the grammar, so the caller names it: "the close of X", the phrase the markdown
   // export uses for the same node.
   async function open(task, dir, label) {
-    taskId = task.id
+    nodeId = task.id
     domainPath = dir
     file = task.note || noteFileName(task.id, task.title)
     recorded = !!task.note
@@ -402,7 +402,7 @@ export function createNoteEditor({ readNote, writeNote, openExternal, onFirstWri
     destroyEditor()
     backdrop.classList.add('hidden')
     body.innerHTML = ''
-    domainPath = taskId = file = null
+    domainPath = nodeId = file = null
     raw = ''
     editMode = false
   }
@@ -411,12 +411,12 @@ export function createNoteEditor({ readNote, writeNote, openExternal, onFirstWri
   // editor is showing is about to be deleted, so a pending autosave would write the file
   // back moments before it goes, or moments after.
   function closeIfOpen(id) {
-    if (!isOpen() || taskId !== id) return false
+    if (!isOpen() || nodeId !== id) return false
     if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
     destroyEditor()
     backdrop.classList.add('hidden')
     body.innerHTML = ''
-    domainPath = taskId = file = null
+    domainPath = nodeId = file = null
     raw = ''
     editMode = false
     return true

@@ -243,7 +243,7 @@ function rangesOverlap(a, b) {
 // needs to know about the vertical; it only ever asks whether two extents overlap.
 export function assignLanes(model, extentOf) {
   const extent = extentOf
-  const lineOfTask = new Map() // taskId -> the line's own start-task id
+  const lineOfNode = new Map() // nodeId -> the line's own start-task id
   const lineExtents = new Map() // lineId -> {min,max} of the line's own extent, in pixels
   const planOfLine = new Map() // lineId -> the tree root's task id
   const lane = new Map() // lineId -> absolute integer lane
@@ -256,7 +256,7 @@ export function assignLanes(model, extentOf) {
     let id = startId
     while (id) {
       ids.push(id)
-      lineOfTask.set(id, startId)
+      lineOfNode.set(id, startId)
       const task = model.getNode(id)
       id = task ? task.next : null
     }
@@ -341,10 +341,10 @@ export function assignLanes(model, extentOf) {
   }
 
   for (const tree of model.plans) {
-    collectChildren(tree.rootTaskId)
-    layout(tree.rootTaskId)
-    assignAbsolute(tree.rootTaskId, 0, tree.rootTaskId)
+    collectChildren(tree.baseId)
+    layout(tree.baseId)
+    assignAbsolute(tree.baseId, 0, tree.baseId)
   }
 
-  return { lineOfTask, lineExtents, lane, planOfLine }
+  return { lineOfNode, lineExtents, lane, planOfLine }
 }

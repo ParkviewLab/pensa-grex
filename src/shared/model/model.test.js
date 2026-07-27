@@ -19,7 +19,7 @@ describe('buildModel — the HomeLab fixture', () => {
   it('carries the domain and all three projects, named by their root nodes, in planOrder', () => {
     expect(model.title).toBe('HomeLab') // the domain's name; the domain also has an id of its own now
     expect(model.id).toBe('d_homelab000')
-    expect(model.plans.map((t) => model.getNode(t.rootTaskId).title)).toEqual(['Media server', 'Home network', 'Home automation'])
+    expect(model.plans.map((t) => model.getNode(t.baseId).title)).toEqual(['Media server', 'Home network', 'Home automation'])
     expect(model.plans.map((t) => t.id)).toEqual(['p_media', 'p_net', 'p_auto'])
   })
 
@@ -48,13 +48,13 @@ describe('buildModel — the HomeLab fixture', () => {
   })
 
   it('assigns every node to the tree its root reaches, forks included', () => {
-    expect(model.getPlanIdForTask('p_media')).toBe('p_media')
-    expect(model.getPlanIdForTask('k_nas')).toBe('p_media')
-    expect(model.getPlanIdForTask('k_plex')).toBe('p_media') // a branch task, same tree as its root
-    expect(model.getPlanIdForTask('k_btrfs')).toBe('p_media')
-    expect(model.getPlanIdForTask('k_wifi')).toBe('p_net')
-    expect(model.getPlanIdForTask('k_energy')).toBe('p_auto')
-    expect(model.getPlanIdForTask('t_net')).toBe('p_net') // Termini: a close belongs to the tree it closes
+    expect(model.getPlanIdForNode('p_media')).toBe('p_media')
+    expect(model.getPlanIdForNode('k_nas')).toBe('p_media')
+    expect(model.getPlanIdForNode('k_plex')).toBe('p_media') // a branch task, same tree as its root
+    expect(model.getPlanIdForNode('k_btrfs')).toBe('p_media')
+    expect(model.getPlanIdForNode('k_wifi')).toBe('p_net')
+    expect(model.getPlanIdForNode('k_energy')).toBe('p_auto')
+    expect(model.getPlanIdForNode('t_net')).toBe('p_net') // Termini: a close belongs to the tree it closes
   })
 
   it('walks the main-line chain via .next, stopping at a tip', () => {
