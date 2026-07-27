@@ -58,7 +58,7 @@ The dragged node's kind and the drop location pick one of these pure moves:
   a project node carries its scope, and that scope's close then continues onto the
   gap's old upper node. Refused inserting a scope into its own line (a cycle) or
   above itself.
-- **detachToTree** — a sub-project dropped on empty canvas becomes its own plan:
+- **detachProject** — a sub-project dropped on empty canvas becomes its own plan:
   the pair leaves the trunk it was on, the trunk is joined across the gap, and the
   project node's id is appended to `planOrder`. Only a project node can be a root, so
   a task dropped on empty canvas is refused (it cannot become a root).
@@ -72,6 +72,14 @@ moveDown** swap a node with its main-line neighbour, keeping each node's own
 branches (a clean positional swap, distinct from `moveIntoLine`'s splice). "Move
 up" needs a successor and a non-root node; "move down" needs a non-root main-line
 predecessor to swap below.
+
+*A close is the one node these will not take as their operand*, since moving it alone would
+quietly resize its scope, taking in a node that was outside it or letting go of one that was
+inside; the record would still be bracket-matched, so nothing downstream would object. The scope
+moves by its project node, which carries its close. **Moving a node PAST a close is a different
+thing and is allowed**: swapping a node with the close above it is how one says that node is no
+longer part of the sub-project, and the map shows the result at once. So a scope's membership
+changes by moving the member, never by moving the boundary.
 
 ### Two verbs that need a second node named
 
@@ -105,7 +113,7 @@ sit on.
 so a move that changes where a branch sits has to keep that merge legal, and one
 reshaping has to be refused outright rather than drawn: extending a merge across
 the close of a scope the branch was opened outside, which would leave a return line
-landing inside a collapsed block. `detachToTree` acquires the second purpose that
+landing inside a collapsed block. `detachProject` acquires the second purpose that
 the new axiom 3 gives it, as the way to say that work diverged and will not rejoin,
 which a branch may no longer say.
 

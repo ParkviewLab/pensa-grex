@@ -75,7 +75,7 @@ without anyone noticing:
 
 The final sentence is the only part with a user-visible cost. A permanent divergence is a real thing, two
 efforts that happened to start from one point and went their own ways, and under these axioms it can no longer
-be drawn inside one plan. The operation that resolves it already exists as `detachToTree`, which acquires a
+be drawn inside one plan. The operation that resolves it already exists as `detachProject`, which acquires a
 second and better-defined purpose: the way out when work genuinely does not rejoin. So add-branch and detach
 become a pair of choices at the moment of divergence, where today add-branch alone covers both cases.
 

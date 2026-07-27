@@ -268,7 +268,7 @@ describe('computeDomainLayout — the HomeLab fixture', () => {
 
 describe('computeDomainLayout — edge cases', () => {
   it('returns finite empty-model bounds rather than NaN', () => {
-    const emptyModel = { trees: [], nodes: new Map(), getTreeIdForTask: () => null }
+    const emptyModel = { plans: [], nodes: new Map(), getPlanIdForTask: () => null }
     const layout = computeDomainLayout(emptyModel, new Map())
     expect(layout.stations).toEqual([])
     expect(Number.isFinite(layout.bounds.w)).toBe(true)
@@ -524,14 +524,14 @@ describe('computeDomainLayout — after drag-and-drop moves', () => {
   // Termini: the subject was k_migrate, a node on the media plan's own trunk.
   // Converting it now opens a scope closed above it on that trunk, and the plan's
   // own close sits above that again, so cutting k_migrate's incoming edge carries
-  // the plan's close away with it and leaves p_media unclosed — detachToTree does
+  // the plan's close away with it and leaves p_media unclosed — detachProject does
   // not refuse it, but the result is not a legal record and there is nothing for
   // this test to draw. A sub-project that CAN be detached is one whose trunk is a
   // branch line, since its close tops that line: k_wifi (a branch of k_vlan, with
   // k_roam above it) converts to a project closed above k_roam, and detaching the
   // branch takes the whole scope, close and all. Same operation, same assertions.
   it('stays drawable after detaching a converted sub-project into its own tree', () => {
-    drawable(M.detachToTree(M.convertKind(fresh(), 'k_wifi'), 'k_wifi'))
+    drawable(M.detachProject(M.convertKind(fresh(), 'k_wifi'), 'k_wifi'))
   })
 
   it('stays drawable after reordering a root', () => {

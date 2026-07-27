@@ -161,7 +161,10 @@ is never silently discarded.
 ## Tool surface
 
 Task-level tools, not the coarse whole-forest load and save, across the three
-scope tiers. Full functionality: every mutation in `mutations.js` is exposed. A
+scope tiers. Nearly every mutation in `mutations.js` is exposed; the exceptions are the
+pairs a tool covers with a `position`, `addTaskAbove`/`addTaskBelow` behind `add_task` and
+`addBranchAbove`/`addBranchBelow` behind `open_branch`, and `insertTask`, which those two
+call. A
 node is addressed by its id and a domain by name or path, defaulting to the open
 domain; every write returns the affected id and the re-rendered outline, and a
 write that would violate an invariant returns the mutation's descriptive error,
@@ -207,7 +210,8 @@ passed, and those two accept a name as well.
 
 Read-only tier:
 
-- `list_domains()` returns domains as name and path.
+- `list_domains()` returns `{ domains }`, each a name and a path, either of which
+  addresses it in the `domain` parameter every other tool takes.
 - `list_projects(domain?)` returns each project's id, title, kind, and `is_root`
   (whether it is a plan's own base rather than a sub-project), for resolving a
   named project (for instance "the Pre-MCP project") to an id. Titles are
@@ -219,7 +223,8 @@ Read-only tier:
   structured node array for the whole domain.
 - `read_project(project, domain?, include_notes=false)` returns the
   `serializeProject` outline plus a structured node array (id, title, kind,
-  status, here, flagged, whether a note exists, and the next and branch links),
+  status, here, flagged, completed_at, has_note and note_file, and the next, branch and
+  merge_point links),
   bounded by the project's own extent: the pair and its body, ending at its close
   rather than running on up the trunk. It also returns `enclosing_project_id` and
   `root_project_id`.
@@ -244,18 +249,24 @@ vocabulary, since a domain holds plans rather than trees, and the three verbs of
 `mode`, an insertion now always naming its edge, and opening a branch being its own
 verb because a branch is three things at once.
 
-- `create_domain(name)`, `create_plan(name, domain?)`.
+- `create_domain(name)`, `create_plan(title, domain?)`.
 - `add_task(target_id, position, title, domain?)`, position above or below.
-- `open_branch(edge_id, title, side?, domain?)`,
-  `set_merge_point(branch_id, merge_point_id, domain?)`.
+- `open_branch(node_id, position, title, side?, domain?)`, the same two positions as
+  `add_task`; `set_merge_point(branch_id, merge_point_id, domain?)`. `side` is the
+  half-plane the branch is drawn in, chosen by alternation where it is not given, and it
+  has no control in the app: see the draggable-branches entry in `in-flight_ideas.md`,
+  which is the real answer rather than a side menu.
 - `wrap_run(from_id, to_id?, title, domain?)`, `unwrap_project(node_id, domain?)`.
 - `set_title`, `set_status`, `cycle_status`, `set_note`, `delete_note`.
 - `make_here`, `clear_here`, `toggle_flag`, `convert_kind`.
 - `paste_as_plan(clip, domain?)`.
-- `move_task`, `move_project`, `move_into_line`, `detach_to_plan`,
-  `reorder_plan`, `move_up`, `move_down`. The first two are named for the kind they
-  take and refuse the other's, a task travelling alone and a project travelling with
-  the plan it opens; the rest are one verb over any kind, as the app's menu is.
+- `move_task`, `move_project`, `move_into_line`, `detach_project`,
+  `reorder_project`, `move_up`, `move_down`. Four are named for the kind they take and
+  refuse the rest: a task travels alone, a project travels with the plan it opens, and
+  only a project detaches or reorders. `move_into_line`, `move_up` and `move_down` are one
+  verb over any kind but a close, as the app's menu is. A close is refused by all of them,
+  it being one half of a pair that sits where its scope ends; moving a node PAST one is
+  another matter and is how one says that node has left the scope.
 
 Destructive tier (off unless enabled at startup):
 
@@ -267,7 +278,7 @@ Destructive tier (off unless enabled at startup):
   operation would fall through to deleting the whole plan, which is the right answer
   to "delete this plan" and the wrong one to what splice asks for. Say `subtree` for
   the first and `unwrap_project` for the second.
-- `delete_domain(name_or_path)`.
+- `delete_domain(domain)`, required rather than defaulting to the open one.
 
 Excluded: the library root (`getLibraryRoot` / `chooseLibraryRoot`), a user
 setting whose change needs a native dialog; an agent works within the existing

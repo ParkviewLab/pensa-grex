@@ -6,7 +6,7 @@ import { assignLanes, solveHeights } from './geometry.js'
 import { hullSeamToClose } from '../render/shapes.js'
 
 // A minimal stand-in for the buildModel() runtime model (model/model.js),
-// exposing only what geometry.js actually reads: .trees, .nodes and .getNode(id).
+// exposing only what geometry.js actually reads: .plans, .nodes and .getNode(id).
 // A model node's .branches is [{ child, side }] — the record's two per-side
 // arrays already flattened in left-then-right order — with no `at`: a branch
 // array names the edge rising from the node that holds it. `mergePoint` rides on the TOP
@@ -16,7 +16,7 @@ import { hullSeamToClose } from '../render/shapes.js'
 // refuses a branch that never rejoins. geometry.js reads the field without requiring it,
 // so a fixture below that omits it is isolating what a fork on its own asks of the solve;
 // every fixture about a return states one.
-function fakeModel(trees, nodeDefs) {
+function fakeModel(plans, nodeDefs) {
   const nodes = new Map(Object.entries(nodeDefs).map(([id, n]) => [
     id, {
       id, next: n.next || null, branches: n.branches || [], mergePoint: n.mergePoint || null,
@@ -26,7 +26,7 @@ function fakeModel(trees, nodeDefs) {
       kind: n.kind || 'task', collapsed: !!n.collapsed,
     },
   ]))
-  return { trees, nodes, getNode: (id) => nodes.get(id) || null }
+  return { plans, nodes, getNode: (id) => nodes.get(id) || null }
 }
 
 // The packer asks one thing of the vertical, whether two lines' extents overlap, so a fixture here
