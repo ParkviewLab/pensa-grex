@@ -45,9 +45,10 @@ const INSTRUCTIONS = [
   'to the next, and a tool that takes an edge names the node BELOW it.',
   // The naming rule, so a refusal reads as the surface being strict rather than broken.
   'The tools speak that vocabulary and no other: domain, project, task, terminus. The READS are',
-  'strict about kind, since the kind decides the shape of the answer: read_domain, read_project',
-  'and read_task each refuse the wrong kind and name the one that reads it, and a terminus is read',
-  'through the project it closes. They take an id OR a title, titles being unique within a domain.',
+  'strict about kind, since the kind decides the shape of the answer: read_domain takes no node at',
+  'all, whilst read_project and read_task each refuse the wrong kind and name the one that reads',
+  'it, a terminus being read through the project it closes. Those two take an id OR a title,',
+  'titles being unique within a domain.',
   'The WRITES are one tool per verb over any kind, except where the kind decides what travels',
   '(move_task takes a task alone, move_project takes a project with the plan it opens), and they',
   'are id-only: every parameter ending in _id takes an id and nothing else, because a title can',

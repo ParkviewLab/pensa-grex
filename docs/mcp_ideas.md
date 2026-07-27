@@ -177,8 +177,10 @@ can change which is which under a client's feet; `list_projects` says which is w
 with `is_root`.
 
 **The reads are strict about kind**, because the kind decides the shape of the answer:
-`read_domain`, `read_project` and `read_task` each refuse the wrong kind and name the tool
-that reads it, a close being sent to the project it closes. **The writes are one tool per
+`read_domain` takes no node at all; `read_project` and `read_task` each refuse the wrong kind
+and name the tool that reads it, a close being sent to the project it closes. A refusal names
+what the CALLER should do next, so `copy_project`, which reaches the same resolver, says to clip
+the enclosing project rather than naming a read tool that cannot clip. **The writes are one tool per
 verb**, polymorphic exactly where the app's own menu is: the app has one Delete and one
 Rename, so splitting `delete_node` by kind would take the two surfaces apart again. The
 exception is where the name itself was wrong, which is why `move_node` became `move_task`
@@ -260,7 +262,11 @@ Destructive tier (off unless enabled at startup):
 - `delete_node(node_id, mode=subtree|splice, domain?)`, which ends a task or a
   project and refuses a close, one half of a pair having no life of its own to end.
   Subtree mode removes the node's extent, which for a project is the plan it opens,
-  pair included, and no more.
+  pair included, and no more. Splice mode is refused on a plan's base: nothing
+  precedes a base, so there is nothing to reconnect its successor to and the
+  operation would fall through to deleting the whole plan, which is the right answer
+  to "delete this plan" and the wrong one to what splice asks for. Say `subtree` for
+  the first and `unwrap_project` for the second.
 - `delete_domain(name_or_path)`.
 
 Excluded: the library root (`getLibraryRoot` / `chooseLibraryRoot`), a user

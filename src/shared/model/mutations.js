@@ -293,6 +293,19 @@ function requireLegalReturns(next, before, refusal) {
   return next
 }
 
+// A close is one half of a pair and sits where its scope ends, so it does not move on its own:
+// moving it alone would quietly resize the scope, taking in a node that was outside it or
+// letting go of one that was inside, and the record would still be bracket-matched, so nothing
+// downstream would object. The scope moves by its project node, which carries its close. The
+// grafting moves refuse a close by kind already; this is the same rule for the three that
+// reorder a trunk in place.
+function requireMovable(node) {
+  if (node.kind === 'terminus') {
+    throw new Error('a close cannot be moved on its own: it is one half of a pair and sits where its scope ends; move the project it closes, which carries it')
+  }
+  return node
+}
+
 function requireTask(record, taskId) {
   if (!record.nodes[taskId]) throw new Error('unknown task "' + taskId + '"')
   return record.nodes[taskId]
@@ -1011,7 +1024,7 @@ export function moveTaskNode(record, id, targetId) {
   const task = requireTask(next, id)
   requireTask(next, targetId)
   if (id === targetId) throw new Error('cannot move a node onto itself')
-  if (task.kind !== 'task') throw new Error('moveTaskNode moves a task node; use moveSubtree for a project')
+  if (task.kind !== 'task') throw new Error('this move takes a task, which travels alone; a project travels with the plan it opens, and has its own move')
   spliceOutTask(next, id) // the node travels alone; its children stay on the line
   graftBranch(next, targetId, id)
   return normalizeHeres(normalizeReturns(next, record))
@@ -1029,7 +1042,7 @@ export function moveSubtree(record, rootId, targetId) {
   const next = clone(record)
   const node = requireTask(next, rootId)
   requireTask(next, targetId)
-  if (node.kind !== 'project') throw new Error('moveSubtree moves a project and the plan it opens; use moveTaskNode for a task')
+  if (node.kind !== 'project') throw new Error('this move takes a project and the plan it opens; a task travels alone, and has its own move')
   if (rootId === targetId) throw new Error('cannot move a node onto itself')
   if (extentOf(next, rootId).has(targetId)) throw new Error('cannot graft a subtree onto its own descendant')
   liftExtent(next, rootId)
@@ -1072,7 +1085,7 @@ export function detachToTree(record, id) {
 export function reorderRoot(record, rootId, index) {
   const next = clone(record)
   requireTask(next, rootId)
-  if (predecessorOf(next, rootId)) throw new Error('reorderRoot expects a root node')
+  if (predecessorOf(next, rootId)) throw new Error('only a plan\'s base can be reordered; this node sits inside a plan')
   const isRoot = (id) => !predecessorOf(next, id)
   const listed = (next.planOrder || []).filter((id) => next.nodes[id] && isRoot(id))
   const unlisted = Object.keys(next.nodes)
@@ -1099,6 +1112,7 @@ export function reorderRoot(record, rootId, index) {
 export function moveIntoLine(record, movedId, belowId) {
   const next = clone(record)
   const moved = requireTask(next, movedId)
+  requireMovable(moved)
   requireTask(next, belowId)
   if (movedId === belowId) throw new Error('cannot insert a node above itself')
   const isProject = moved.kind === 'project'
@@ -1142,6 +1156,7 @@ function swapWithSuccessor(next, aId) {
 export function moveUp(record, id) {
   const next = clone(record)
   const node = requireTask(next, id)
+  requireMovable(node)
   if (!node.next) throw new Error('nothing above to swap with')
   if (!predecessorOf(next, id)) throw new Error('cannot move a root up')
   swapWithSuccessor(next, id)
@@ -1155,7 +1170,7 @@ export function moveUp(record, id) {
  */
 export function moveDown(record, id) {
   const next = clone(record)
-  requireTask(next, id)
+  requireMovable(requireTask(next, id))
   const pred = predecessorOf(next, id)
   if (!pred || pred.kind !== 'next') throw new Error('no main-line predecessor to swap with')
   if (!predecessorOf(next, pred.id)) throw new Error('cannot move below the root')

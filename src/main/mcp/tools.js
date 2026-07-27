@@ -98,7 +98,7 @@ function rootOf(record, id) {
 // move under a stale read, and a write addressed by one can land on the node next door.
 const KIND_NAME = { project: 'a project', task: 'a task', terminus: 'a close' }
 
-function resolveRead(record, ref, want) {
+function resolveRead(record, ref, want, advice) {
   if (typeof ref !== 'string' || !ref.length) throw new Error('pass an id or a title')
   let id = record.nodes[ref] ? ref : null
   if (!id) {
@@ -110,11 +110,16 @@ function resolveRead(record, ref, want) {
 
   const kind = record.nodes[id].kind
   if (kind === want) return id
+  // What to do instead, which is the caller's to say: the two reads send one another work, but
+  // copy_project cannot, neither read tool being able to clip.
+  const say = advice || ((k, other) => (k === 'terminus'
+    ? `read the project it closes with read_project("${other || '?'}")`
+    : 'use ' + (k === 'project' ? 'read_project' : 'read_task')))
   if (kind === 'terminus') {
     const opened = pairScopes(record, trunksOf(record)).closes.get(id)
-    throw new Error(`"${ref}" is a close, one half of a pair; read the project it closes with read_project("${opened || '?'}")`)
+    throw new Error(`"${ref}" is a close, one half of a pair; ${say('terminus', opened)}`)
   }
-  throw new Error(`"${ref}" is ${KIND_NAME[kind] || 'not ' + KIND_NAME[want]}; use ${kind === 'project' ? 'read_project' : 'read_task'}`)
+  throw new Error(`"${ref}" is ${KIND_NAME[kind] || 'not ' + KIND_NAME[want]}; ${say(kind, id)}`)
 }
 
 // The innermost project whose scope contains `id`, and the base of the plan it belongs to.
@@ -165,7 +170,12 @@ function runWrite(taskService, dir, op, args, primaryId) {
     affected = newIds.find((id) => !inc.has(id)) ?? newIds[0]
   }
   const outline = affected && after.nodes[affected] ? projectOutline(after, rootOf(after, affected)) : domainOutline(after)
-  return json({ id: affected, outline })
+  // The title is reported because it is not always the one asked for: titles are unique within
+  // a domain, so a create or a rename that collides is silently given the next free "name-N"
+  // (uniqueTitle). Since a title also addresses a node on the reads, a silent rename is a
+  // silently changed address, and the caller has to be told.
+  const node = affected ? after.nodes[affected] : null
+  return json({ id: affected, title: node && node.title != null ? node.title : null, outline })
 }
 
 // ---- registration ----------------------------------------------------------
@@ -308,7 +318,9 @@ export function registerTools(server, deps, scope) {
     inputSchema: { project: z.string(), domain: z.string().optional() },
   }, guard(async (a) => {
     const dir = dirOf(a); const r = record(dir)
-    const id = resolveRead(r, a.project, 'project')
+    const id = resolveRead(r, a.project, 'project', (kind, other) => (kind === 'terminus'
+      ? `clip the project it closes, copy_project("${other || '?'}")`
+      : 'only a project can be clipped, a clip being a plan; clip the project this sits in, which read_task reports as its enclosing_project_id'))
     // The project's extent, with no edge leaving it: a clip is a whole plan, opening and
     // close, which is what paste_as_plan needs and what stops a sub-project taking the rest
     // of its trunk. The clip mirrors the record, so its node map is `nodes` too.
@@ -340,7 +352,7 @@ export function registerTools(server, deps, scope) {
   }, guard(async (a) => runWrite(taskService, dirOf(a), 'addTree', [a.name], null)))
 
   server.registerTool('add_task', {
-    description: 'Insert a task into an edge of a trunk. position "above" takes the edge rising from target_id; "below" takes the edge beneath it, which is refused where there is none (below a plan\'s base, or below the first node of a branch). An insertion always names its edge. To start a parallel strand instead, use open_branch.',
+    description: 'Insert a task into an edge of a trunk. position "above" takes the edge rising from target_id; "below" takes the edge beneath it, which is refused only below a plan\'s base, nothing preceding it. Below a branch\'s first node is allowed: the new task takes that node\'s place as the foot of the branch. An insertion always names its edge. To start a parallel strand instead, use open_branch.',
     inputSchema: {
       target_id: z.string(),
       position: z.enum(['above', 'below']),
@@ -393,7 +405,7 @@ export function registerTools(server, deps, scope) {
 
   write1('cycle_status', 'cycleStatus', "Advance a task's status one step (todo -> in-progress -> completed -> cancelled -> todo).")
   write1('make_here', 'makeHere', 'Set this task as its branch cursor ("here"), clearing any other "here" on the same branch.')
-  write1('clear_here', 'clearHere', 'Clear this task\'s "here" cursor.')
+  write1('clear_here', 'clearHere', 'Clear the "here" cursor from the line this node sits on, wherever on that line it sits, which need not be this node. Takes any kind, and is a no-op where the line has no cursor.')
   write1('toggle_flag', 'toggleFlag', "Toggle a node's flag.")
   write1('convert_kind', 'convertKind', 'Convert a node between task and sub-project, which opens or closes a scope with it (not allowed on a plan\'s base, or on a terminus). Refused where the new scope would straddle a branch\'s span.')
   write1('move_up', 'moveUp', 'Swap a node up one place within its line.')
@@ -448,10 +460,19 @@ export function registerTools(server, deps, scope) {
 
   // ------- destructive -------
   server.registerTool('delete_node', {
-    description: 'Delete a task or a project. mode subtree removes the node\'s extent, which is what grows from it within the scope it sits in, and for a project is the plan it opens, pair included; mode splice removes only the node and reconnects its successor. Deleting a branch\'s last task takes the branch and its return with it. A close cannot be deleted on its own, being one half of a pair: delete the project to remove the scope, or unwrap_project to keep what is inside. Re-read (read_domain, read_project) to confirm the target id before calling; the domain may have changed since your last read.',
+    description: 'Delete a task or a project. mode subtree removes the node\'s extent, which is what grows from it within the scope it sits in, and for a project is the plan it opens, pair included; mode splice removes only the node and reconnects its successor, and is refused on a plan\'s base, which nothing precedes: to remove a whole plan use mode subtree, to remove a scope and keep what is inside use unwrap_project. Deleting a branch\'s last task takes the branch and its return with it. A close cannot be deleted on its own, being one half of a pair: delete the project to remove the scope, or unwrap_project to keep what is inside. Re-read (read_domain, read_project) to confirm the target id before calling; the domain may have changed since your last read.',
     inputSchema: { node_id: z.string(), mode: z.enum(['subtree', 'splice']).optional(), domain: z.string().optional() },
   }, guard(async (a) => {
     const dir = dirOf(a)
+    // A plan's base has no splice: nothing precedes it, so there is no predecessor to reconnect
+    // its successor to, and the operation falls through to deleting the whole plan. That is the
+    // right answer to "delete this plan" and the wrong one to "unwrap this plan", which is what
+    // splice asks for, so the ambiguous call is refused rather than answered destructively.
+    const r = record(dir)
+    if (!r.nodes[a.node_id]) throw new Error(`no node "${a.node_id}" in this domain`)
+    if (a.mode === 'splice' && !predecessorOf(r, a.node_id)) {
+      throw new Error('a plan\'s base cannot be spliced: nothing precedes it. Use mode subtree to delete the whole plan, or unwrap_project to remove the scope and keep what is inside')
+    }
     const res = taskService.runOp(dir, 'deleteTask', [a.node_id, a.mode || 'subtree'])
     if (res.error) return fail(res.error)
     return json({ deleted: a.node_id, outline: domainOutline(res.record) })
