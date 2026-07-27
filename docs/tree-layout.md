@@ -237,8 +237,17 @@ about the rise, which is constant, but would re-open the packing, whereas liftin
 monotone. Which node is lifted follows `pinnedBy`, the record of which constraint
 set each height, so a node whose height a lateral pins is repaired by lifting the
 host of the branch that pins it, rather than by bending that lateral off twelve
-degrees. The pass is bounded by `repairPasses`, and whatever it cannot close rides
-out on `layout.conflicts` instead of being drawn in silence. Over the nine live
+degrees. A folded pair's close pins to its own project node for the same reason: the
+pair is one object, and slack given to the close would come out of the seam instead of
+moving anything. The pass is bounded by `repairPasses`, and whatever it cannot close
+rides out on `layout.conflicts` instead of being drawn in silence.
+
+What comes back is the best placement rather than the last. A lift is not guaranteed to
+clear the line it was asked to clear; it can move a card into another line's path, or
+move nothing at all relative to the line, and a pass that buys nothing still costs the
+height it added. Fewer conflicts therefore wins, and between two placements with the
+same number the shorter drawing wins, which is the unrepaired one when the repair can
+do nothing. Over the nine live
 domains and the two committed fixtures it closes everything, and those eleven
 drawings together are slightly shorter than the grid drew them, 10,883 pixels of
 height against 11,096.
