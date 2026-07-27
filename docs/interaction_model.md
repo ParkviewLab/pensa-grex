@@ -73,6 +73,14 @@ branches (a clean positional swap, distinct from `moveIntoLine`'s splice). "Move
 up" needs a successor and a non-root node; "move down" needs a non-root main-line
 predecessor to swap below.
 
+*A close is the one node these will not take as their operand*, since moving it alone would
+quietly resize its scope, taking in a node that was outside it or letting go of one that was
+inside; the record would still be bracket-matched, so nothing downstream would object. The scope
+moves by its project node, which carries its close. **Moving a node PAST a close is a different
+thing and is allowed**: swapping a node with the close above it is how one says that node is no
+longer part of the sub-project, and the map shows the result at once. So a scope's membership
+changes by moving the member, never by moving the boundary.
+
 ### Two verbs that need a second node named
 
 Two menu items act on a pair of nodes, and there is no selection mechanism: every edit

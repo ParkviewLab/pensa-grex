@@ -138,7 +138,7 @@ function structuredNode(record, id) {
   const t = record.nodes[id]
   const base = {
     id, title: t.title, kind: t.kind, flagged: !!t.flagged,
-    hasNote: !!t.note, next: t.next || null,
+    has_note: !!t.note, note_file: t.note || null, next: t.next || null,
     branches: branchChildrenOf(t),
   }
   if (t.kind === 'task') { base.status = t.status; base.here = !!t.here }
@@ -248,12 +248,12 @@ export function registerTools(server, deps, scope) {
   }
   const nodesFor = (r, ids, notes) => ids.map((id) => {
     const s = structuredNode(r, id)
-    if (notes && notes[id] != null) s.note = notes[id]
+    if (notes && notes[id] != null) s.content = notes[id]
     return s
   })
 
   server.registerTool('read_domain', {
-    description: 'Read a whole domain: every plan as a markdown outline, plus a structured node array for all of them. include_notes inlines note contents. To read one plan or sub-project, use read_project; to read one task, read_task.',
+    description: 'Read a whole domain: every plan as a markdown outline, plus a structured node array for all of them. Every node reports has_note and note_file; include_notes adds each note\'s text as content. To read one plan or sub-project, use read_project; to read one task, read_task.',
     inputSchema: { domain: z.string().optional(), include_notes: z.boolean().optional() },
   }, guard(async (a) => {
     const dir = dirOf(a); const r = record(dir)
@@ -268,7 +268,7 @@ export function registerTools(server, deps, scope) {
   }))
 
   server.registerTool('read_project', {
-    description: 'Read one project and the plan it opens: a markdown outline plus a structured node array, bounded by the project\'s own close, so a sub-project reads as far as it ends and no further. `project` takes an id or a domain-unique title, and a plan\'s base and a sub-project are both projects. enclosing_project_id names the scope this one sits in (null for a plan\'s base) and root_project_id the base of its plan. Refuses a task (use read_task) and a close (read the project it closes). include_notes inlines note contents; for the whole domain use read_domain.',
+    description: 'Read one project and the plan it opens: a markdown outline plus a structured node array, bounded by the project\'s own close, so a sub-project reads as far as it ends and no further. `project` takes an id or a domain-unique title, and a plan\'s base and a sub-project are both projects. enclosing_project_id names the scope this one sits in (null for a plan\'s base) and root_project_id the base of its plan. Refuses a task (use read_task) and a close (read the project it closes). Every node reports has_note and note_file; include_notes adds each note\'s text as content. For the whole domain use read_domain.',
     inputSchema: {
       project: z.string(),
       domain: z.string().optional(),
@@ -289,7 +289,7 @@ export function registerTools(server, deps, scope) {
   }))
 
   server.registerTool('read_task', {
-    description: 'Read one task: its title, status, flag, "here" mark, whether it carries a note, and its links. `task` takes an id or a domain-unique title. enclosing_project_id names the project whose scope it sits in and root_project_id the base of its plan, so one task id reaches its project and its plan in one further call. Refuses a project (use read_project) and a close. include_note inlines the note contents.',
+    description: 'Read one task: its title, status, flag, "here" mark, whether it carries a note, and its links. `task` takes an id or a domain-unique title. enclosing_project_id names the project whose scope it sits in and root_project_id the base of its plan, so one task id reaches its project and its plan in one further call. Refuses a project (use read_project) and a close. has_note and note_file say whether there is a note and what it is called; include_note adds its text as content.',
     inputSchema: {
       task: z.string(),
       domain: z.string().optional(),
@@ -299,18 +299,18 @@ export function registerTools(server, deps, scope) {
     const dir = dirOf(a); const r = record(dir)
     const id = resolveRead(r, a.task, 'task')
     const out = { domain: dir, ...structuredNode(r, id), ...context(r, id) }
-    if (a.include_note) out.note = r.nodes[id].note ? ((store.readNote(dir, r.nodes[id].note) || {}).content || '') : ''
+    if (a.include_note) out.content = r.nodes[id].note ? ((store.readNote(dir, r.nodes[id].note) || {}).content || '') : ''
     return json(out)
   }))
 
   server.registerTool('read_note', {
-    description: "Read a node's markdown note, whatever kind carries it. Empty if it has none.",
+    description: "Read a node's markdown note, whatever kind carries it: note_file names the file and content is its text, empty where there is none.",
     inputSchema: { node_id: z.string(), domain: z.string().optional() },
   }, guard(async (a) => {
     const dir = dirOf(a); const r = record(dir); const t = r.nodes[a.node_id]
     if (!t) throw new Error(`no node "${a.node_id}" in this domain`)
     const content = t.note ? ((store.readNote(dir, t.note) || {}).content || '') : ''
-    return json({ id: a.node_id, note: t.note || null, content })
+    return json({ id: a.node_id, note_file: t.note || null, content })
   }))
 
   server.registerTool('copy_project', {
@@ -421,11 +421,17 @@ export function registerTools(server, deps, scope) {
     const file = t.note || noteFileName(a.node_id, t.title)
     const w = store.writeNote(dir, file, a.content)
     if (w && w.error) return fail(w.error)
-    if (!t.note) return runWrite(taskService, dir, 'setNote', [a.node_id, file], a.node_id)
+    // The record changes only on a first write, when the filename is recorded on the node; the
+    // reply is the same either way, the caller having no interest in which of the two it was.
+    if (!t.note) {
+      const res = runWrite(taskService, dir, 'setNote', [a.node_id, file], a.node_id)
+      if (res.isError) return res
+      return json({ ...JSON.parse(res.content[0].text), note_file: file })
+    }
     // The record is unchanged (the note filename was already recorded), so the
     // runOp wrapper did not fire; push the note change for the live view/editor.
     notify('pensagrex:domain-changed', { dir })
-    return json({ id: a.node_id, note: file, outline: projectOutline(r, rootOf(r, a.node_id)) })
+    return json({ id: a.node_id, note_file: file, outline: projectOutline(r, rootOf(r, a.node_id)) })
   }))
 
   server.registerTool('delete_note', {

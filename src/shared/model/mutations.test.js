@@ -1269,13 +1269,12 @@ describe('a close does not move on its own', () => {
     expect(() => moveDown(base(), 'm2')).not.toThrow()
   })
 
-  it('leaves the neighbouring swap alone, which is an open question and not this fix', () => {
-    // moveUp swaps a node with its successor and moveDown with its predecessor, so a node
-    // NEXT TO a close still moves that close, and with it the scope's membership: here m1
-    // leaves Sub and Sub is left empty. The app offers this ("Move up" on any node with a
-    // successor), so refusing it would change what a person can do, not merely what an agent
-    // can; it is recorded here as behaviour rather than corrected in a fix aimed at the
-    // operand. The explicit way to say the same thing is moveIntoLine.
+  it('moves a node PAST a close, which is how one says it has left the scope', () => {
+    // The other half of the rule, and settled rather than overlooked. A close does not move as
+    // an operand, but a node moving past one does move it, and that is the point: swapping m1
+    // with the close above it is how an author says m1 is no longer part of Sub, leaving Sub
+    // empty and legal. The app offers exactly this ("Move up" on any node with a successor), so
+    // the two surfaces agree; moveIntoLine is the longer way to say the same thing.
     const { record, subId, closeId } = wrapped()
     const out = moveUp(record, 'm1')
     expect(out.nodes[subId].next).toBe(closeId) // Sub now closes immediately: it is empty

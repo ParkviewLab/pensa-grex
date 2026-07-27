@@ -113,6 +113,30 @@ describe('tools drive the task authority', () => {
     expect(data(await s.call('read_note', { node_id: cp.id })).content).toBe('# hello\n')
   })
 
+  it('names the file and the text differently wherever either is returned', async () => {
+    // One name per thing: note_file is what the note is called on disk, content is what it says.
+    // They were both called "note" in different tools, so a client could hold a filename and a
+    // markdown document under one key and reconcile neither.
+    const cp = data(await s.call('create_plan', { name: 'Noted' }))
+    const first = data(await s.call('set_note', { node_id: cp.id, content: '# hello\n' }))
+    expect(first.note_file).toMatch(/\.md$/) // reported on the write that created it, too
+    const again = data(await s.call('set_note', { node_id: cp.id, content: '# hello again\n' }))
+    expect(again.note_file).toBe(first.note_file) // and on every write after
+
+    const read = data(await s.call('read_note', { node_id: cp.id }))
+    expect(read.note_file).toBe(first.note_file)
+    expect(read.content).toBe('# hello again\n')
+
+    const task = data(await s.call('read_task', { task: data(await s.call('add_task', { target_id: cp.id, position: 'above', title: 'T' })).id }))
+    expect(task.has_note).toBe(false)
+    expect(task.note_file).toBeNull()
+
+    const withText = data(await s.call('read_domain', { include_notes: true })).nodes.find((n) => n.id === cp.id)
+    expect(withText.has_note).toBe(true)
+    expect(withText.note_file).toBe(first.note_file)
+    expect(withText.content).toBe('# hello again\n')
+  })
+
   it('copy_project -> paste_as_plan duplicates the tree', async () => {
     const cp = data(await s.call('create_plan', { name: 'Src' }))
     const at = data(await s.call('add_task', { target_id: cp.id, position: 'above', title: 'A task' }))
