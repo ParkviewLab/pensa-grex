@@ -106,26 +106,26 @@ function placeOnce(model, sizes, o, slack) {
     return { min, max }
   }
 
-  const { lineOfTask, lane } = assignLanes(model, extentOf)
+  const { lineOfNode, lane } = assignLanes(model, extentOf)
   const rawX = new Map()
-  for (const id of model.nodes.keys()) rawX.set(id, lane.get(lineOfTask.get(id)) * o.laneStep)
+  for (const id of model.nodes.keys()) rawX.set(id, lane.get(lineOfNode.get(id)) * o.laneStep)
 
   // ---- per-tree bounding box, then packed left to right ----
-  const tasksByPlan = new Map(model.plans.map((t) => [t.id, []]))
-  for (const id of model.nodes.keys()) tasksByPlan.get(model.getPlanIdForTask(id)).push(id)
+  const nodesByPlan = new Map(model.plans.map((t) => [t.id, []]))
+  for (const id of model.nodes.keys()) nodesByPlan.get(model.getPlanIdForNode(id)).push(id)
   const planOffsetX = new Map()
   let packCursor = 0
   for (const tree of model.plans) {
     let minX = Infinity
     let maxX = -Infinity
-    for (const id of tasksByPlan.get(tree.id)) {
+    for (const id of nodesByPlan.get(tree.id)) {
       minX = Math.min(minX, rawX.get(id) - cardW(id) / 2)
       maxX = Math.max(maxX, rawX.get(id) + cardW(id) / 2)
     }
     planOffsetX.set(tree.id, packCursor - minX)
     packCursor = maxX + (packCursor - minX) + o.planGap
   }
-  const finalX = (id) => rawX.get(id) + planOffsetX.get(model.getPlanIdForTask(id))
+  const finalX = (id) => rawX.get(id) + planOffsetX.get(model.getPlanIdForNode(id))
 
   // ---- stations, dots, cursors ----
   const stations = []
@@ -149,7 +149,7 @@ function placeOnce(model, sizes, o, slack) {
   // as it always has.
   const linesByStart = new Map()
   for (const id of model.nodes.keys()) {
-    const start = lineOfTask.get(id)
+    const start = lineOfNode.get(id)
     if (!linesByStart.has(start)) linesByStart.set(start, [])
     linesByStart.get(start).push(id)
   }

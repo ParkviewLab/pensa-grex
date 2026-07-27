@@ -57,7 +57,7 @@ export function buildCard(task, { isCursor } = {}) {
 
   const card = document.createElement('div')
   card.className = 'card'
-  card.dataset.taskId = task.id
+  card.dataset.nodeId = task.id
   if (isProject) card.classList.add('project')
   if (task.collapsed) card.classList.add('collapsed')
   if (cursor) card.classList.add('cursor')
@@ -114,7 +114,7 @@ export function buildCard(task, { isCursor } = {}) {
 function buildTerminus(node) {
   const card = document.createElement('div')
   card.className = 'card terminus' + (node.note ? ' note' : '')
-  card.dataset.taskId = node.id
+  card.dataset.nodeId = node.id
   if (node.note) card.appendChild(noteIconEl())
   return card
 }

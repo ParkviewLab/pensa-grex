@@ -16,7 +16,7 @@
 const THRESHOLD = 5 // px of pointer travel before a press becomes a drag
 
 function sel(id) {
-  return '[data-task-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]'
+  return '[data-node-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]'
 }
 
 export function createDragController({ contentEl, viewportEl, onProbe, onDrop, onCancel }) {
@@ -84,9 +84,9 @@ export function createDragController({ contentEl, viewportEl, onProbe, onDrop, o
 
   function onDown(e) {
     if (e.button !== 0) return
-    const card = e.target && e.target.closest ? e.target.closest('[data-task-id]') : null
+    const card = e.target && e.target.closest ? e.target.closest('[data-node-id]') : null
     if (!card) return
-    state = { sourceId: card.dataset.taskId, startX: e.clientX, startY: e.clientY, dragging: false, preview: null }
+    state = { sourceId: card.dataset.nodeId, startX: e.clientX, startY: e.clientY, dragging: false, preview: null }
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
     window.addEventListener('pointercancel', onCancelEvent)

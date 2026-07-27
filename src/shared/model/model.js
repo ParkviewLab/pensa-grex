@@ -64,17 +64,17 @@ export function buildModel(record) {
   })
   // A tree is identified by its root node's id; there is no separate tree id or
   // stored tree name (the name is the root node's title).
-  const plans = rootIds.map((id) => ({ id, rootTaskId: id }))
+  const plans = rootIds.map((id) => ({ id, baseId: id }))
 
   // Which tree a node belongs to: the tree whose root reaches it by .next or by a
   // branch (a fork stays within its tree; plans never share nodes).
-  const planIdByTask = new Map()
+  const planIdByNode = new Map()
   for (const rootId of rootIds) {
     const stack = [rootId]
     while (stack.length) {
       const id = stack.pop()
-      if (planIdByTask.has(id)) continue
-      planIdByTask.set(id, rootId)
+      if (planIdByNode.has(id)) continue
+      planIdByNode.set(id, rootId)
       const node = nodes.get(id)
       if (!node) continue
       if (node.next) stack.push(node.next)
@@ -90,8 +90,8 @@ export function buildModel(record) {
     return plans.find((t) => t.id === id) || null
   }
 
-  function getPlanIdForTask(id) {
-    return planIdByTask.get(id) || null
+  function getPlanIdForNode(id) {
+    return planIdByNode.get(id) || null
   }
 
   // The main-line chain starting at startId (a root or a branch child), following
@@ -131,7 +131,7 @@ export function buildModel(record) {
     nodes,
     getNode,
     getPlan,
-    getPlanIdForTask,
+    getPlanIdForNode,
     getMainLineChain,
     getBranchChildren,
     getHereTaskId,

@@ -42,15 +42,15 @@ const extentsFrom = (spans) => (ids) => ({
 describe('assignLanes', () => {
   it('puts every tree\'s trunk at lane 0', () => {
     const model = fakeModel(
-      [{ id: 't1', rootTaskId: 'a' }, { id: 't2', rootTaskId: 'p' }],
+      [{ id: 't1', baseId: 'a' }, { id: 't2', baseId: 'p' }],
       { a: {}, p: {} },
     )
     // Two trunks and nothing hanging off either, so no extent can decide anything here: a trunk is
     // lane 0 by definition, and what keeps two trees apart is layout.js offsetting each tree's box
     // rather than a lane.
-    const { lane, lineOfTask } = assignLanes(model, extentsFrom({ a: [0, 50], p: [0, 50] }))
-    expect(lane.get(lineOfTask.get('a'))).toBe(0)
-    expect(lane.get(lineOfTask.get('p'))).toBe(0)
+    const { lane, lineOfNode } = assignLanes(model, extentsFrom({ a: [0, 50], p: [0, 50] }))
+    expect(lane.get(lineOfNode.get('a'))).toBe(0)
+    expect(lane.get(lineOfNode.get('p'))).toBe(0)
   })
 
   // Returns: this test pinned an alternation fallback, left then right by branch index,
@@ -61,7 +61,7 @@ describe('assignLanes', () => {
   // geometry's own reading of a branch that arrives without one.
   it('reads a branch that arrives without a side as a left branch', () => {
     const model = fakeModel(
-      [{ id: 't1', rootTaskId: 'a' }],
+      [{ id: 't1', baseId: 'a' }],
       {
         a: { branches: [{ child: 'x1' }, { child: 'x2' }, { child: 'x3' }] },
         x1: {}, x2: {}, x3: {},
@@ -71,27 +71,27 @@ describe('assignLanes', () => {
     // are given as one span. Sharing it is what forces three distinct lanes, and distinct lanes
     // are what make the side and the order readable at all.
     const spans = { a: [400, 450], x1: [300, 350], x2: [300, 350], x3: [300, 350] }
-    const { lane, lineOfTask } = assignLanes(model, extentsFrom(spans))
-    expect(lane.get(lineOfTask.get('x1'))).toBe(-1) // 1st: innermost, a holds it first
-    expect(lane.get(lineOfTask.get('x2'))).toBe(-2) // 2nd: outward on the same side
-    expect(lane.get(lineOfTask.get('x3'))).toBe(-3) // 3rd: outward again
+    const { lane, lineOfNode } = assignLanes(model, extentsFrom(spans))
+    expect(lane.get(lineOfNode.get('x1'))).toBe(-1) // 1st: innermost, a holds it first
+    expect(lane.get(lineOfNode.get('x2'))).toBe(-2) // 2nd: outward on the same side
+    expect(lane.get(lineOfNode.get('x3'))).toBe(-3) // 3rd: outward again
   })
 
   it('honours an explicit side', () => {
     const model = fakeModel(
-      [{ id: 't1', rootTaskId: 'a' }],
+      [{ id: 't1', baseId: 'a' }],
       { a: { branches: [{ child: 'x1', side: 'right' }] }, x1: {} },
     )
     const spans = { a: [400, 450], x1: [300, 350] }
-    const { lane, lineOfTask } = assignLanes(model, extentsFrom(spans))
-    expect(lane.get(lineOfTask.get('x1'))).toBe(1)
+    const { lane, lineOfNode } = assignLanes(model, extentsFrom(spans))
+    expect(lane.get(lineOfNode.get('x1'))).toBe(1)
   })
 
   it('reuses a lane for two branches whose extents never overlap', () => {
     // a forks x1, low down the trunk; c, further up, forks x2. Neither reaches the other, so
     // there is no height at which both are drawn and they should share lane -1.
     const model = fakeModel(
-      [{ id: 't1', rootTaskId: 'a' }],
+      [{ id: 't1', baseId: 'a' }],
       {
         a: { next: 'b', branches: [{ child: 'x1', side: 'left' }] },
         b: { next: 'c', branches: [] },
@@ -102,16 +102,16 @@ describe('assignLanes', () => {
     // Pixels: the separation the row grid derived from the two branch points is stated here as two
     // disjoint spans, since that is the whole of what the packer consults.
     const spans = { a: [400, 450], b: [250, 300], c: [100, 150], x1: [380, 430], x2: [80, 130] }
-    const { lane, lineOfTask } = assignLanes(model, extentsFrom(spans))
-    expect(lane.get(lineOfTask.get('x1'))).toBe(-1)
-    expect(lane.get(lineOfTask.get('x2'))).toBe(-1)
+    const { lane, lineOfNode } = assignLanes(model, extentsFrom(spans))
+    expect(lane.get(lineOfNode.get('x1'))).toBe(-1)
+    expect(lane.get(lineOfNode.get('x2'))).toBe(-1)
   })
 
   it('does not reuse a lane for two branches whose extents do overlap', () => {
     // Both x1 and x2 fork off the same task a, so both are drawn beside the same stretch of
     // trunk and would collide if given the same lane.
     const model = fakeModel(
-      [{ id: 't1', rootTaskId: 'a' }],
+      [{ id: 't1', baseId: 'a' }],
       {
         a: { branches: [{ child: 'x1', side: 'left' }, { child: 'x2', side: 'left' }] },
         x1: { next: 'x1b' }, x1b: {},
@@ -121,8 +121,8 @@ describe('assignLanes', () => {
     // x1's line runs on above its foot, so it spans [30, 350] against x2's single card at
     // [300, 350]: the two overlap, which is the collision the packer has to avoid.
     const spans = { a: [400, 450], x1: [300, 350], x1b: [30, 80], x2: [300, 350] }
-    const { lane, lineOfTask } = assignLanes(model, extentsFrom(spans))
-    expect(lane.get(lineOfTask.get('x1'))).not.toBe(lane.get(lineOfTask.get('x2')))
+    const { lane, lineOfNode } = assignLanes(model, extentsFrom(spans))
+    expect(lane.get(lineOfNode.get('x1'))).not.toBe(lane.get(lineOfNode.get('x2')))
   })
 
   it('orders a side by the stored arrays, the line read from the top down', () => {
@@ -135,7 +135,7 @@ describe('assignLanes', () => {
     // first, so the lanes run p, q, r outward. The author decides that order by where a
     // branch hangs and where in its node's array it sits, and by nothing else.
     const model = fakeModel(
-      [{ id: 't1', rootTaskId: 'a' }],
+      [{ id: 't1', baseId: 'a' }],
       {
         a: { next: 'b', branches: [{ child: 'r', side: 'left' }] },
         b: { next: 'c' },
@@ -154,8 +154,8 @@ describe('assignLanes', () => {
       p: [150, 200], q: [150, 200],
       r: [380, 430], r2: [280, 330], r3: [180, 230],
     }
-    const { lane, lineOfTask } = assignLanes(model, extentsFrom(spans))
-    const l = (id) => lane.get(lineOfTask.get(id))
+    const { lane, lineOfNode } = assignLanes(model, extentsFrom(spans))
+    const l = (id) => lane.get(lineOfNode.get(id))
     expect(l('p')).toBe(-1) // c is the higher branch point, and p is first in its array
     expect(l('q')).toBe(-2)
     expect(l('r')).toBe(-3) // a is read last, so its branch takes the outermost lane
@@ -171,7 +171,7 @@ describe('assignLanes — lane order and band reservation', () => {
   // banana sits, so the two of them cannot share a lane and one is inner.
   function wide() {
     return fakeModel(
-      [{ id: 't1', rootTaskId: 'alpha' }],
+      [{ id: 't1', baseId: 'alpha' }],
       {
         alpha: { next: 'bravo' },
         bravo: { next: 'charlie' },
@@ -198,8 +198,8 @@ describe('assignLanes — lane order and band reservation', () => {
       one: [150, 200], two: [150, 200], wonder: [50, 100],
       apple: [50, 100], banana: [50, 100],
     }
-    const { lane, lineOfTask } = assignLanes(model, extentsFrom(spans))
-    const l = (id) => lane.get(lineOfTask.get(id))
+    const { lane, lineOfNode } = assignLanes(model, extentsFrom(spans))
+    const l = (id) => lane.get(lineOfNode.get(id))
     // right side: banana (off delta, the higher of the two branch points, so read first)
     // inner, two (off charlie, read after it) outer
     expect(l('banana')).toBeGreaterThan(0)
@@ -217,7 +217,7 @@ describe('assignLanes — lane order and band reservation', () => {
     // tall, so it overlaps a sibling c drawn halfway up it. b's band must be wide
     // enough for s, and c must sit outside the whole band.
     const model = fakeModel(
-      [{ id: 't1', rootTaskId: 'a' }],
+      [{ id: 't1', baseId: 'a' }],
       {
         a: { next: 'a2', branches: [{ child: 'b', side: 'right' }] },
         a2: { branches: [{ child: 'c', side: 'right' }] },
@@ -232,8 +232,8 @@ describe('assignLanes — lane order and band reservation', () => {
       b: [380, 430], b2: [280, 330], b3: [180, 230],
       s: [280, 330], c: [280, 330],
     }
-    const { lane, lineOfTask } = assignLanes(model, extentsFrom(spans))
-    const l = (id) => lane.get(lineOfTask.get(id))
+    const { lane, lineOfNode } = assignLanes(model, extentsFrom(spans))
+    const l = (id) => lane.get(lineOfNode.get(id))
     // All three are right-side branches.
     expect(l('b')).toBeGreaterThan(0)
     expect(l('s')).toBeGreaterThan(0)
@@ -265,7 +265,7 @@ describe('solveHeights', () => {
   const bottom = (top, h) => top + h
 
   it('packs a plain chain at the minimum, and only the minimum', () => {
-    const model = fakeModel([{ id: 't', rootTaskId: 'a' }], { a: { next: 'b' }, b: { next: 'c' }, c: {} })
+    const model = fakeModel([{ id: 't', baseId: 'a' }], { a: { next: 'b' }, b: { next: 'c' }, c: {} })
     const sizes = sizesOf({ a: [188, 50], b: [188, 90], c: [188, 50] })
     const { cardTopY } = solveHeights(model, sizes, METRICS)
 
@@ -282,7 +282,7 @@ describe('solveHeights', () => {
 
   it('places a branch foot so its line leaves the trunk at exactly twelve degrees', () => {
     const model = fakeModel(
-      [{ id: 't', rootTaskId: 'a' }],
+      [{ id: 't', baseId: 'a' }],
       { a: { next: 'b', branches: [{ child: 'f', side: 'left' }] }, b: {}, f: { mergePoint: 'a' } },
     )
     const sizes = sizesOf({ a: [188, 50], b: [188, 50], f: [188, 50] })
@@ -301,7 +301,7 @@ describe('solveHeights', () => {
     // holder; the solve states it as the one lateral, since b is the top of the trunk and nothing
     // else hangs on the edge the branch leaves.
     const model = fakeModel(
-      [{ id: 't', rootTaskId: 'a' }],
+      [{ id: 't', baseId: 'a' }],
       { a: { next: 'b' }, b: { branches: [{ child: 'x', side: 'left' }] }, x: {} },
     )
     const sizes = sizesOf({ a: [188, 50], b: [188, 50], x: [188, 50] })
@@ -314,11 +314,11 @@ describe('solveHeights', () => {
   })
 
   it('gives an edge that carries a junction more air than a plain one, so the line clears the card', () => {
-    const plain = fakeModel([{ id: 't', rootTaskId: 'a' }], { a: { next: 'b' }, b: { next: 'c' }, c: {} })
+    const plain = fakeModel([{ id: 't', baseId: 'a' }], { a: { next: 'b' }, b: { next: 'c' }, c: {} })
     // The branch leaves a and merges at b, so the edge from a to b hosts a fork and nothing else,
     // and the edge from b to c receives that fork's return and nothing else. One edge for each case.
     const forked = fakeModel(
-      [{ id: 't', rootTaskId: 'a' }],
+      [{ id: 't', baseId: 'a' }],
       { a: { next: 'b', branches: [{ child: 'f', side: 'left' }] }, b: { next: 'c' }, c: {}, f: { mergePoint: 'b' } },
     )
     const sizes = sizesOf({ a: [188, 50], b: [188, 50], c: [188, 50], f: [188, 50] })
@@ -337,7 +337,7 @@ describe('solveHeights', () => {
     // A branch of three cards spanning one trunk edge: the trunk cannot pack that tightly, so the
     // edge above the merge point grows to fit the strand beside it.
     const model = fakeModel(
-      [{ id: 't', rootTaskId: 'a' }],
+      [{ id: 't', baseId: 'a' }],
       {
         a: { next: 'b', branches: [{ child: 'f1', side: 'left' }] }, b: {},
         f1: { next: 'f2' }, f2: { next: 'f3' }, f3: { mergePoint: 'a' },
@@ -363,7 +363,7 @@ describe('solveHeights', () => {
     // One card spanning four trunk edges: the trunk is already at its minimum and cannot come
     // down, so the branch's spine runs on above its card before the return peels off.
     const model = fakeModel(
-      [{ id: 't', rootTaskId: 'a' }],
+      [{ id: 't', baseId: 'a' }],
       {
         a: { next: 'b', branches: [{ child: 'f', side: 'left' }] },
         b: { next: 'c' }, c: { next: 'd' }, d: { next: 'e' }, e: {},
@@ -391,8 +391,8 @@ describe('solveHeights', () => {
     // pixel solve has no such number to state. What survives is the comparison itself, that the
     // span above the merge point opens whilst z and a hold their ground.
     const trunk = { z: { next: 'a' }, b: { next: 'c' }, c: {} }
-    const bare = fakeModel([{ id: 't', rootTaskId: 'z' }], { ...trunk, a: { next: 'b' } })
-    const model = fakeModel([{ id: 't', rootTaskId: 'z' }], {
+    const bare = fakeModel([{ id: 't', baseId: 'z' }], { ...trunk, a: { next: 'b' } })
+    const model = fakeModel([{ id: 't', baseId: 'z' }], {
       ...trunk,
       a: { next: 'b', branches: [{ child: 'x1', side: 'left' }] },
       x1: { next: 'x2' }, x2: { next: 'x3' }, x3: { mergePoint: 'b' },
@@ -411,7 +411,7 @@ describe('solveHeights', () => {
 
   it('stretches a bubble\'s own edge, both junctions on it and the branch between them', () => {
     const model = fakeModel(
-      [{ id: 't', rootTaskId: 'a' }],
+      [{ id: 't', baseId: 'a' }],
       { a: { next: 'b', branches: [{ child: 'f', side: 'left' }] }, b: {}, f: { mergePoint: 'a' } },
     )
     const sizes = sizesOf({ a: [188, 50], b: [188, 50], f: [188, 50] })
@@ -442,7 +442,7 @@ describe('solveHeights', () => {
       a: [188, 50], b: [188, 50], c: [188, 50],
       x1: [188, 50], x2: [188, 50], x3: [188, 50], y: [188, 50],
     })
-    const solve = (nodeDefs) => solveHeights(fakeModel([{ id: 't', rootTaskId: 'a' }], nodeDefs), sizes, METRICS).cardTopY
+    const solve = (nodeDefs) => solveHeights(fakeModel([{ id: 't', baseId: 'a' }], nodeDefs), sizes, METRICS).cardTopY
     const tallOnly = solve({ ...defs, a: { next: 'b', branches: [{ child: 'x1', side: 'left' }] } })
     const withBoth = solve({
       ...defs,
@@ -458,7 +458,7 @@ describe('solveHeights', () => {
 
   it('places a nested branch off its own host, so depth alone does not compound the climb', () => {
     const model = fakeModel(
-      [{ id: 't', rootTaskId: 'a' }],
+      [{ id: 't', baseId: 'a' }],
       {
         a: { next: 'b', branches: [{ child: 'f', side: 'left' }] }, b: {},
         f: { next: 'g', branches: [{ child: 'h', side: 'left' }] }, g: { mergePoint: 'a' },
@@ -480,7 +480,7 @@ describe('solveHeights — a folded scope, drawn shut', () => {
   // the project node's successor is its own close (app.js pruneCollapsed). The pair is then
   // drawn with the two cards touching, so the project hull and the close's half turn cross
   // into a lens and a shut scope reads as one closed object.
-  const folded = () => fakeModel([{ id: 't1', rootTaskId: 'P' }], {
+  const folded = () => fakeModel([{ id: 't1', baseId: 'P' }], {
     P: { kind: 'project', collapsed: true, next: 'T' },
     T: { kind: 'terminus', next: 'a' },
     a: {},
@@ -543,7 +543,7 @@ describe('solveHeights — a folded scope, drawn shut', () => {
   })
 
   it('gives an unfolded pair the ordinary minimum, the fold being the only exception', () => {
-    const open = fakeModel([{ id: 't1', rootTaskId: 'P' }], {
+    const open = fakeModel([{ id: 't1', baseId: 'P' }], {
       P: { kind: 'project', next: 'T' },
       T: { kind: 'terminus', next: 'a' },
       a: {},
@@ -556,7 +556,7 @@ describe('solveHeights — a folded scope, drawn shut', () => {
   it('does not read the mark on a task, nor on a project whose successor is not its close', () => {
     // `collapsed` on anything but a project node closed by the very next node means nothing:
     // the flush case exists for a pair drawn shut, and nothing else may lose its air.
-    const odd = fakeModel([{ id: 't1', rootTaskId: 'P' }], {
+    const odd = fakeModel([{ id: 't1', baseId: 'P' }], {
       P: { kind: 'project', collapsed: true, next: 'b' },
       b: { kind: 'task', collapsed: true, next: 'T' },
       T: { kind: 'terminus' },
@@ -572,7 +572,7 @@ describe('assignLanes — extents in pixels', () => {
   // nothing besides. These two tests state one model twice, changing only where the extents fall,
   // and so pin the packer either side of the boundary between overlap and none.
   const twoBranches = () => fakeModel(
-    [{ id: 't', rootTaskId: 'a' }],
+    [{ id: 't', baseId: 'a' }],
     {
       a: { next: 'b', branches: [{ child: 'f', side: 'left' }] },
       b: { next: 'c' }, c: { next: 'd' }, d: { branches: [{ child: 'g', side: 'left' }] },
@@ -584,16 +584,16 @@ describe('assignLanes — extents in pixels', () => {
     const model = twoBranches()
     // f sits low, g sits high, and neither reaches the other: one lane serves both.
     const spans = { a: [0, 300], b: [0, 300], c: [0, 300], d: [0, 300], f: [200, 300], g: [0, 100] }
-    const { lane, lineOfTask } = assignLanes(model, extentsFrom(spans))
-    expect(lane.get(lineOfTask.get('f'))).toBe(-1)
-    expect(lane.get(lineOfTask.get('g'))).toBe(-1)
+    const { lane, lineOfNode } = assignLanes(model, extentsFrom(spans))
+    expect(lane.get(lineOfNode.get('f'))).toBe(-1)
+    expect(lane.get(lineOfNode.get('g'))).toBe(-1)
   })
 
   it('pushes the second line outward when their pixel extents do overlap', () => {
     const model = twoBranches()
     const spans = { a: [0, 300], b: [0, 300], c: [0, 300], d: [0, 300], f: [100, 250], g: [90, 240] }
-    const { lane, lineOfTask } = assignLanes(model, extentsFrom(spans))
-    const lanes = [lane.get(lineOfTask.get('f')), lane.get(lineOfTask.get('g'))].sort((x, y) => y - x)
+    const { lane, lineOfNode } = assignLanes(model, extentsFrom(spans))
+    const lanes = [lane.get(lineOfNode.get('f')), lane.get(lineOfNode.get('g'))].sort((x, y) => y - x)
     expect(lanes).toEqual([-1, -2])
   })
 })

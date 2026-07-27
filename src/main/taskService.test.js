@@ -157,14 +157,14 @@ describe('runOp', () => {
     const [dir, rootId] = domainWithPlan()
     const added = taskService.runOp(dir, 'addTaskAbove', [rootId, 'First'])
     expect(added.error).toBeUndefined()
-    const taskId = Object.keys(added.record.nodes).find((id) => added.record.nodes[id].kind === 'task')
-    expect(taskId).toBeTruthy()
+    const nodeId = Object.keys(added.record.nodes).find((id) => added.record.nodes[id].kind === 'task')
+    expect(nodeId).toBeTruthy()
 
-    const done = taskService.runOp(dir, 'setStatus', [taskId, 'completed'])
+    const done = taskService.runOp(dir, 'setStatus', [nodeId, 'completed'])
     expect(done.error).toBeUndefined()
-    expect(done.record.nodes[taskId].status).toBe('completed')
-    expect(done.record.nodes[taskId].completedAt).toBeTruthy()
-    expect(onDisk(dir).nodes[taskId].status).toBe('completed')
+    expect(done.record.nodes[nodeId].status).toBe('completed')
+    expect(done.record.nodes[nodeId].completedAt).toBeTruthy()
+    expect(onDisk(dir).nodes[nodeId].status).toBe('completed')
   })
 
   it('refuses an op that breaks an invariant and writes nothing', () => {

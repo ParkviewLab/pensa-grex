@@ -268,7 +268,7 @@ describe('computeDomainLayout — the HomeLab fixture', () => {
 
 describe('computeDomainLayout — edge cases', () => {
   it('returns finite empty-model bounds rather than NaN', () => {
-    const emptyModel = { plans: [], nodes: new Map(), getPlanIdForTask: () => null }
+    const emptyModel = { plans: [], nodes: new Map(), getPlanIdForNode: () => null }
     const layout = computeDomainLayout(emptyModel, new Map())
     expect(layout.stations).toEqual([])
     expect(Number.isFinite(layout.bounds.w)).toBe(true)
