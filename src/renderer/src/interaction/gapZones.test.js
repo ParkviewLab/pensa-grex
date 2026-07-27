@@ -13,11 +13,12 @@ const record = {
   schemaVersion: 3, id: 'd_test000000', title: 'T', planOrder: ['r'],
   nodes: {
     r: { id: 'r', title: 'R', kind: 'project', next: 'a', leftBranches: [], rightBranches: [] },
-    a: { id: 'a', title: 'A', kind: 'task', status: 'todo', next: 'b', leftBranches: ['f1'], rightBranches: [] },
+    a: { id: 'a', title: 'A', kind: 'task', status: 'todo', next: 'b', leftBranches: ['f1'], rightBranches: ['g1'] },
     b: { id: 'b', title: 'B', kind: 'task', status: 'todo', next: 'z', leftBranches: [], rightBranches: [] },
     z: { id: 'z', kind: 'terminus', next: null, leftBranches: [], rightBranches: [] },
     f1: { id: 'f1', title: 'F1', kind: 'task', status: 'todo', next: 'f2', leftBranches: [], rightBranches: [] },
     f2: { id: 'f2', title: 'F2', kind: 'task', status: 'todo', next: null, mergePoint: 'a', leftBranches: [], rightBranches: [] },
+    g1: { id: 'g1', title: 'G1', kind: 'task', status: 'todo', next: null, mergePoint: 'a', leftBranches: [], rightBranches: [] },
   },
 }
 
@@ -47,6 +48,15 @@ describe('gapAt', () => {
     const withTip = [...stations, station('f2', -200)]
     const g = gapAt(record, withTip, 0, -200 - TIP_GAP / 2)
     expect(g && g.belowId).toBe('f2')
+  })
+
+  it('a successor with no station is a fold, not a tip: no band above it', () => {
+    // The layout is drawn from a pruned copy, so a collapsed project's next has no card.
+    // Without the guard, `a` would read as a line tip and open a 44px band whose drop
+    // splices the card invisibly inside the fold. Modelled here by leaving b (and z)
+    // out of the stations, exactly what the collapsed layout hands over.
+    const folded = stations.filter((s) => s.id !== 'b' && s.id !== 'z')
+    expect(gapAt(record, folded, 0, 200 - TIP_GAP / 2)).toBeNull()
   })
 
   it('misses sideways', () => {
@@ -80,11 +90,33 @@ describe('carryAt', () => {
     expect(c.caretY).toBe((178 + 200) / 2)
   })
 
-  it('leaves out the junctions of the branch the source itself is on', () => {
-    // Dragging f2, the branch's own tip: its junctions must not be offered, since the
-    // splice-out changes what that branch looks like mid-edit and the mutation refuses.
-    const c = carryAt(record, junctions, gap, 145, 'f2')
+  it('leaves out the feet of the branch the source itself is on, junctions still bounding', () => {
+    // Dragging f2, the branch's own tip, and dropping BELOW both diamonds, where they
+    // would otherwise carry: the feet must not be offered, since the splice-out changes
+    // what that branch looks like mid-edit and the mutation refuses. The diamonds are
+    // still ink, so they still bound the sub-gap and the caret sits under the fork,
+    // not across the whole gap.
+    const c = carryAt(record, junctions, gap, 190, 'f2')
     expect(c.branchFeet).toEqual([])
     expect(c.mergeFeet).toEqual([])
+    expect(c.caretY).toBe((178 + 200) / 2)
+  })
+
+  it('a shared diamond fans out to every foot, and drops only the source\'s own', () => {
+    // Both branches' junctions coincide (the layout keys junctions by point), so one
+    // diamond carries two feet. Dragging a card from f1's branch must still offer g1's
+    // half: excluding the whole junction would leave the record quietly diverging from
+    // what the drop showed.
+    const shared = [
+      { x: 0, y: 178, kind: 'fork', edgeBelowId: 'a', footIds: ['f1', 'g1'] },
+      { x: 0, y: 152, kind: 'merge', edgeBelowId: 'a', footIds: ['f1', 'g1'] },
+    ]
+    const foreign = carryAt(record, shared, gap, 190, 'x')
+    expect(foreign.branchFeet).toEqual(['f1', 'g1'])
+    expect(foreign.mergeFeet).toEqual(['f1', 'g1'])
+    const fromF = carryAt(record, shared, gap, 190, 'f2')
+    expect(fromF.branchFeet).toEqual(['g1'])
+    expect(fromF.mergeFeet).toEqual(['g1'])
+    expect(fromF.caretY).toBe((178 + 200) / 2) // the diamond still bounds the sub-gap
   })
 })
