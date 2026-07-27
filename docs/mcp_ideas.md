@@ -186,7 +186,7 @@ since each write is mutation, then `validateRecord`, then atomic write.
 *Settled at v3.3.0, from the rule that the tools and the app should be the same tools.*
 The surface speaks the model's own vocabulary and no other: **domain, project, task,
 terminus**. A plan is the structure a project opens, not an operand type of its own, since
-a plan's base and a sub-project are the same kind and `detach_to_plan` or `move_project`
+a plan's base and a sub-project are the same kind and `detach_project` or `move_project`
 can change which is which under a client's feet; `list_projects` says which is which today
 with `is_root`.
 
