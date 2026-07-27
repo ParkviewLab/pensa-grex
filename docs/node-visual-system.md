@@ -54,27 +54,55 @@ The mapping is policy, set in `renderCard`, not a property of the shapes:
   (in the ink colour, `var(--ink)`);
 - project node → **hull**, in the reserved project colour `--c-project` (a violet:
   `#7d54a6` on the azure ground, `#bd93e6` on navy);
+- terminus node (the close of a scope, schema 3) → the same **hull** in the same violet,
+  turned through half a turn: mirrored about both of the card's axes, so the pair reads as
+  one shape and its reflection, and the inversion says which end of the scope this is. It
+  carries no label, so the hull is empty;
 - any **flagged** node → the **orbits**, in the node's own colour (its status colour
   for a task, the project violet for a project);
-- a **collapsed** project node additionally casts a **shadow**.
+- a project node and its terminus → the panel is `--c-project-tint`, a tint of the
+  project violet, in place of the `--panel` colour every task wears, so a scope's two
+  ends read as one material;
+- a **collapsed** project node → nothing additional. Its close is placed flush on its
+  card instead (see below), which is what says the scope is shut.
 
 A project node shows no status glyph and no tag and can never be the cursor, so the
 violet and the hull shape read unambiguously as "this is a project, not a task." The
 orbits are no longer tied to project-ness: they mark the flagged state, toggled by
 double-clicking a node (see `docs/interaction_model.md`).
 
-## The three decorators
+## A folded scope, drawn shut
+
+Collapsing a project hides what lies between it and its own terminus and leaves the
+trunk above the close untouched (`app.js` `pruneCollapsed`, over `scopeOf` in
+`shared/model/validate.js`). The pair that remains is drawn with the two cards
+touching, the close's bottom edge on the project's top edge, with no gap and no air
+between them; `geometry.js` treats that one edge as the exception to the minimum.
+
+The two silhouettes then cross. The hull's top edge rises from left to right, and the
+close is that same hull turned through half a turn, so its bottom edge rises the other
+way; two arcs bowing oppositely meet twice and enclose a lens. That seam is what makes
+a folded pair read as one closed object rather than as two cards that happen to be
+adjacent, and it is why the close is turned through half a turn rather than merely
+mirrored top to bottom.
+
+Since the fold is drawn as one object, the edge rising from a folded project node is
+inside it, and nothing may be added there: the context menu withholds "Add task above",
+"Add branch above", and the merge submenu until the scope is expanded.
+
+## The decorators
 
 Decorators are independent and compose; each is drawn behind the card so it can
-overflow the card box.
+overflow the card box. Two are in use; the third, the shadow, is retired.
 
 - **orbits** — three heavy, off-axis elliptical rings centred on the card, each
   carrying one solid electron set back from apogee. Off-axis and irregular on
   purpose: rings at 0/90/180 would read as a tidy modern diagram, not atomic-age.
   Worn by any flagged node, in the node's own colour.
-- **shadow** — a filled echo of the silhouette, offset down and right at low
-  opacity, drawn when a project is collapsed so a folded project reads as a stack
-  of hidden cards.
+- **shadow** — retired. It was a filled echo of the silhouette, offset up and left at
+  low opacity, drawn when a project was collapsed so a fold read as a stack of hidden
+  cards. A folded scope now says so with its own two ends instead, and a shadow behind
+  that reads as a third edge.
 - **Atomic Starburst** (the "here" mark, `#sputnik` in `tracks.js`) — solid rays
   of irregular length at irregular angles, each tipped with a ball, around a solid
   centre. It marks the branch cursor beside the marquee. Its colour is `.cursor-mark`'s

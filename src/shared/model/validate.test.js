@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import JSON5 from 'json5'
 import fixtureRaw from './fixtures/homelab.record.json?raw'
-import { validateRecord, pairScopes, trunksOf, indexRecord, enclosingScopeOpen } from './validate.js'
+import { validateRecord, pairScopes, trunksOf, indexRecord, enclosingScopeOpen, scopeOf, reachableFrom } from './validate.js'
 
 // A task node with sensible defaults.
 function task(overrides) {
@@ -613,5 +613,95 @@ describe('enclosingScopeOpen — the bound a branch may not reach past', () => {
     expect(enclosingScopeOpen(record, 'x', ix)).toBe('p')
     // And the branch the bound permits is accepted: a bubble on c's own edge.
     expect(validateRecord(record)).toEqual({ ok: true, errors: [] })
+  })
+})
+
+describe('reachableFrom and scopeOf — what belongs to a scope', () => {
+  // A plan with a sub-project in the middle of its trunk, a branch inside that scope, a
+  // branch on the scope's own opening edge, a branch on its close, and a task above it:
+  //
+  //   P  a  P2  b  T2  c  T          (base to top, up the trunk)
+  //          |   |   |
+  //          x   y   z               (x on P2's own edge, y inside, z on the close)
+  const record = () => ({
+    schema: 3, id: 'd_1', title: 'D', planOrder: ['P'],
+    nodes: {
+      P: project({ id: 'P', next: 'a' }),
+      a: task({ id: 'a', next: 'P2' }),
+      P2: project({ id: 'P2', next: 'b', rightBranches: ['x1'] }),
+      b: task({ id: 'b', next: 'T2', rightBranches: ['y1'] }),
+      T2: terminus({ id: 'T2', next: 'c', rightBranches: ['z1'] }),
+      c: task({ id: 'c', next: 'T' }),
+      T: terminus({ id: 'T' }),
+      x1: task({ id: 'x1', next: 'x2' }),
+      x2: task({ id: 'x2', mergePoint: 'P2' }),
+      y1: task({ id: 'y1', mergePoint: 'b' }),
+      z1: task({ id: 'z1', mergePoint: 'T2' }),
+    },
+  })
+
+  it('stops at the close, so the trunk above a scope is not part of it', () => {
+    const { body, terminusId } = scopeOf(record(), 'P2')
+    expect(terminusId).toBe('T2')
+    // Inside: the run between the pair, the branch on the opening edge, the branch off b.
+    expect([...body].sort()).toEqual(['b', 'x1', 'x2', 'y1'])
+    // Outside: the close itself, the branch hanging off the close, and everything above.
+    for (const id of ['P2', 'T2', 'z1', 'c', 'T', 'a', 'P']) expect(body.has(id)).toBe(false)
+  })
+
+  it('gives a plan\'s own base everything but its close', () => {
+    const { body, terminusId } = scopeOf(record(), 'P')
+    expect(terminusId).toBe('T')
+    expect(body.has('P2')).toBe(true)
+    expect(body.has('T2')).toBe(true) // a nested pair is wholly inside the outer scope
+    expect(body.has('c')).toBe(true)
+    expect(body.has('z1')).toBe(true) // and so is the branch off the nested close
+    expect(body.has('T')).toBe(false)
+    expect(body.has('P')).toBe(false)
+  })
+
+  it('returns nothing for a node that opens no scope', () => {
+    expect(scopeOf(record(), 'b')).toBeNull()
+    expect(scopeOf(record(), 'T2')).toBeNull()
+    expect(scopeOf(record(), 'nope')).toBeNull()
+  })
+
+  it('takes the close bracket matching gives it, which on an unbalanced trunk is the outer one', () => {
+    // With T2 gone the trunk reads P a P2 b c T: P2 opened last, so the one remaining close
+    // is its, and P is the scope left unclosed. scopeOf does not guess or invent a close, it
+    // reports the pairing, so a caller folding P2 hides b and c and stops below T.
+    const r = record()
+    delete r.nodes.T2
+    r.nodes.b.next = 'c'
+    delete r.nodes.z1
+    const { body, terminusId } = scopeOf(r, 'P2')
+    expect(terminusId).toBe('T')
+    expect(body.has('b')).toBe(true)
+    expect(body.has('c')).toBe(true)
+    expect(body.has('T')).toBe(false)
+  })
+
+  it('falls back to the top of the trunk when nothing closes the scope at all', () => {
+    // No terminus anywhere above P2: there is no scope to stay inside, so the unbounded
+    // reading is the only one left, and the caller sees terminusId null and can say so.
+    const r = record()
+    delete r.nodes.T2
+    delete r.nodes.T
+    delete r.nodes.z1
+    r.nodes.b.next = 'c'
+    r.nodes.c.next = null
+    const { body, terminusId } = scopeOf(r, 'P2')
+    expect(terminusId).toBeNull()
+    expect(body.has('b')).toBe(true)
+    expect(body.has('c')).toBe(true)
+  })
+
+  it('reads a branch as bounded by itself, which is why a branch subtree needs no bracket', () => {
+    // reachableFrom follows next and the branch arrays with no notion of a scope; from a
+    // branch's foot that is exactly the branch, since a branch's tip has no successor.
+    expect([...reachableFrom(record(), 'x1')].sort()).toEqual(['x1', 'x2'])
+    // From a node on a plan's trunk it runs to the top, which is the reading the fold had
+    // to stop using.
+    expect(reachableFrom(record(), 'P2').has('T')).toBe(true)
   })
 })

@@ -185,6 +185,15 @@ receives a return. An edge that does both takes the larger of the two, and at le
 Nothing is aligned across lanes. Two cards in different plans, or one on a trunk and
 one on a branch beside it, share a y only by coincidence.
 
+One edge is exempt from all of this, and it is the only one: a **folded scope**. When a
+project node is collapsed, the client's view keeps the pair and drops the body, and the
+close is placed flush on the project's own card, bottom edge to top edge, with no
+`anchorGap` and no air. The air that edge reports is therefore negative by exactly the
+`anchorGap`, since the project's own circle falls inside the close's card and is covered
+by it. The two silhouettes cross into a lens there, which is what makes a shut scope read
+as one closed object; see `node-visual-system.md`. Collapse is client-local, so no stored
+record ever asks for this.
+
 ## The twelve-degree lateral, and the underpass
 
 A branch line leaving a fork and a return line rejoining a trunk are the same kind
@@ -228,8 +237,17 @@ about the rise, which is constant, but would re-open the packing, whereas liftin
 monotone. Which node is lifted follows `pinnedBy`, the record of which constraint
 set each height, so a node whose height a lateral pins is repaired by lifting the
 host of the branch that pins it, rather than by bending that lateral off twelve
-degrees. The pass is bounded by `repairPasses`, and whatever it cannot close rides
-out on `layout.conflicts` instead of being drawn in silence. Over the nine live
+degrees. A folded pair's close pins to its own project node for the same reason: the
+pair is one object, and slack given to the close would come out of the seam instead of
+moving anything. The pass is bounded by `repairPasses`, and whatever it cannot close
+rides out on `layout.conflicts` instead of being drawn in silence.
+
+What comes back is the best placement rather than the last. A lift is not guaranteed to
+clear the line it was asked to clear; it can move a card into another line's path, or
+move nothing at all relative to the line, and a pass that buys nothing still costs the
+height it added. Fewer conflicts therefore wins, and between two placements with the
+same number the shorter drawing wins, which is the unrepaired one when the repair can
+do nothing. Over the nine live
 domains and the two committed fixtures it closes everything, and those eleven
 drawings together are slightly shorter than the grid drew them, 10,883 pixels of
 height against 11,096.

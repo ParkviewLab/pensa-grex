@@ -44,6 +44,12 @@ const DEFAULTS = {
   anchorGap: 14, // how far a circle sits above its own card's top edge
   dotRadius: 6, // half a station dot (style.css .dot{width:11px}), rounded up
   branchYieldsToReturn: true, // a branch line passes behind a return line where the two cross
+  // How far a folded scope's two cards overlap, so the pair reads as one closed object: Gary's
+  // figure, judged against renderings at actual size. It is a floor rather than the whole answer,
+  // since the hull's edges bow away from the seam in proportion to their own card's height, so a
+  // taller project card takes whatever more it needs to keep the seam shut (render/shapes.js
+  // hullSeamToClose). At the ordinary card height, 58 by 58, closing takes 19.5 and this is 22.
+  foldSeam: 22,
   repairPasses: 8, // how many times a lateral crossing a card may lift that card before we stop
   treeGap: 90, // horizontal gap between two trees' bounding boxes
   margin: 40, // canvas margin on every side
@@ -319,9 +325,23 @@ function placeOnce(model, sizes, o, slack) {
 // the case the argument misses; whatever is left rides out on `conflicts` rather than being
 // swallowed, because a drawing that quietly runs a line through a station is worse than one that
 // says it did.
+//
+// What comes back is the BEST placement, not the last one. A lift is not guaranteed to clear the
+// line it was asked to clear: it can move the card into the path of another, and a pass that buys
+// nothing still costs the height it added. Returning the last placement therefore let a handful
+// of futile passes inflate a trunk edge by hundreds of pixels and leave the conflicts standing.
+// Fewer conflicts wins; between two placements with the same number, the shorter drawing wins,
+// which is the un-repaired one when the repair can do nothing at all.
+function betterPlacement(a, b) {
+  if (!b) return true
+  if (a.conflicts.length !== b.conflicts.length) return a.conflicts.length < b.conflicts.length
+  return a.bounds.h < b.bounds.h
+}
+
 function repairAndPlace(model, sizes, o) {
   const slack = new Map()
   let placed = placeOnce(model, sizes, o, slack)
+  let best = placed
   for (let pass = 0; pass < o.repairPasses && placed.conflicts.length; pass++) {
     let grew = false
     for (const c of placed.conflicts) {
@@ -333,8 +353,9 @@ function repairAndPlace(model, sizes, o) {
     }
     if (!grew) break
     placed = placeOnce(model, sizes, o, slack)
+    if (betterPlacement(placed, best)) best = placed
   }
-  return placed
+  return best
 }
 
 export function computeDomainLayout(model, sizes, opts = {}) {

@@ -17,7 +17,7 @@ function syntheticSizes(model) {
   const sizes = new Map()
   for (const [id, node] of model.nodes) {
     // A terminus carries no title, so there is no text to wrap, but it is drawn as the
-    // project hull turned upside down and so takes the project card's width and its minimum
+    // project hull turned through half a turn and so takes the project card's width and its minimum
     // height (style.css: .card{width:188px}, .card.terminus{min-height:58px}). It was a short
     // bar before stage 5 and this fixture still said so, which hid every clearance question a
     // full-width close asks.
@@ -150,6 +150,11 @@ describe('computeDomainLayout — the HomeLab fixture', () => {
   })
 
   it('never overlaps two station cards, anywhere in the model', () => {
+    // With one exception, which no stored record can ask for: the two halves of a FOLDED scope
+    // overlap on purpose, by the seam that shuts the lens where their silhouettes cross
+    // (geometry.js, and node-visual-system.md). Collapse is client-local view state, so a
+    // fixture is never folded; the exemption is named in the sweep below rather than left
+    // implicit, so the property stays true of the drawing rather than only of these fixtures.
     const { layout } = loadFixtureLayout()
     const rects = layout.stations.map(rectOf)
     for (let i = 0; i < rects.length; i++) {
@@ -947,6 +952,63 @@ describe('trackPath — the polyline it draws', () => {
 
 // Five properties that hold whatever the engine draws, asserted here so that a rewrite of the
 // vertical half has something to be measured against. None of them names a coordinate.
+describe('computeDomainLayout — the repair returns the best placement, not the last', () => {
+  // A lift is not guaranteed to clear the line it was asked to clear: it can move the card into
+  // another line's path, or, as here, move nothing relative to the line at all. Before this was
+  // handled, eight futile passes inflated one trunk edge from 36 pixels to 734 and left the
+  // conflict standing, so the drawing was both wrong and half as tall again.
+  //
+  // The shape: a plan whose base carries a branch returning just above a sub-project's close,
+  // with a second branch off the node above the base returning near the top. Folded, the first
+  // branch's return crosses the shut pair, and no lift can separate them, since everything the
+  // repair can raise carries the crossing line with it.
+  const T0S = '2026-01-01T00:00:00Z'
+  const task = (id, o = {}) => ({ id, title: id.toUpperCase(), kind: 'task', status: 'todo', createdAt: T0S, completedAt: null, note: null, here: false, next: null, leftBranches: [], rightBranches: [], ...o })
+  const project = (id, o = {}) => ({ id, title: id.toUpperCase(), kind: 'project', createdAt: T0S, note: null, next: null, leftBranches: [], rightBranches: [], ...o })
+  const terminus = (id, o = {}) => ({ id, kind: 'terminus', createdAt: T0S, note: null, next: null, leftBranches: [], rightBranches: [], ...o })
+  const unfolded = () => ({
+    schemaVersion: 3, id: 'd_run', title: 'Runaway', planOrder: ['P0'],
+    nodes: Object.fromEntries([
+      project('P0', { next: 'b0', leftBranches: ['g0'] }), task('g0', { mergePoint: 'T1' }),
+      task('b0', { next: 'P1', leftBranches: ['f0'] }), task('f0', { mergePoint: 'a1' }),
+      project('P1', { next: 'm0' }), task('m0', { next: 'T1' }),
+      terminus('T1', { next: 'a0' }), task('a0', { next: 'a1' }), task('a1', { next: 'T0' }), terminus('T0'),
+    ].map((n) => [n.id, n])),
+  })
+  // The view the renderer builds when P1 is folded: its body goes and it points at its own close.
+  const foldedView = () => {
+    const r = unfolded()
+    delete r.nodes.m0
+    r.nodes.P1.collapsed = true
+    r.nodes.P1.next = 'T1'
+    return r
+  }
+  const layoutOf = (record, opts) => {
+    const model = buildModel(record)
+    const sizes = new Map([...model.nodes].map(([id]) => [id, { cardW: 188, cardH: 58 }]))
+    return computeDomainLayout(model, sizes, opts)
+  }
+
+  it('takes the record it is given as a legal one', () => {
+    expect(validateRecord(unfolded())).toEqual({ ok: true, errors: [] })
+  })
+
+  it('does not inflate the drawing over passes that clear nothing', () => {
+    const none = layoutOf(foldedView(), { repairPasses: 0 })
+    const eight = layoutOf(foldedView(), { repairPasses: 8 })
+    expect(none.conflicts.length).toBe(1) // the crossing no lift can resolve
+    expect(eight.conflicts.length).toBe(1) // still there, and still reported
+    expect(eight.bounds.h).toBe(none.bounds.h) // and the drawing is the same size, not half as tall again
+  })
+
+  it('keeps the fold shut through those passes', () => {
+    const { stations } = layoutOf(foldedView(), { repairPasses: 8 })
+    const by = new Map(stations.map((s) => [s.id, s]))
+    const overlap = (by.get('T1').cardTop + by.get('T1').cardH) - by.get('P1').cardTop
+    expect(overlap).toBeCloseTo(22, 9)
+  })
+})
+
 describe('computeDomainLayout — properties of any drawing', () => {
   it('reports the constants it drew with, and honours an override of one', () => {
     const { layout } = loadFixtureLayout()
@@ -1043,6 +1105,13 @@ describe('computeDomainLayout — properties of any drawing', () => {
     const byId = new Map(layout.stations.map((s) => [s.id, s]))
     for (const [id, node] of model.nodes) {
       if (!node.next || !byId.has(node.next)) continue
+      // One edge in the drawing is deliberately airless: a folded scope's close sits flush on
+      // its project card, the two silhouettes crossing into a lens, so the pair reads as one
+      // closed object (geometry.js isFoldedPair). No fixture here is folded, since collapse is
+      // client-local view state, but the exemption is stated so the property stays true rather
+      // than merely untested.
+      const above = model.getNode(node.next)
+      if (node.collapsed && node.kind === 'project' && above && above.kind === 'terminus') continue
       const lower = byId.get(id)
       const upper = byId.get(node.next)
       const air = lower.anchorY - (upper.cardTop + upper.cardH)

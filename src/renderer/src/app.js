@@ -14,7 +14,7 @@ import { createViewport } from './interaction/viewport.js'
 import { mountLayout } from './render/scene.js'
 import { renderCards } from './render/shapes.js'
 import { buildModel } from '../../shared/model/model.js'
-import { branchChildrenOf, isPlanClose, branchesIn, indexRecord, mergeErrors } from '../../shared/model/validate.js'
+import { branchChildrenOf, isPlanClose, branchesIn, indexRecord, mergeErrors, pairScopes, trunksOf, scopeOf, reachableFrom } from '../../shared/model/validate.js'
 import { measureDomain } from './layout/measure.js'
 import { computeDomainLayout } from './layout/layout.js'
 import { createApi } from './bridge/api.js'
@@ -347,7 +347,7 @@ function resolveDropIntent(sourceId, clientX, clientY) {
   // scope ends. Moving the scope means moving its project node, which carries it.
   if (src.kind === 'terminus') return { kind: 'none' }
   const { wx, wy } = clientToWorld(clientX, clientY)
-  const sub = subtreeIdsOf(currentRecord, sourceId)
+  const sub = reachableFrom(currentRecord, sourceId)
   const byId = new Map(currentLayout.stations.map((s) => [s.id, s]))
 
   // 1. Over a card -> fork (never the source itself or a node inside its subtree).
@@ -434,38 +434,39 @@ function applyDropIntent(sourceId, intent) {
   }
 }
 
-// Every id reachable from startId in the record (inclusive), following .next and branches.
-function subtreeIdsOf(record, startId) {
-  const ids = new Set()
-  const stack = [startId]
-  while (stack.length) {
-    const id = stack.pop()
-    if (ids.has(id)) continue
-    ids.add(id)
-    const t = record.nodes[id]
-    if (!t) continue
-    if (t.next) stack.push(t.next)
-    for (const b of branchChildrenOf(t)) stack.push(b.child)
-  }
-  return ids
-}
-
-// A view-only copy of the record with each collapsed project node kept as a leaf: its
-// subtree removed and the node marked so the render draws it folded (its shadow).
+// A view-only copy of the record in which each collapsed project node keeps its own
+// close and loses what lies between them: the fold hides the scope's body, and the
+// trunk above the close carries on untouched. The pair is then drawn flush, one card
+// on the other (layout/geometry.js), so a shut scope reads as a single closed object.
+//
 // Collapse is client-local (docs/northstar.md axiom 9), so this never touches
 // currentRecord or the saved record; a collapsed id that is now a task is ignored.
+// The scope's extent comes from scopeOf, which matches brackets rather than following
+// `next` to the top of the trunk: that unbounded walk is what used to take the rest of
+// the plan, the enclosing plan's own terminus included.
 function pruneCollapsed(record, collapsed) {
   const ids = [...collapsed].filter((id) => record.nodes[id] && record.nodes[id].kind === 'project')
   if (!ids.length) return record
+  const { pairs } = pairScopes(record, trunksOf(record))
+  const scopes = new Map()
   const remove = new Set()
-  for (const id of ids) for (const d of subtreeIdsOf(record, id)) if (d !== id) remove.add(d)
+  for (const id of ids) {
+    const scope = scopeOf(record, id, pairs)
+    if (!scope) continue
+    scopes.set(id, scope)
+    for (const d of scope.body) remove.add(d)
+  }
   const next = structuredClone(record)
   for (const id of ids) {
     if (remove.has(id)) continue // this collapsed node is itself hidden inside another
+    const scope = scopes.get(id)
+    if (!scope) continue
     next.nodes[id].collapsed = true
-    next.nodes[id].next = null
+    // The edge rising from a project node belongs to its scope, so its own branches are
+    // inside the fold; its close is not, and keeps its branches and its successor.
     next.nodes[id].leftBranches = []
     next.nodes[id].rightBranches = []
+    next.nodes[id].next = scope.terminusId
   }
   for (const d of remove) delete next.nodes[d]
   return next
@@ -484,7 +485,7 @@ function toggleCollapse(taskId) {
 // so it is a snapshot independent of later edits. Shared by copy and export.
 async function collectSubtreeNotes(taskId) {
   const notes = {}
-  for (const id of subtreeIdsOf(currentRecord, taskId)) {
+  for (const id of reachableFrom(currentRecord, taskId)) {
     const rec = currentRecord.nodes[id]
     if (rec.note) {
       const r = await api.readNote(currentDomainPath, rec.note)
@@ -499,7 +500,7 @@ async function collectSubtreeNotes(taskId) {
 // domain switch; note text is read now rather than referenced by file.
 async function copyProject(taskId) {
   const nodes = {}
-  for (const id of subtreeIdsOf(currentRecord, taskId)) nodes[id] = structuredClone(currentRecord.nodes[id])
+  for (const id of reachableFrom(currentRecord, taskId)) nodes[id] = structuredClone(currentRecord.nodes[id])
   clipboard = { rootId: taskId, nodes, notes: await collectSubtreeNotes(taskId) }
 }
 
@@ -718,12 +719,18 @@ function openTaskMenu(x, y, taskId) {
   if (predId && !isRootId(currentRecord, predId)) items.push({ label: 'Move down', onClick: () => applyOp('moveDown', taskId) })
   items.push({ label: 'Rename…', onClick: () => renameTask(taskId) })
   items.push({ separator: true })
-  items.push({ label: 'Add task above', onClick: () => addTaskFlow('above', taskId) })
+  // Nothing may be added on the edge rising from a folded project node: that edge is the
+  // first edge of the scope it opens, so whatever landed there would land out of sight
+  // inside the fold. Expanding the scope offers all three again.
+  const foldedOpen = isProject && collapsedSet.has(taskId)
+  if (!foldedOpen) items.push({ label: 'Add task above', onClick: () => addTaskFlow('above', taskId) })
   // Nothing may be added below a root node (a project's base).
   if (!isRoot) items.push({ label: 'Add task below', onClick: () => addTaskFlow('below', taskId) })
-  items.push({ label: 'Add branch above', onClick: () => addBranchFlow('above', taskId) })
+  if (!foldedOpen) items.push({ label: 'Add branch above', onClick: () => addBranchFlow('above', taskId) })
   if (!isRoot) items.push({ label: 'Add branch below', onClick: () => addBranchFlow('below', taskId) })
-  const merges = mergeCandidates(taskId)
+  // A merge lands a return on the edge above this node, so it is an addition on that
+  // same hidden edge and goes with the other two.
+  const merges = foldedOpen ? [] : mergeCandidates(taskId)
   if (merges.length) items.push({ label: 'Merge a branch here', submenu: merges })
   items.push({ separator: true })
   items.push({ label: 'Edit note…', onClick: () => openNote(taskId) })

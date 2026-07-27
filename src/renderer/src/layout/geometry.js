@@ -5,6 +5,12 @@
 // its y in pixels, and the horizontal lane packing. No DOM; every input is plain data
 // (a domain model — see model/model.js — plus measured sizes).
 //
+// The one figure it borrows is the seam of a folded pair, which is a property of the hull's
+// own path and so comes from the shape module rather than being restated here. That is a
+// sibling import inside the renderer, of a pure function that touches no DOM.
+
+import { hullSeamToClose } from '../render/shapes.js'
+//
 // Horizontal placement (assignLanes) is a subtree-aware band packer: each branch
 // reserves a contiguous band of lanes wide enough for its whole subtree, packed
 // first-fit against the extents already placed on that side, so two subtrees whose
@@ -58,6 +64,17 @@ function airOnEdge(m, { hostsFork, receivesMerge, upperW, lowerW }) {
   if (receivesMerge) air = Math.max(air, m.arriveClear + (lowerW / 2) * m.tan12 + m.dotRadius + m.junctionMargin)
   if (hostsFork && receivesMerge) air = Math.max(air, m.departClear + m.diamondGap + m.arriveClear)
   return air
+}
+
+// Whether this edge joins a folded project node to its own close, which is the one edge
+// drawn with the two cards touching. `collapsed` is the renderer's view-only mark
+// (app.js pruneCollapsed), never a field of the stored record: collapse is the client's,
+// per northstar axiom 9. A folded project's successor IS its close, the body having been
+// taken out of the view, so the two tests together are exact.
+function isFoldedPair(model, id, node) {
+  if (!node.collapsed || node.kind !== 'project') return false
+  const above = model.getNode(node.next)
+  return !!above && above.kind === 'terminus'
 }
 
 /**
@@ -115,6 +132,26 @@ export function solveHeights(model, sizes, metrics, slack) {
 
   for (const [id, node] of model.nodes) {
     if (node.next && model.getNode(node.next)) {
+      // A folded scope is drawn shut: its close sits ON its project card, the two overlapping
+      // enough that the hull and its half turn cross, so the pair reads as one closed object
+      // rather than as two cards with a gap. That is the one edge in the drawing with no air
+      // at all; the air it reports is therefore negative, since the project's own circle falls
+      // inside the close's card and is covered by it.
+      if (isFoldedPair(model, id, node)) {
+        // The two cards overlap rather than merely touch, by the greater of the metric and what
+        // this pair's own heights need, so the seam between them is shut at every card size.
+        //
+        // The seam takes no repair slack, and the close is pinned to its own project node. A
+        // folded pair is one object: slack added to the close would come straight out of the
+        // overlap, prising the pair open by however much a lateral crossing the close asked for,
+        // and since nothing else marks a fold the drawing would then be indistinguishable from an
+        // open, empty scope with the conflict list empty. Pinning sends the lift to the project
+        // instead, which carries the close with it and keeps the seam exact.
+        const seam = Math.max(m.foldSeam, hullSeamToClose(cardH(id), cardH(node.next)))
+        airBelow.set(node.next, -(m.anchorGap + seam))
+        constrain(id, node.next, cardH(node.next) - seam, { hostId: id, fold: true })
+        continue
+      }
       const air = airOnEdge(m, {
         hostsFork: hostsFork.has(id),
         receivesMerge: receivesMerge.has(id),
@@ -151,7 +188,8 @@ export function solveHeights(model, sizes, metrics, slack) {
         u.set(edge.to, want)
         // Which constraint won matters to a repair pass: a node whose height came from a lateral
         // line cannot be lifted on its own without bending that line off twelve degrees, so the
-        // thing to lift is the branch's own host, which carries the whole lens with it.
+        // thing to lift is the branch's own host, which carries the whole lens with it. A folded
+        // pair's close pins to its project node for the same reason, the pair being one object.
         if (edge.branch) pinnedBy.set(edge.to, edge.branch)
         else pinnedBy.delete(edge.to)
       }
