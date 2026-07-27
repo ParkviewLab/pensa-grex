@@ -138,6 +138,13 @@ export function renderCard(cardEl) {
   const flagged = cardEl.classList.contains('flagged')
   const shape = isProject ? 'hull' : isCursor ? 'marquee' : 'screen'
   const w = cardEl.offsetWidth, h = cardEl.offsetHeight
+  // A card the layout has not shown cannot be measured: "show only flagged" puts
+  // display:none on every unflagged card (style.css), and an element with no box reports
+  // zero for both. Painting a silhouette from that would bake viewBox="0 0 0 0" and a
+  // degenerate inner transform into a card that is about to be revealed again, so leave
+  // whatever it already has and wait to be called once it has a box. renderCards on the
+  // filter's own toggle is what calls again.
+  if (w === 0 || h === 0) return
 
   let svg = cardEl.querySelector('svg.cardbg')
   if (!svg) {
