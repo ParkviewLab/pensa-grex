@@ -66,9 +66,11 @@ path = ["build/icon.png", "build/icon.svg", "build/icon-night.svg", "site/assets
 SPDX-FileCopyrightText = "2026 Gary Frattarola <garyf@parkviewlab.ai>"
 SPDX-License-Identifier = "LicenseRef-AllRightsReserved"
 
-# Download-page screenshot — a first-party capture of the running app, part of the
-# public download page's documentation of the product. Binary (webp), annotated here.
+# Download-page screenshots — first-party captures of the running app, part of the
+# public download page's documentation of the product. A pair, as the icon is: the
+# azure (day) ground and the navy (night) one, swapped with the page's own toggle.
+# Binary (webp), annotated here.
 [[annotations]]
-path = ["site/assets/screenshot.webp"]
+path = ["site/assets/screenshot.webp", "site/assets/screenshot-night.webp"]
 SPDX-FileCopyrightText = "2026 Gary Frattarola <garyf@parkviewlab.ai>"
 SPDX-License-Identifier = "CC-BY-4.0"

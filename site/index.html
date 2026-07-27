@@ -8,7 +8,7 @@ SPDX-License-Identifier: CC-BY-4.0
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PensaGrex — download</title>
-<meta name="description" content="PensaGrex: a live set of project plans, drawn as a subway map. Download for macOS, Windows, and Linux.">
+<meta name="description" content="PensaGrex: a live set of project plans, drawn as an interactive map. Download for macOS, Windows, and Linux.">
 <link rel="icon" href="assets/icon.svg">
 <style>
 /* Bundled mid-century typefaces, self-hosted (no network). Both SIL OFL 1.1. */
@@ -81,8 +81,11 @@ a{color:var(--accent-teal);}
 /* Download tiles as Googie "screen" station cards. */
 .dl-head{display:flex; align-items:baseline; gap:12px; margin:0 0 14px;}
 .dl-head h2{font-family:var(--font-display); font-weight:400; font-size:22px; letter-spacing:.02em; margin:0; color:var(--ink);}
-.verbadge{font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--here-ink);
-  background:var(--accent-teal); padding:2px 8px; border-radius:3px; font-weight:800;}
+/* The version reads at twice its old size: it is the one fact a returning visitor
+   comes for, and it sat smaller than the word Download beside it. Padding and
+   radius grow with it so the chip stays snug rather than merely taller. */
+.verbadge{font-size:22px; letter-spacing:.1em; text-transform:uppercase; color:var(--here-ink);
+  background:var(--accent-teal); padding:3px 11px; border-radius:5px; font-weight:800;}
 .tiles{display:grid; grid-template-columns:repeat(2,1fr); gap:12px;}
 .tile{display:flex; align-items:center; gap:11px; text-decoration:none; color:var(--ink);
   background:var(--panel); border:3px solid var(--accent); border-bottom-width:5px; border-radius:15px;
@@ -102,6 +105,12 @@ a{color:var(--accent-teal);}
 .shot{border:1px solid var(--line); border-radius:16px; overflow:hidden; background:var(--ground);
   box-shadow:0 18px 50px rgba(0,0,0,.16);}
 .shot img{display:block; width:100%; height:auto;}
+/* The screenshot follows the ground, as the hero mark does: the app in its azure
+   ground on light, in its navy ground on dark, so the page never shows one whilst
+   wearing the other. Same frame, same zoom, same domain, so the swap does not jump. */
+.shot .shot-night{display:none;}
+:root[data-ground="navy"] .shot .shot-day{display:none;}
+:root[data-ground="navy"] .shot .shot-night{display:block;}
 .shot-ph{padding:60px 24px; text-align:center; color:var(--muted);
   background-image:radial-gradient(circle, var(--grid) 1px, transparent 1.4px); background-size:40px 40px;}
 .shot-cap{font-size:12px; color:var(--muted); text-align:center; margin:12px 0 0; letter-spacing:.02em;}
@@ -203,7 +212,11 @@ footer a{color:var(--muted); text-decoration:underline;}
 
   <section class="shotband">
     <div class="shot">
-      <img src="assets/screenshot.webp" alt="PensaGrex showing the Work domain as a subway map of project plans"
+      <img class="shot-day" src="assets/screenshot.webp" width="2000" height="1301"
+           alt="PensaGrex showing the Work domain: three project plans side by side, each opening at a project and closing at its terminus, with branches that leave a line and rejoin it"
+           onerror="this.style.display='none'; document.getElementById('shot-ph').style.display='block';">
+      <img class="shot-night" src="assets/screenshot-night.webp" width="2000" height="1301"
+           alt="PensaGrex showing the Work domain: three project plans side by side, each opening at a project and closing at its terminus, with branches that leave a line and rejoin it"
            onerror="this.style.display='none'; document.getElementById('shot-ph').style.display='block';">
       <div class="shot-ph" id="shot-ph" style="display:none;">The app screenshot goes here.</div>
     </div>
