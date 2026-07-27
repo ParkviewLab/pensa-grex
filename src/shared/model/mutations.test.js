@@ -7,7 +7,7 @@ import {
   setTitle, uniqueTitle, setNote, toggleFlag, setStatus, cycleStatus, makeHere, clearHere, addTree, convertKind,
   addTaskAbove, addTaskBelow, addBranchAbove, addBranchBelow, openBranch, setMergePoint, deleteTask, pasteAsTree,
   moveTaskNode, moveSubtree, detachToTree, reorderRoot, moveIntoLine, moveUp, moveDown,
-  wrapRun, unwrapProject, clipNodes,
+  wrapRun, unwrapProject, clipNodes, wrapCandidates,
 } from './mutations.js'
 
 // A small valid record: project root r -> m1(here) -> m2 -> z, with a fork b1 -> b2
@@ -825,6 +825,40 @@ describe('wrapRun / unwrapProject', () => {
   })
 })
 
+describe('wrapCandidates — the runs a menu may offer', () => {
+  it('offers each node up the trunk, itself first', () => {
+    // base(): r -> m1 -> m2 -> z. From m1 the legal runs are m1 alone and m1 to m2; the
+    // plan's close cannot end a run, since its opening (r) would be left outside.
+    expect(wrapCandidates(base(), 'm1')).toEqual(['m1', 'm2'])
+    expect(wrapCandidates(base(), 'm2')).toEqual(['m2'])
+  })
+
+  it('offers a whole sub-project but never half of one', () => {
+    // r -> Sub -> m1 -> zSub -> m2 -> z. From Sub the runs are the pair alone and the pair
+    // plus m2; a run ending at m1 or at zSub would cut the scope in half.
+    const wrapped = wrapRun(base(), 'm1', 'm1', 'Sub')
+    const subId = ids(wrapped).find((id) => wrapped.nodes[id].title === 'Sub')
+    const closeId = pairScopes(wrapped, trunksOf(wrapped)).pairs.get(subId)
+    expect(wrapCandidates(wrapped, subId)).toEqual([closeId, 'm2'])
+    // and from inside the scope, the run stops below the close that ends it
+    expect(wrapCandidates(wrapped, 'm1')).toEqual(['m1'])
+  })
+
+  it('offers nothing that wrapRun would then refuse', () => {
+    // The property the menu rests on, asserted directly against the operation.
+    const wrapped = wrapRun(base(), 'm1', 'm1', 'Sub')
+    for (const from of ids(wrapped)) {
+      for (const to of wrapCandidates(wrapped, from)) {
+        expect(() => wrapRun(wrapped, from, to, 'X')).not.toThrow()
+      }
+    }
+  })
+
+  it('is empty for a node that is not there', () => {
+    expect(wrapCandidates(base(), 'nope')).toEqual([])
+  })
+})
+
 describe('pasteAsTree', () => {
   // A clip mirroring base()'s shape, with one completed task and one carrying a
   // note, so the paste can be checked to keep statuses, clear cursors, and carry
@@ -846,6 +880,16 @@ describe('pasteAsTree', () => {
     notes: { b2: '# b2 note\n' },
   })
   const empty = () => ({ schemaVersion: 3, id: 'd_test000000', title: 'T', planOrder: [], nodes: {} })
+
+  it('refuses a clip that is not a plan, saying so where the clip is named', () => {
+    // A clip pastes as a plan, and a plan is bounded by a project and its close, so a clip
+    // rooted at a task cannot become one. Refused here rather than by validateRecord at the
+    // end, which would complain about a node the caller never mentioned.
+    const c = clip()
+    c.rootId = 'm1'
+    expect(() => pasteAsTree(empty(), c)).toThrow(/its root must be a project/)
+    expect(() => pasteAsTree(empty(), { rootId: 'nope', nodes: {} })).toThrow(/rootId present in its own nodes/)
+  })
   const byTitle = (record) => Object.fromEntries(Object.values(record.nodes).map((t) => [t.title, t]))
 
   it('pastes a copied project as a fresh, valid tree with regenerated ids', () => {
@@ -1033,6 +1077,13 @@ describe('moveSubtree', () => {
   it('refuses grafting a subtree onto its own descendant, or onto itself', () => {
     expect(() => moveSubtree(withSub(), 'SP', 's1')).toThrow() // s1 is inside SP
     expect(() => moveSubtree(withSub(), 'SP', 'SP')).toThrow()
+  })
+
+  it('refuses a task, which travels alone and has its own verb', () => {
+    // The two moves are named for the two kinds, and each names the other: a project takes
+    // the plan it opens, a task takes nothing. Refusing here rather than in the tool layer
+    // means the tool surface and the app get the same answer.
+    expect(() => moveSubtree(withSub(), 's1', 'f1')).toThrow(/use moveTaskNode for a task/)
   })
 })
 

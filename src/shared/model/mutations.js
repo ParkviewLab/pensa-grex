@@ -529,6 +529,31 @@ export function wrapRun(record, fromId, toId, title) {
 }
 
 /**
+ * The runs beginning at `fromId` that wrapRun would accept, as the id of each run's last
+ * node, base to top. The first is always `fromId` itself, which wraps one node.
+ *
+ * Computed by asking wrapRun, on a throwaway record per candidate, rather than by a second
+ * reading of its rules. That costs a clone per node up the trunk, which is nothing at these
+ * sizes, and buys the property that matters for a menu: it can never offer a run the
+ * operation would then refuse. wrapRun is pure, so the record is untouched.
+ */
+export function wrapCandidates(record, fromId) {
+  const trunk = lineIds(record, fromId)
+  const from = trunk.indexOf(fromId)
+  if (from === -1) return []
+  const out = []
+  for (let i = from; i < trunk.length; i++) {
+    try {
+      wrapRun(record, fromId, trunk[i], 'Probe')
+      out.push(trunk[i])
+    } catch {
+      // Not a legal run: it straddles a scope, or a branch opened inside it rejoins outside.
+    }
+  }
+  return out
+}
+
+/**
  * Undo a wrap: remove a project node and the terminus that closes it, leaving what
  * was inside on the trunk. The scope goes; nothing inside it moves.
  *
@@ -827,6 +852,12 @@ export function clipNodes(record, rootId) {
  */
 export function pasteAsTree(record, clip) {
   const next = clone(record)
+  // A clip pastes as a plan of its own, and a plan is bounded by a project and its close, so
+  // a clip rooted anywhere else cannot become one. Said here, where the clip is named, rather
+  // than left to validateRecord to say at the end about a node the caller never mentioned.
+  const clipRoot = clip && clip.nodes && clip.rootId ? clip.nodes[clip.rootId] : null
+  if (!clipRoot) throw new Error('a clip must name a rootId present in its own nodes')
+  if (clipRoot.kind !== 'project') throw new Error('a clip pastes as a plan, so its root must be a project; clip the project that contains this node instead')
   if (!Array.isArray(next.planOrder)) next.planOrder = []
   const idMap = new Map()
   for (const oldId of Object.keys(clip.nodes)) idMap.set(oldId, mintNodeId())
@@ -996,8 +1027,9 @@ export function moveTaskNode(record, id, targetId) {
  */
 export function moveSubtree(record, rootId, targetId) {
   const next = clone(record)
-  requireTask(next, rootId)
+  const node = requireTask(next, rootId)
   requireTask(next, targetId)
+  if (node.kind !== 'project') throw new Error('moveSubtree moves a project and the plan it opens; use moveTaskNode for a task')
   if (rootId === targetId) throw new Error('cannot move a node onto itself')
   if (extentOf(next, rootId).has(targetId)) throw new Error('cannot graft a subtree onto its own descendant')
   liftExtent(next, rootId)

@@ -42,9 +42,17 @@ describe('tool registration by scope tier', () => {
   it('read-only registers reads only', () => {
     const s = fakeServer('read-only')
     expect(s.has('list_domains')).toBe(true)
-    expect(s.has('read_project')).toBe(true)
+    for (const t of ['read_domain', 'read_project', 'read_task']) expect(s.has(t)).toBe(true)
     expect(s.has('add_task')).toBe(false)
     expect(s.has('delete_task')).toBe(false)
+  })
+  it('names the writes for the kind they take', () => {
+    const s = fakeServer('read-write')
+    expect(s.has('move_task')).toBe(true)
+    expect(s.has('move_project')).toBe(true)
+    // The old names, which said node and subtree where the model says task and project.
+    expect(s.has('move_node')).toBe(false)
+    expect(s.has('move_subtree')).toBe(false)
   })
   it('read-write adds writes but holds destructive back', () => {
     const s = fakeServer('read-write')
@@ -76,7 +84,7 @@ describe('tools drive the task authority', () => {
     const cp = data(await s.call('create_plan', { name: 'Overview' }))
     expect(cp.id).toBeTruthy()
     const lp = data(await s.call('list_projects', {}))
-    expect(lp.projects.find((p) => p.title === 'Overview' && p.root)).toBeTruthy()
+    expect(lp.projects.find((p) => p.title === 'Overview' && p.is_root)).toBeTruthy()
 
     const at = data(await s.call('add_task', { target_id: cp.id, position: 'above', title: 'First task' }))
     expect(at.id).toBeTruthy()
@@ -85,7 +93,7 @@ describe('tools drive the task authority', () => {
     const ss = data(await s.call('set_status', { node_id: at.id, status: 'completed' }))
     expect(ss.outline).toContain('[x] First task')
 
-    const rp = data(await s.call('read_project', {}))
+    const rp = data(await s.call('read_domain', {}))
     expect(rp.outline).toContain('First task')
     expect(rp.nodes.find((n) => n.id === at.id).status).toBe('completed')
   })
@@ -108,22 +116,22 @@ describe('tools drive the task authority', () => {
   it('copy_project -> paste_as_plan duplicates the tree', async () => {
     const cp = data(await s.call('create_plan', { name: 'Src' }))
     const at = data(await s.call('add_task', { target_id: cp.id, position: 'above', title: 'A task' }))
-    const clip = data(await s.call('copy_project', { node_id: cp.id }))
+    const clip = data(await s.call('copy_project', { project: cp.id }))
     // Termini: the subtree under a plan's base now includes the terminus closing it,
     // so the clip carries three nodes, not two. Still asserted as the exact set, and
     // still under the key pasteAsTree reads, `nodes`: the record-wide tasks -> nodes
     // rename reaches the clip snapshot too, so a producer that emits the old key (or
     // one that drops the close) fails here rather than downstream.
-    const close = data(await s.call('read_project', {})).nodes.find((n) => n.kind === 'terminus')
+    const close = data(await s.call('read_domain', {})).nodes.find((n) => n.kind === 'terminus')
     expect(close.id).toBeTruthy()
     expect(Object.keys(clip.nodes || {}).sort()).toEqual([cp.id, at.id, close.id].sort())
     const pasted = data(await s.call('paste_as_plan', { clip }))
     expect(pasted.id).toBeTruthy()
     const lp = data(await s.call('list_projects', {}))
-    expect(lp.projects.filter((p) => p.root)).toHaveLength(2)
+    expect(lp.projects.filter((p) => p.is_root)).toHaveLength(2)
     // Termini: duplicating the tree now means duplicating its brackets, so the pasted
     // copy carries a close of its own, freshly identified rather than the source's.
-    const pastedNodes = data(await s.call('read_project', { project_id: pasted.id })).nodes
+    const pastedNodes = data(await s.call('read_project', { project: pasted.id })).nodes
     const pastedClose = pastedNodes.find((n) => n.kind === 'terminus')
     expect(pastedClose).toBeTruthy()
     expect(pastedClose.id).not.toBe(close.id)
@@ -137,23 +145,99 @@ describe('tools drive the task authority', () => {
     const later = data(await s.call('add_task', { target_id: cp.id, position: 'above', title: 'Later' }))
     const inner = data(await s.call('add_task', { target_id: cp.id, position: 'above', title: 'Inner' }))
     await s.call('wrap_run', { from_id: inner.id, title: 'Sub' })
-    const all = data(await s.call('read_project', {})).nodes
+    const all = data(await s.call('read_domain', {})).nodes
     const sub = all.find((n) => n.title === 'Sub')
     expect(sub).toBeTruthy()
 
-    const scoped = data(await s.call('read_project', { project_id: sub.id }))
+    const scoped = data(await s.call('read_project', { project: sub.id }))
     expect(scoped.nodes.map((n) => n.title || n.kind).sort()).toEqual(['Inner', 'Sub', 'terminus'])
     expect(scoped.outline).toContain('Inner')
     expect(scoped.outline).not.toContain('Later')
 
-    const clip = data(await s.call('copy_project', { node_id: sub.id }))
+    const clip = data(await s.call('copy_project', { project: sub.id }))
     expect(Object.keys(clip.nodes)).toHaveLength(3) // the pair and what is between them
     expect(Object.values(clip.nodes).some((n) => n.id === later.id)).toBe(false)
     // and the clip is a whole plan, so it pastes as one
     const pasteRes = await s.call('paste_as_plan', { clip })
     if (pasteRes.isError) throw new Error('paste refused: ' + pasteRes.content[0].text)
     const pasted = data(pasteRes)
-    expect(data(await s.call('read_project', { project_id: pasted.id })).outline).toContain('Inner')
+    expect(data(await s.call('read_project', { project: pasted.id })).outline).toContain('Inner')
+  })
+
+  // A plan whose trunk reads Src -> Inner -> [Sub] -> Later -> close, Sub wrapped around
+  // Inner: a sub-project with work above its close, plus a task inside it and one outside.
+  async function nested() {
+    const plan = data(await s.call('create_plan', { name: 'Src' }))
+    const later = data(await s.call('add_task', { target_id: plan.id, position: 'above', title: 'Later' }))
+    const inner = data(await s.call('add_task', { target_id: plan.id, position: 'above', title: 'Inner' }))
+    await s.call('wrap_run', { from_id: inner.id, title: 'Sub' })
+    const all = data(await s.call('read_domain', {})).nodes
+    return {
+      plan: plan.id,
+      later: later.id,
+      inner: inner.id,
+      sub: all.find((n) => n.title === 'Sub').id,
+      close: all.find((n) => n.kind === 'terminus' && n.next).id, // Sub's close, which has Later above it
+    }
+  }
+
+  it('reads one task, with the project and the plan it sits in', async () => {
+    const { inner, later, sub, plan } = await nested()
+    const t = data(await s.call('read_task', { task: inner }))
+    expect(t.title).toBe('Inner')
+    expect(t.kind).toBe('task')
+    expect(t.status).toBe('todo')
+    // The two fields that make a read_plan tool unnecessary: one task id reaches its scope
+    // and its plan in one further call.
+    expect(t.enclosing_project_id).toBe(sub)
+    expect(t.root_project_id).toBe(plan)
+    // Later sits outside Sub, above its close, so its scope is the plan itself.
+    const out = data(await s.call('read_task', { task: later }))
+    expect(out.enclosing_project_id).toBe(plan)
+    expect(out.root_project_id).toBe(plan)
+  })
+
+  it('reads a project with the scope it sits in, and a plan base with none', async () => {
+    const { sub, plan } = await nested()
+    const p = data(await s.call('read_project', { project: sub }))
+    expect(p.project).toBe(sub)
+    expect(p.enclosing_project_id).toBe(plan)
+    expect(p.root_project_id).toBe(plan)
+    const base = data(await s.call('read_project', { project: plan }))
+    expect(base.enclosing_project_id).toBeNull() // a plan's base sits in no scope
+    expect(base.root_project_id).toBe(plan)
+  })
+
+  it('takes a title as readily as an id, titles being domain-unique', async () => {
+    const { inner, sub } = await nested()
+    expect(data(await s.call('read_task', { task: 'Inner' })).id).toBe(inner)
+    expect(data(await s.call('read_project', { project: 'Sub' })).project).toBe(sub)
+    const miss = await s.call('read_task', { task: 'Nowhere' })
+    expect(miss.isError).toBe(true)
+    expect(miss.content[0].text).toMatch(/nothing in this domain has the id or title "Nowhere"/)
+  })
+
+  it('refuses the wrong kind and names the tool that reads it', async () => {
+    const { inner, sub, close } = await nested()
+    const asProject = await s.call('read_project', { project: inner })
+    expect(asProject.isError).toBe(true)
+    expect(asProject.content[0].text).toMatch(/is a task; use read_task/)
+
+    const asTask = await s.call('read_task', { task: sub })
+    expect(asTask.isError).toBe(true)
+    expect(asTask.content[0].text).toMatch(/is a project; use read_project/)
+
+    // A close is one half of a pair, so both reads send the caller to the project it closes.
+    for (const call of [s.call('read_task', { task: close }), s.call('read_project', { project: close })]) {
+      const res = await call
+      expect(res.isError).toBe(true)
+      expect(res.content[0].text).toMatch(new RegExp(`one half of a pair.*read_project\\("${sub}"\\)`))
+    }
+
+    // And a clip is a plan, so only a project may be clipped.
+    const clip = await s.call('copy_project', { project: inner })
+    expect(clip.isError).toBe(true)
+    expect(clip.content[0].text).toMatch(/is a task; use read_task/)
   })
 
   it('delete_task removes the node', async () => {
@@ -161,7 +245,7 @@ describe('tools drive the task authority', () => {
     const at = data(await s.call('add_task', { target_id: cp.id, position: 'above', title: 'gone' }))
     const del = data(await s.call('delete_task', { node_id: at.id, mode: 'subtree' }))
     expect(del.deleted).toBe(at.id)
-    expect(data(await s.call('read_project', {})).nodes.find((n) => n.id === at.id)).toBeUndefined()
+    expect(data(await s.call('read_domain', {})).nodes.find((n) => n.id === at.id)).toBeUndefined()
   })
 
   it('find_flagged returns flagged nodes', async () => {
@@ -178,7 +262,7 @@ describe('tools drive the task authority', () => {
     const cp = data(await s.call('create_plan', { name: 'Ship' }))
     const first = data(await s.call('add_task', { target_id: cp.id, position: 'above', title: 'Write it' }))
     const br = data(await s.call('open_branch', { edge_id: first.id, title: 'Review it' }))
-    const nodes = data(await s.call('read_project', {})).nodes
+    const nodes = data(await s.call('read_domain', {})).nodes
     const foot = nodes.find((n) => n.title === 'Review it')
     expect(foot).toBeTruthy()
     expect(nodes.find((n) => n.id === first.id).branches.map((b) => b.child)).toEqual([foot.id])
@@ -209,7 +293,7 @@ describe('tools drive the task authority', () => {
 
   it('open_branch refuses a plan\'s closing terminus, which has no edge above it', async () => {
     await s.call('create_plan', { name: 'Ship' })
-    const close = data(await s.call('read_project', {})).nodes.find((n) => n.kind === 'terminus')
+    const close = data(await s.call('read_domain', {})).nodes.find((n) => n.kind === 'terminus')
     const res = await s.call('open_branch', { edge_id: close.id, title: 'Nowhere' })
     expect(res.isError).toBe(true)
     expect(res.content[0].text).toMatch(/no edge above it/)
@@ -221,17 +305,17 @@ describe('tools drive the task authority', () => {
     const two = data(await s.call('add_task', { target_id: one.id, position: 'above', title: 'Two' }))
     const wrapped = data(await s.call('wrap_run', { from_id: one.id, to_id: two.id, title: 'Delivery' }))
     let projects = data(await s.call('list_projects', {})).projects
-    expect(projects.find((p) => p.title === 'Delivery' && !p.root)).toBeTruthy()
+    expect(projects.find((p) => p.title === 'Delivery' && !p.is_root)).toBeTruthy()
     // A scope is a pair, so wrapping added a close as well as an opening.
-    const termini = data(await s.call('read_project', {})).nodes.filter((n) => n.kind === 'terminus')
+    const termini = data(await s.call('read_domain', {})).nodes.filter((n) => n.kind === 'terminus')
     expect(termini).toHaveLength(2)
 
     await s.call('unwrap_project', { project_id: wrapped.id })
     projects = data(await s.call('list_projects', {})).projects
     expect(projects.find((p) => p.title === 'Delivery')).toBeUndefined()
-    expect(data(await s.call('read_project', {})).nodes.filter((n) => n.kind === 'terminus')).toHaveLength(1)
+    expect(data(await s.call('read_domain', {})).nodes.filter((n) => n.kind === 'terminus')).toHaveLength(1)
     // Nothing inside the scope moved; only the scope went.
-    expect(data(await s.call('read_project', {})).nodes.map((n) => n.title)).toContain('Two')
+    expect(data(await s.call('read_domain', {})).nodes.map((n) => n.title)).toContain('Two')
   })
 
   it('unwrap_project refuses a plan\'s base, since that is the plan itself', async () => {
@@ -247,7 +331,7 @@ describe('tools drive the task authority', () => {
     const wrapped = data(await s.call('wrap_run', { from_id: one.id, title: 'Delivery' }))
     await s.call('detach_to_plan', { node_id: wrapped.id })
     const projects = data(await s.call('list_projects', {})).projects
-    expect(projects.filter((p) => p.root).map((p) => p.title).sort()).toEqual(['Delivery', 'Ship'])
+    expect(projects.filter((p) => p.is_root).map((p) => p.title).sort()).toEqual(['Delivery', 'Ship'])
   })
 
   it('resolves a domain by name and errors on an unknown one', async () => {

@@ -404,5 +404,20 @@ export function createNoteEditor({ readNote, writeNote, openExternal, onFirstWri
     editMode = false
   }
 
-  return { open, close, flush, isOpen, reconcile }
+  // Close without saving, for the one case where saving would be wrong: the note this
+  // editor is showing is about to be deleted, so a pending autosave would write the file
+  // back moments before it goes, or moments after.
+  function closeIfOpen(id) {
+    if (!isOpen() || taskId !== id) return false
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
+    destroyEditor()
+    backdrop.classList.add('hidden')
+    body.innerHTML = ''
+    domainPath = taskId = file = null
+    raw = ''
+    editMode = false
+    return true
+  }
+
+  return { open, close, closeIfOpen, flush, isOpen, reconcile }
 }
