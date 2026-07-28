@@ -83,21 +83,30 @@ and the record never bloats with prose.
 
 Owned by the renderer; the main process stores and serves it as text. Each bookmark is
 a named view — client view state deliberately kept out of the record (northstar
-axiom 9), but shareable because it is *named*:
+axiom 9), but shareable because it is *named*.
+
+**The designed shape** (`model_v3_ideas.md` section 14) is `{name, collapsed, nodes}`
+— no pan, no scale, no anchor chain: `nodes` is every node drawn wholly inside the
+viewport at save time, and any client computes its own framing from where those nodes
+sit now, survivors framed, only an empty set broken. The schema-3 migration writes
+exactly this shape.
+
+**What the renderer writes and reads today** is the pre-v3 shape, never converted to
+the design:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `name` | string | what the user called the view |
 | `collapsed` | string[] | ids of project nodes folded shut in this view |
 | `zoom` | number | the viewport scale to restore |
-| `anchor` | string[] | a chain of node ids from a centred node toward its root; the camera centres on the first id still present in the restored view — existing, and not hidden inside a collapsed scope — so the bookmark degrades rather than breaks as nodes are deleted or folded away |
+| `anchor` | string[] | a chain of node ids from a centred node toward its root; the camera centres on the first id still present in the restored view — existing, and not hidden inside a collapsed scope |
 
-Known defect, open: the schema-3 migration wrote bookmarks as `{name, collapsed,
-nodes}`. The renderer reads them — they appear in the menus and restore their collapse
-set — but their camera cannot be restored: nothing ever reads the migration's `nodes`
-field, and `zoom` was dropped, so jumping to a migrated bookmark shows the "Bookmark
-location is gone" dialog and fits the whole domain. Newly made bookmarks use the shape
-above and restore in full.
+The divergence is the whole of the migrated-bookmark defect: a migrated bookmark is
+correct per the design, appears in the menus and restores its collapse set, but the
+renderer never reads its `nodes` field, so its camera falls to the "Bookmark location
+is gone" dialog and a whole-domain fit. Bringing the renderer to the designed shape is
+[#95](https://github.com/ParkviewLab/pensa-grex/issues/95), which restores every
+migrated bookmark in full and retires `zoom` and `anchor`.
 
 ## DomainRecord (`record` in code)
 
