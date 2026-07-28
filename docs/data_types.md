@@ -55,8 +55,11 @@ directory name is re-derived from the record (`model_v3_ideas.md` section 11). W
 the code does today falls short of that: the name is derived once, at creation and at
 the schema-2 migration, and never re-derived afterwards; drift is neither detected nor
 healed; and `listDomains` reads a domain's id from the directory name, taking only the
-display title from the record. Implementing the re-derivation (and a rename that
-triggers it) is [#90](https://github.com/ParkviewLab/pensa-grex/issues/90).
+display title from the record. The work is tracked as four independent issues:
+[#91](https://github.com/ParkviewLab/pensa-grex/issues/91) (listDomains reads the
+record), [#92](https://github.com/ParkviewLab/pensa-grex/issues/92) (renaming a
+domain), [#93](https://github.com/ParkviewLab/pensa-grex/issues/93) (re-derive on
+rename), [#94](https://github.com/ParkviewLab/pensa-grex/issues/94) (the startup heal).
 
 Inside the directory:
 
