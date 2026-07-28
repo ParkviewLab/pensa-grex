@@ -108,7 +108,7 @@ GUI, MCP, fallback — is mutate, validate, then atomic write of this object.
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `schemaVersion` | number | `3`. A schema-2 file (`tasks`, `rootOrder`, JSON5) is migrated on first load, never written back. |
-| `id` | string | the domain's `d_` id — the identity the directory name is a label for |
+| `id` | string | the domain's `d_` id — the identity the directory name is derived from |
 | `title` | string | the domain's display name |
 | `planOrder` | string[] | ids of plan **base nodes**, ordering the plans left to right. Advisory: the graph decides what *is* a root (a node with no incoming edge); this list only orders them, and a root it omits sorts last by `createdAt`. |
 | `nodes` | object | every node in the domain, keyed by id; each value is a node record (below) whose `id` field repeats its key |
