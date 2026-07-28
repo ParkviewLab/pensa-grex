@@ -85,11 +85,25 @@ Owned by the renderer; the main process stores and serves it as text. Each bookm
 a named view — client view state deliberately kept out of the record (northstar
 axiom 9), but shareable because it is *named*.
 
-**The designed shape** (`model_v3_ideas.md` section 14) is `{name, collapsed, nodes}`
-— no pan, no scale, no anchor chain: `nodes` is every node drawn wholly inside the
-viewport at save time, and any client computes its own framing from where those nodes
-sit now, survivors framed, only an empty set broken. The schema-3 migration writes
-exactly this shape.
+**What a bookmark shall someday be** (`model_v3_ideas.md` section 14) is
+`{name, collapsed, nodes}` — no pan, no scale, no anchor chain:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `name` | string | what the user called the view |
+| `collapsed` | string[] | ids of project nodes folded shut in this view |
+| `nodes` | string[] | every node drawn wholly inside the viewport when the bookmark was saved |
+
+The why is device-independence, and it follows from where a bookmark lives. A bookmark
+sits in the domain's own sidecar because it is a *named* view, the one kind of view
+state axiom 9 permits to travel with the data; a field that travels must therefore
+mean the same thing on every client. A zoom scale and a pixel-anchored camera are one
+screen's framing — another window size, another layout pass, and they point at
+nothing. A set of node ids is the domain's own vocabulary: any client computes its own
+framing from where those nodes sit *now*, under a maximum scale and a minimum padding,
+so the bookmark survives layout changes by construction. And it degrades rather than
+breaking: deleted ids are filtered out and the survivors framed, so only an empty set
+is a broken bookmark. The schema-3 migration writes exactly this shape.
 
 **What the renderer writes and reads today** is the pre-v3 shape, never converted to
 the design:
