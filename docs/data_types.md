@@ -44,9 +44,17 @@ is not a project, so it keeps its own word.
 
 The library root is `<userData>/domains/` unless `settings.json` points elsewhere. A
 domain directory is named `pensagrex_domain_<slug>_<id>` — the app's prefix, a slug of
-the title, and the domain's `d_` id. **The path is a label; the record's `id` field is
-the identity.** A mismatch between the directory name and the record is repaired by
-regenerating the label, never by trusting it.
+the title, and the domain's `d_` id; a title yielding no slug (only emoji or
+punctuation) omits the slug segment and its underscore, giving
+`pensagrex_domain_<id>`, exactly as a note filename does.
+
+**By design, the path is a label and the record's `id` field is the identity**
+(`model_v3_ideas.md` section 11). What the code does today falls short of that: the
+label is generated from the record once, at creation and at the schema-2 migration,
+and is never regenerated afterwards; a mismatch is neither detected nor repaired; and
+`listDomains` reads a domain's id from the directory name, taking only the display
+title from the record. The repair the design record promises is unimplemented — a
+known divergence, recorded here rather than restated as fact.
 
 Inside the directory:
 
@@ -77,11 +85,14 @@ axiom 9), but shareable because it is *named*:
 | `name` | string | what the user called the view |
 | `collapsed` | string[] | ids of project nodes folded shut in this view |
 | `zoom` | number | the viewport scale to restore |
-| `anchor` | string[] | a chain of node ids from a centred node toward its root; the camera centres on the first id that still exists, so the bookmark degrades rather than breaks as nodes are deleted |
+| `anchor` | string[] | a chain of node ids from a centred node toward its root; the camera centres on the first id still present in the restored view — existing, and not hidden inside a collapsed scope — so the bookmark degrades rather than breaks as nodes are deleted or folded away |
 
-Known defect, open: the schema-3 migration wrote bookmarks in a `{name, collapsed,
-nodes}` shape that the renderer does not read, so bookmarks migrated from schema 2 are
-dead; newly made ones use the shape above and work.
+Known defect, open: the schema-3 migration wrote bookmarks as `{name, collapsed,
+nodes}`. The renderer reads them — they appear in the menus and restore their collapse
+set — but their camera cannot be restored: nothing ever reads the migration's `nodes`
+field, and `zoom` was dropped, so jumping to a migrated bookmark shows the "Bookmark
+location is gone" dialog and fits the whole domain. Newly made bookmarks use the shape
+above and restore in full.
 
 ## DomainRecord (`record` in code)
 
@@ -201,6 +212,7 @@ And the model object itself:
 
 | Member | Meaning |
 | --- | --- |
+| `id` / `title` / `schemaVersion` | the record's own three scalars, copied through for convenience — the one part of the model that is a copy rather than a derivation |
 | `nodes` | `Map<id, modelNode>` |
 | `plans` | `{ id, baseId }[]` — one per root, in `planOrder` order (unlisted roots last, by `createdAt`); a plan's `id` *is* its base node's id |
 | `getNode(id)` | the model node, or null |
