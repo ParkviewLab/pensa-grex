@@ -48,13 +48,15 @@ the title, and the domain's `d_` id; a title yielding no slug (only emoji or
 punctuation) omits the slug segment and its underscore, giving
 `pensagrex_domain_<id>`, exactly as a note filename does.
 
-**By design, the path is a label and the record's `id` field is the identity**
-(`model_v3_ideas.md` section 11). What the code does today falls short of that: the
-label is generated from the record once, at creation and at the schema-2 migration,
-and is never regenerated afterwards; a mismatch is neither detected nor repaired; and
-`listDomains` reads a domain's id from the directory name, taking only the display
-title from the record. The repair the design record promises is unimplemented — a
-known divergence, recorded here rather than restated as fact.
+**The directory name is derived from the record, never the other way round.** The
+record's `id` and `title` are the only authorities; the name exists so a person can
+read a directory listing and so directories cannot collide, and by design a drifted
+directory name is re-derived from the record (`model_v3_ideas.md` section 11). What
+the code does today falls short of that: the name is derived once, at creation and at
+the schema-2 migration, and never re-derived afterwards; drift is neither detected nor
+healed; and `listDomains` reads a domain's id from the directory name, taking only the
+display title from the record. Implementing the re-derivation (and a rename that
+triggers it) is [#90](https://github.com/ParkviewLab/pensa-grex/issues/90).
 
 Inside the directory:
 
