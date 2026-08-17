@@ -13,7 +13,10 @@ is written down rather than left in the code. The implementation is
 [`src/renderer/src/render/shapes.js`](../src/renderer/src/render/shapes.js) (the
 silhouettes and the `orbits` / `shadow` decorators) and
 [`src/renderer/src/render/tracks.js`](../src/renderer/src/render/tracks.js) (the
-Atomic Starburst, the "here" mark); both point back here.
+Atomic Starburst, the "here" mark); both point back here. The reproducible geometry,
+the formulas and constants for redrawing every mark against any 2D API, is the
+companion [`mark-geometry.md`](mark-geometry.md): this document is the grammar and
+policy, that one is the drawing specification.
 
 ## Outline as a gap between two fills
 

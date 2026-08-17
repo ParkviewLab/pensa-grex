@@ -118,6 +118,9 @@ brief:
   subway-map-plus-notes shape; the note editor is not CodeMirror (that needs a
   webview) but `TextEdit` + `egui_commonmark`; math is a preview-pane task with real
   native Rust renderers (RaTeX, ReX, pulldown-latex), not a lost capability. The
+  notebook now also works the renderer and interaction layers through against the
+  code (drawing the flat Googie skin with `egui::Painter`; hit-testing, drag, and
+  hover on egui's `Response` API) and carries a crate inventory with licenses. The
   recommended end state.
 - Design C (Rust + Python): keep Python only across a wire, as a federated peer
   service (FastAPI, smalt-mcp). Every in-app shape (PyO3 embed, sidecar, Python MCP

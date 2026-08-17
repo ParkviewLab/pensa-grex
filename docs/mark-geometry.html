@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<!--
+SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
+SPDX-License-Identifier: CC-BY-4.0
+
+Presentation sibling of mark-geometry.md. Markdown is canonical; if the two
+drift, the Markdown wins and this file is regenerated from it. Every inline SVG
+below uses the same path data as the golden-master instances in the Markdown, so
+the page renders the specification rather than illustrating it.
+
+One self-contained file: inline style, inline SVG, system fonts, no script, no
+network dependency.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PensaGrex mark geometry</title>
+<style>
+/*
+  PALETTE
+  Page chrome (three colours, used consistently):
+    paper   #efe9dc   page ground
+    ink     #173242   body text
+    teal    #1f8f8a   headings, rules, accents
+  Content palettes are the app's own two grounds, set on .ground.azure / .ground.navy
+  below; those tokens are the subject of the document, not chrome, so they are shown
+  in full rather than reduced.
+*/
+:root{
+  --paper:#efe9dc; --ink:#173242; --teal:#1f8f8a;
+  --paper-2:#e6dece; --rule:#ccbfa6; --muted-ink:#5f6f74;
+  --serif: Georgia, 'Times New Roman', serif;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+*{ box-sizing:border-box; }
+body{ margin:0; background:var(--paper); color:var(--ink); font-family:var(--serif);
+  line-height:1.55; -webkit-font-smoothing:antialiased; }
+.wrap{ max-width:940px; margin:0 auto; padding:48px 24px 96px; }
+
+header.top{ border-bottom:2px solid var(--teal); padding-bottom:20px; margin-bottom:8px; }
+header.top h1{ font-family:var(--sans); font-weight:800; letter-spacing:-.01em;
+  font-size:30px; line-height:1.1; margin:0 0 8px; }
+header.top p{ margin:0; color:var(--muted-ink); font-size:15px; max-width:64ch; }
+
+h2{ font-family:var(--sans); font-weight:800; font-size:20px; margin:48px 0 4px;
+  padding-top:14px; border-top:1px solid var(--rule); }
+h2 .n{ color:var(--teal); margin-right:.5em; font-variant-numeric:tabular-nums; }
+h3{ font-family:var(--sans); font-weight:700; font-size:15px; margin:26px 0 6px; letter-spacing:.01em; }
+p{ margin:8px 0; max-width:70ch; }
+p.lead{ font-size:15px; }
+a{ color:var(--teal); }
+code{ font-family:var(--mono); font-size:.86em; background:var(--paper-2); padding:.05em .35em; border-radius:3px; }
+.small{ font-size:13px; color:var(--muted-ink); }
+
+/* Mark blocks */
+.mark{ margin:22px 0 8px; }
+.desc{ max-width:70ch; }
+
+/* Ground swatch pair */
+.pair{ display:flex; gap:16px; flex-wrap:wrap; margin:14px 0 4px; }
+.ground{ flex:1 1 300px; min-width:0; border:1px solid var(--rule); border-radius:10px;
+  padding:18px; display:flex; align-items:center; justify-content:center; gap:22px;
+  flex-wrap:wrap; background:var(--ground); position:relative; overflow:hidden; }
+.ground .tag{ position:absolute; top:8px; left:10px; font-family:var(--sans); font-size:10px;
+  letter-spacing:.14em; text-transform:uppercase; color:var(--line); opacity:.7; }
+.ground svg{ display:block; }
+
+/* The two app grounds — token definitions lifted verbatim from style.css */
+.ground.azure{
+  --ground:#d3e6ef; --panel:#f8f3e8; --ink:#173242; --line:#365b6c; --muted:#5f7d8b;
+  --grid:rgba(23,50,66,.10);
+  --c-todo:#d9a53a; --c-prog:#d75f2e; --c-done:#7d54a6; --c-cancel:#8aa0ab;
+  --c-project:#1f8f8a; --c-project-tint:#cbe6e4; --cursor:#d75f2e;
+  --burst-a:#1f8f8a; --burst-b:#d9a53a;
+}
+.ground.navy{
+  --ground:#0f2334; --panel:#1a3a54; --ink:#e8f1f6; --line:#6fb6c9; --muted:#93b3c2;
+  --grid:rgba(111,182,201,.13);
+  --c-todo:#f0bd55; --c-prog:#f27a44; --c-done:#bd93e6; --c-cancel:#7590a0;
+  --c-project:#37c2ba; --c-project-tint:#356e69; --cursor:#f27a44;
+  --burst-a:#37c2ba; --burst-b:#f0bd55;
+}
+
+/* SVG element roles, driven by the ground tokens above */
+.outer.todo{ fill:var(--c-todo); } .outer.prog{ fill:var(--c-prog); }
+.outer.done{ fill:var(--c-done); } .outer.cancel{ fill:var(--c-cancel); }
+.outer.project{ fill:var(--c-project); }
+.inner{ fill:var(--panel); } .inner.tint{ fill:var(--c-project-tint); }
+
+.track{ fill:none; stroke:var(--line); stroke-linecap:round; stroke-linejoin:round; }
+.track.riser{ stroke-width:3; } .track.branch,.track.return{ stroke-width:2.3; }
+.cap{ stroke:var(--line); stroke-width:1.6; stroke-linecap:round; }
+.dot,.fork{ fill:var(--line); } .halo{ fill:var(--line); opacity:.12; }
+
+.glyph.done{ fill:var(--c-done); } .glyph.prog{ fill:var(--c-prog); }
+.glyph.project{ fill:var(--c-project); }
+.glyph.todo{ fill:none; stroke:var(--c-todo); stroke-width:2; }
+.glyph.cancel{ fill:none; stroke:var(--c-cancel); stroke-width:1.5; stroke-dasharray:2.4 2.2; }
+
+.orbit{ fill:none; stroke-width:2.4; stroke-opacity:.7; }
+.ray{ stroke:var(--ink); stroke-width:1.4; stroke-linecap:round; }
+.spark,.core{ fill:var(--ink); }
+.note{ fill:none; stroke:var(--muted); stroke-linecap:round; }
+.note .body{ stroke-width:1.2; } .note .ring{ stroke-width:1.2; } .note .rule{ stroke-width:1; }
+.gridfill{ fill:var(--grid); }
+
+/* Code blocks */
+pre{ background:#20313a; color:#e8f1f6; border-radius:8px; padding:14px 16px; overflow-x:auto;
+  font-family:var(--mono); font-size:12.5px; line-height:1.5; margin:12px 0; }
+pre .c{ color:#8fb7c4; } /* comment / dim */
+
+/* Tables */
+table{ border-collapse:collapse; width:100%; margin:12px 0; font-size:13.5px; }
+th,td{ border:1px solid var(--rule); padding:6px 10px; text-align:left; vertical-align:top; }
+th{ font-family:var(--sans); font-weight:700; background:var(--paper-2); }
+td code{ background:transparent; padding:0; }
+.swatch{ display:inline-block; width:12px; height:12px; border-radius:3px; vertical-align:-1px;
+  margin-right:6px; border:1px solid rgba(0,0,0,.15); }
+
+.note-scope{ background:var(--paper-2); border-left:3px solid var(--teal); border-radius:0 8px 8px 0;
+  padding:12px 16px; margin:16px 0; font-size:14px; }
+
+@media (max-width:560px){
+  .wrap{ padding:32px 16px 72px; }
+  header.top h1{ font-size:24px; }
+  .pair{ flex-direction:column; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <h1>PensaGrex mark geometry</h1>
+  <p>A renderer-neutral drawing specification for every mark on the map. Complete
+  enough to reproduce the shapes in any language against any 2D API, without reading
+  the renderer. The companion to <a href="node-visual-system.html">node-visual-system</a>
+  (grammar and policy) and <a href="rust_port_ideas.md">rust_port_ideas</a> (the egui
+  argument). Each figure below renders from the same path data as the golden masters
+  in the canonical Markdown.</p>
+</header>
+
+<p class="lead">This page is the presentation sibling of <code>mark-geometry.md</code>,
+which is canonical. It shows each mark on both of the app's grounds, azure (the light
+default) and navy (the dark), because the two-ground colour meaning is part of the
+specification. The Markdown carries the formulas, the constants, and the full prose;
+this page carries the shapes.</p>
+
+<div class="note-scope"><strong>Scope.</strong> The mark vocabulary only: the vector
+marks a card, track, junction, decorator, or marker draws. Not the layout engine that
+positions them (row layering, branch routing, junction placement, folding, the
+camera), which is a separate specification. Every position here is an input the layout
+supplies.</div>
+
+<!-- ============================================================ -->
+<h2><span class="n">1</span>The ground</h2>
+<div class="mark">
+  <p class="desc">A dot at every 40-pixel lattice point, in the low-alpha
+  <code>--grid</code> ink; the subway paper. In the source a 40&times;40 CSS radial
+  gradient; reproduced as a tiled texture, or a loop of small filled circles over the
+  visible rectangle.</p>
+  <div class="pair">
+    <div class="ground azure"><span class="tag">azure</span>
+      <svg width="200" height="120" viewBox="0 0 200 120" aria-label="dot grid on azure">
+        <defs><pattern id="g-a" width="40" height="40" patternUnits="userSpaceOnUse">
+          <circle class="gridfill" cx="0" cy="0" r="1.2"/></pattern></defs>
+        <rect x="0" y="0" width="200" height="120" fill="url(#g-a)"/>
+      </svg>
+    </div>
+    <div class="ground navy"><span class="tag">navy</span>
+      <svg width="200" height="120" viewBox="0 0 200 120" aria-label="dot grid on navy">
+        <defs><pattern id="g-n" width="40" height="40" patternUnits="userSpaceOnUse">
+          <circle class="gridfill" cx="0" cy="0" r="1.2"/></pattern></defs>
+        <rect x="0" y="0" width="200" height="120" fill="url(#g-n)"/>
+      </svg>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<h2><span class="n">2</span>The station dot</h2>
+<div class="mark">
+  <p class="desc">Where a card attaches to its line: a filled circle of diameter 11
+  (radius 5.5) in <code>--line</code>, the same size as a status glyph.</p>
+  <div class="pair">
+    <div class="ground azure"><span class="tag">azure</span>
+      <svg width="60" height="60" viewBox="0 0 60 60"><circle class="dot" cx="30" cy="30" r="5.5"/></svg>
+    </div>
+    <div class="ground navy"><span class="tag">navy</span>
+      <svg width="60" height="60" viewBox="0 0 60 60"><circle class="dot" cx="30" cy="30" r="5.5"/></svg>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<h2><span class="n">3</span>The card silhouettes</h2>
+<p class="desc">Four shapes. Each is an outer silhouette in the node colour with the
+same path inset per edge and refilled in the panel colour; the band between the two
+fills is the outline, thin on one edge and heavy on another (the Googie tell). Every
+figure below is the outer path and its <code>innerT</code>-transformed copy, drawn on
+both grounds. Width is a fixed 188; the height is stated per shape.</p>
+
+<h3>screen &mdash; a plain task (w=188, h=56)</h3>
+<div class="pair">
+  <div class="ground azure"><span class="tag">azure</span>
+    <svg width="188" height="56" viewBox="0 0 188 56" aria-label="screen on azure">
+      <path class="outer todo" d="M15.5,1.5L172.5,1.5Q186.5,1.5 186.5,15.5L186.5,40.5Q186.5,54.5 172.5,54.5L15.5,54.5Q1.5,54.5 1.5,40.5L1.5,15.5Q1.5,1.5 15.5,1.5Z"/>
+      <path class="inner" transform="translate(7 3.5) scale(0.9202 0.8750)" d="M15.5,1.5L172.5,1.5Q186.5,1.5 186.5,15.5L186.5,40.5Q186.5,54.5 172.5,54.5L15.5,54.5Q1.5,54.5 1.5,40.5L1.5,15.5Q1.5,1.5 15.5,1.5Z"/>
+    </svg>
+  </div>
+  <div class="ground navy"><span class="tag">navy</span>
+    <svg width="188" height="56" viewBox="0 0 188 56" aria-label="screen on navy">
+      <path class="outer todo" d="M15.5,1.5L172.5,1.5Q186.5,1.5 186.5,15.5L186.5,40.5Q186.5,54.5 172.5,54.5L15.5,54.5Q1.5,54.5 1.5,40.5L1.5,15.5Q1.5,1.5 15.5,1.5Z"/>
+      <path class="inner" transform="translate(7 3.5) scale(0.9202 0.8750)" d="M15.5,1.5L172.5,1.5Q186.5,1.5 186.5,15.5L186.5,40.5Q186.5,54.5 172.5,54.5L15.5,54.5Q1.5,54.5 1.5,40.5L1.5,15.5Q1.5,1.5 15.5,1.5Z"/>
+    </svg>
+  </div>
+</div>
+
+<h3>marquee &mdash; a task carrying the "here" cursor (w=188, h=72)</h3>
+<p class="small">A concave cushion: each edge bows inward, top and bottom by 0.14h, sides by 0.05w.</p>
+<div class="pair">
+  <div class="ground azure"><span class="tag">azure</span>
+    <svg width="188" height="72" viewBox="0 0 188 72" aria-label="marquee on azure">
+      <path class="outer prog" d="M1.5,1.5 Q94,11.6 186.5,1.5 Q177.1,36 186.5,70.5 Q94,60.4 1.5,70.5 Q10.9,36 1.5,1.5 Z"/>
+      <path class="inner" transform="translate(5 6) scale(0.9309 0.8611)" d="M1.5,1.5 Q94,11.6 186.5,1.5 Q177.1,36 186.5,70.5 Q94,60.4 1.5,70.5 Q10.9,36 1.5,1.5 Z"/>
+    </svg>
+  </div>
+  <div class="ground navy"><span class="tag">navy</span>
+    <svg width="188" height="72" viewBox="0 0 188 72" aria-label="marquee on navy">
+      <path class="outer prog" d="M1.5,1.5 Q94,11.6 186.5,1.5 Q177.1,36 186.5,70.5 Q94,60.4 1.5,70.5 Q10.9,36 1.5,1.5 Z"/>
+      <path class="inner" transform="translate(5 6) scale(0.9309 0.8611)" d="M1.5,1.5 Q94,11.6 186.5,1.5 Q177.1,36 186.5,70.5 Q94,60.4 1.5,70.5 Q10.9,36 1.5,1.5 Z"/>
+    </svg>
+  </div>
+</div>
+
+<h3>hull &mdash; a project node, and its terminus (w=188, h=58)</h3>
+<p class="small">Concave top, tapering sides, convex bottom; the curve is capped at a
+height of 58 so a tall card does not swallow its own label. The terminus (right) is the
+same hull turned a half turn, so a folded pair reads as one shape and its reflection.</p>
+<div class="pair">
+  <div class="ground azure"><span class="tag">azure &middot; hull + terminus</span>
+    <svg width="188" height="58" viewBox="0 0 188 58" aria-label="hull on azure">
+      <path class="outer project" d="M1.5,7.3 Q94,14.3 186.5,1.5 L162.1,53.6 Q94,56.5 25.9,53.6 Z"/>
+      <path class="inner tint" transform="translate(8 4) scale(0.9309 0.7931)" d="M1.5,7.3 Q94,14.3 186.5,1.5 L162.1,53.6 Q94,56.5 25.9,53.6 Z"/>
+    </svg>
+    <svg width="188" height="58" viewBox="0 0 188 58" aria-label="terminus on azure">
+      <path class="outer project" transform="translate(188 58) scale(-1 -1)" d="M1.5,7.3 Q94,14.3 186.5,1.5 L162.1,53.6 Q94,56.5 25.9,53.6 Z"/>
+      <path class="inner tint" transform="translate(188 58) scale(-1 -1) translate(8 4) scale(0.9309 0.7931)" d="M1.5,7.3 Q94,14.3 186.5,1.5 L162.1,53.6 Q94,56.5 25.9,53.6 Z"/>
+    </svg>
+  </div>
+  <div class="ground navy"><span class="tag">navy &middot; hull + terminus</span>
+    <svg width="188" height="58" viewBox="0 0 188 58" aria-label="hull on navy">
+      <path class="outer project" d="M1.5,7.3 Q94,14.3 186.5,1.5 L162.1,53.6 Q94,56.5 25.9,53.6 Z"/>
+      <path class="inner tint" transform="translate(8 4) scale(0.9309 0.7931)" d="M1.5,7.3 Q94,14.3 186.5,1.5 L162.1,53.6 Q94,56.5 25.9,53.6 Z"/>
+    </svg>
+    <svg width="188" height="58" viewBox="0 0 188 58" aria-label="terminus on navy">
+      <path class="outer project" transform="translate(188 58) scale(-1 -1)" d="M1.5,7.3 Q94,14.3 186.5,1.5 L162.1,53.6 Q94,56.5 25.9,53.6 Z"/>
+      <path class="inner tint" transform="translate(188 58) scale(-1 -1) translate(8 4) scale(0.9309 0.7931)" d="M1.5,7.3 Q94,14.3 186.5,1.5 L162.1,53.6 Q94,56.5 25.9,53.6 Z"/>
+    </svg>
+  </div>
+</div>
+
+<h3>keystone &mdash; a rounded asymmetric quadrilateral, currently unassigned (w=188, h=56)</h3>
+<div class="pair">
+  <div class="ground azure"><span class="tag">azure</span>
+    <svg width="188" height="56" viewBox="0 0 188 56" aria-label="keystone on azure">
+      <path class="outer cancel" d="M16.94,17.41Q10.90,8.22 21.89,7.80L175.51,1.92Q186.50,1.50 182.19,11.62L168.25,44.38Q163.94,54.50 152.94,54.20L50.10,51.44Q39.10,51.14 33.06,41.95Z"/>
+      <path class="inner" transform="translate(7 3) scale(0.9362 0.7857)" d="M16.94,17.41Q10.90,8.22 21.89,7.80L175.51,1.92Q186.50,1.50 182.19,11.62L168.25,44.38Q163.94,54.50 152.94,54.20L50.10,51.44Q39.10,51.14 33.06,41.95Z"/>
+    </svg>
+  </div>
+  <div class="ground navy"><span class="tag">navy</span>
+    <svg width="188" height="56" viewBox="0 0 188 56" aria-label="keystone on navy">
+      <path class="outer cancel" d="M16.94,17.41Q10.90,8.22 21.89,7.80L175.51,1.92Q186.50,1.50 182.19,11.62L168.25,44.38Q163.94,54.50 152.94,54.20L50.10,51.44Q39.10,51.14 33.06,41.95Z"/>
+      <path class="inner" transform="translate(7 3) scale(0.9362 0.7857)" d="M16.94,17.41Q10.90,8.22 21.89,7.80L175.51,1.92Q186.50,1.50 182.19,11.62L168.25,44.38Q163.94,54.50 152.94,54.20L50.10,51.44Q39.10,51.14 33.06,41.95Z"/>
+    </svg>
+  </div>
+</div>
+
+<p class="small">The <code>BORDERS</code> four-tuples (top, right, bottom, left) that
+set the outline weight: screen (3.5,&nbsp;8,&nbsp;3.5,&nbsp;7); marquee
+(6,&nbsp;8,&nbsp;4,&nbsp;5); hull (4,&nbsp;5,&nbsp;8,&nbsp;8); keystone
+(3,&nbsp;5,&nbsp;9,&nbsp;7). The inner transform is
+<code>translate(l, t) scale((w&minus;l&minus;r)/w, (h&minus;t&minus;b)/h)</code>.</p>
+
+<!-- ============================================================ -->
+<h2><span class="n">4</span>The status glyphs</h2>
+<p class="desc">An 11-pixel circle (radius 5.5) beside the label. Filled for done and
+in-progress; a 2px solid ring for to-do; a 1.5px dashed ring for cancelled; a filled
+teal ring for a project node.</p>
+<div class="pair">
+  <div class="ground azure"><span class="tag">azure</span>
+    <svg width="240" height="30" viewBox="0 0 240 30" aria-label="glyphs on azure">
+      <circle class="glyph done" cx="18" cy="15" r="5.5"/>
+      <circle class="glyph prog" cx="66" cy="15" r="5.5"/>
+      <circle class="glyph todo" cx="114" cy="15" r="4.5"/>
+      <circle class="glyph cancel" cx="162" cy="15" r="4.75"/>
+      <circle class="glyph project" cx="210" cy="15" r="5.5"/>
+    </svg>
+  </div>
+  <div class="ground navy"><span class="tag">navy</span>
+    <svg width="240" height="30" viewBox="0 0 240 30" aria-label="glyphs on navy">
+      <circle class="glyph done" cx="18" cy="15" r="5.5"/>
+      <circle class="glyph prog" cx="66" cy="15" r="5.5"/>
+      <circle class="glyph todo" cx="114" cy="15" r="4.5"/>
+      <circle class="glyph cancel" cx="162" cy="15" r="4.75"/>
+      <circle class="glyph project" cx="210" cy="15" r="5.5"/>
+    </svg>
+  </div>
+</div>
+<p class="small">Left to right: done, in-progress, to-do, cancelled, project. The ring
+variants draw at a smaller radius so their stroke sits inside the 11-pixel envelope.</p>
+
+<!-- ============================================================ -->
+<h2><span class="n">5</span>The orbits decorator</h2>
+<p class="desc">A flagged node wears three off-axis elliptical rings centred on the
+card, each carrying one electron ball, plus a core, in the node's own colour. Off-axis
+and irregular on purpose; drawn behind the card so the rings overflow it. Shown in the
+done violet; the faint rounded box represents the card the decorator sits behind; it is
+included here so that you can see how much the decorator overflows a card.</p>
+<div class="pair">
+  <div class="ground azure"><span class="tag">azure</span>
+    <svg width="200" height="144" viewBox="0 0 200 144" aria-label="orbits on azure">
+      <g transform="translate(6 0)">
+        <path class="outer done" opacity="0.18" d="M15.5,45.5L172.5,45.5Q186.5,45.5 186.5,59.5L186.5,84.5Q186.5,98.5 172.5,98.5L15.5,98.5Q1.5,98.5 1.5,84.5L1.5,59.5Q1.5,45.5 15.5,45.5Z"/>
+        <g stroke="var(--c-done)">
+          <ellipse class="orbit" cx="94" cy="72" rx="72" ry="12" transform="rotate(-30 94 72)"/>
+          <ellipse class="orbit" cx="94" cy="72" rx="66" ry="13" transform="rotate(40 94 72)"/>
+          <ellipse class="orbit" cx="94" cy="72" rx="68" ry="11" transform="rotate(103 94 72)"/>
+        </g>
+        <g fill="var(--c-done)">
+          <circle r="4" cx="139.4" cy="37.2"/>
+          <circle r="4" cx="57.4" cy="31.5"/>
+          <circle r="4" cx="88.5" cy="125.7"/>
+          <circle r="4" cx="94" cy="72"/>
+        </g>
+      </g>
+    </svg>
+  </div>
+  <div class="ground navy"><span class="tag">navy</span>
+    <svg width="200" height="144" viewBox="0 0 200 144" aria-label="orbits on navy">
+      <g transform="translate(6 0)">
+        <path class="outer done" opacity="0.20" d="M15.5,45.5L172.5,45.5Q186.5,45.5 186.5,59.5L186.5,84.5Q186.5,98.5 172.5,98.5L15.5,98.5Q1.5,98.5 1.5,84.5L1.5,59.5Q1.5,45.5 15.5,45.5Z"/>
+        <g stroke="var(--c-done)">
+          <ellipse class="orbit" cx="94" cy="72" rx="72" ry="12" transform="rotate(-30 94 72)"/>
+          <ellipse class="orbit" cx="94" cy="72" rx="66" ry="13" transform="rotate(40 94 72)"/>
+          <ellipse class="orbit" cx="94" cy="72" rx="68" ry="11" transform="rotate(103 94 72)"/>
+        </g>
+        <g fill="var(--c-done)">
+          <circle r="4" cx="139.4" cy="37.2"/>
+          <circle r="4" cx="57.4" cy="31.5"/>
+          <circle r="4" cx="88.5" cy="125.7"/>
+          <circle r="4" cx="94" cy="72"/>
+        </g>
+      </g>
+    </svg>
+  </div>
+</div>
+<p class="small">Ring semi-axes and rotations (rx, ry, deg): (72, 12, &minus;30),
+(66, 13, 40), (68, 11, 103). Ball offsets from the centre: (45.4, &minus;34.8),
+(&minus;36.6, &minus;40.5), (&minus;5.5, 53.7).</p>
+
+<!-- ============================================================ -->
+<h2><span class="n">6</span>The cursor mark (Atomic Starburst)</h2>
+<p class="desc">The branch cursor: ten solid rays of irregular length at irregular
+angles off a base of 15, each tipped with a ball, around a solid core, in
+<code>--ink</code>. The cursor draws it at 1.15&times; the base size.</p>
+<div class="pair">
+  <div class="ground azure"><span class="tag">azure</span>
+    <svg width="80" height="80" viewBox="-25 -25 50 50" aria-label="sputnik on azure">
+      <g class="ray">
+        <line x1="0" y1="0" x2="14.9" y2="-1.6"/><line x1="0" y1="0" x2="8.6" y2="4.9"/>
+        <line x1="0" y1="0" x2="7.6" y2="15"/><line x1="0" y1="0" x2="-1.4" y2="8.6"/>
+        <line x1="0" y1="0" x2="-10" y2="9"/><line x1="0" y1="0" x2="-18" y2="0.9"/>
+        <line x1="0" y1="0" x2="-8.8" y2="-5.1"/><line x1="0" y1="0" x2="-6.2" y2="-14"/>
+        <line x1="0" y1="0" x2="3.2" y2="-11.9"/><line x1="0" y1="0" x2="12" y2="-10.8"/>
+      </g>
+      <g class="spark">
+        <circle r="2.2" cx="14.9" cy="-1.6"/><circle r="2.2" cx="8.6" cy="4.9"/>
+        <circle r="2.2" cx="7.6" cy="15"/><circle r="2.2" cx="-1.4" cy="8.6"/>
+        <circle r="2.2" cx="-10" cy="9"/><circle r="2.2" cx="-18" cy="0.9"/>
+        <circle r="2.2" cx="-8.8" cy="-5.1"/><circle r="2.2" cx="-6.2" cy="-14"/>
+        <circle r="2.2" cx="3.2" cy="-11.9"/><circle r="2.2" cx="12" cy="-10.8"/>
+      </g>
+      <circle class="core" r="2.8" cx="0" cy="0"/>
+    </svg>
+  </div>
+  <div class="ground navy"><span class="tag">navy</span>
+    <svg width="80" height="80" viewBox="-25 -25 50 50" aria-label="sputnik on navy">
+      <g class="ray">
+        <line x1="0" y1="0" x2="14.9" y2="-1.6"/><line x1="0" y1="0" x2="8.6" y2="4.9"/>
+        <line x1="0" y1="0" x2="7.6" y2="15"/><line x1="0" y1="0" x2="-1.4" y2="8.6"/>
+        <line x1="0" y1="0" x2="-10" y2="9"/><line x1="0" y1="0" x2="-18" y2="0.9"/>
+        <line x1="0" y1="0" x2="-8.8" y2="-5.1"/><line x1="0" y1="0" x2="-6.2" y2="-14"/>
+        <line x1="0" y1="0" x2="3.2" y2="-11.9"/><line x1="0" y1="0" x2="12" y2="-10.8"/>
+      </g>
+      <g class="spark">
+        <circle r="2.2" cx="14.9" cy="-1.6"/><circle r="2.2" cx="8.6" cy="4.9"/>
+        <circle r="2.2" cx="7.6" cy="15"/><circle r="2.2" cx="-1.4" cy="8.6"/>
+        <circle r="2.2" cx="-10" cy="9"/><circle r="2.2" cx="-18" cy="0.9"/>
+        <circle r="2.2" cx="-8.8" cy="-5.1"/><circle r="2.2" cx="-6.2" cy="-14"/>
+        <circle r="2.2" cx="3.2" cy="-11.9"/><circle r="2.2" cx="12" cy="-10.8"/>
+      </g>
+      <circle class="core" r="2.8" cx="0" cy="0"/>
+    </svg>
+  </div>
+</div>
+<p class="small">The four-plus-spoke atmosphere burst is defined in the source but not
+currently mounted; see the constants in the Markdown.</p>
+
+<!-- ============================================================ -->
+<h2><span class="n">7</span>The tracks, and the underpass</h2>
+<p class="desc">A track is a polyline in <code>--line</code> with round caps and joins:
+a riser (the vertical spine, width 3), and the branch and return laterals (width 2.3).
+Where a lateral crosses another line it yields, cut with a gap whose ends carry caps
+lying parallel to the line passed under, so the cut reads as a slice of what runs on.
+The illustration shows a return passing behind a riser.</p>
+<div class="pair">
+  <div class="ground azure"><span class="tag">azure</span>
+    <svg width="200" height="120" viewBox="0 0 200 120" aria-label="underpass on azure">
+      <!-- the crossed line runs on unbroken: a vertical trunk (riser) -->
+      <path class="track riser" d="M100,12 L100,108"/>
+      <circle class="dot" cx="100" cy="32" r="5.5"/>
+      <circle class="dot" cx="100" cy="96" r="5.5"/>
+      <!-- the crossing lateral (a return) yields: one straight line, cut where it passes behind -->
+      <path class="track return" d="M24,84 L95.5,68.95"/>
+      <path class="track return" d="M104.5,67.05 L176,52"/>
+      <!-- a cap parallel to the trunk at each cut end, so the gap reads as passing behind -->
+      <line class="cap" x1="95.5" y1="64.35" x2="95.5" y2="73.55"/>
+      <line class="cap" x1="104.5" y1="62.45" x2="104.5" y2="71.65"/>
+    </svg>
+  </div>
+  <div class="ground navy"><span class="tag">navy</span>
+    <svg width="200" height="120" viewBox="0 0 200 120" aria-label="underpass on navy">
+      <path class="track riser" d="M100,12 L100,108"/>
+      <circle class="dot" cx="100" cy="32" r="5.5"/>
+      <circle class="dot" cx="100" cy="96" r="5.5"/>
+      <path class="track return" d="M24,84 L95.5,68.95"/>
+      <path class="track return" d="M104.5,67.05 L176,52"/>
+      <line class="cap" x1="95.5" y1="64.35" x2="95.5" y2="73.55"/>
+      <line class="cap" x1="104.5" y1="62.45" x2="104.5" y2="71.65"/>
+    </svg>
+  </div>
+</div>
+<p class="small">Illustrative crossing; the exact gap and cap geometry is the
+<code>breakSize</code> computation in the Markdown (air across the crossed line,
+<code>perpClear</code> 3 plus its half-width, divided by the sine of the crossing
+angle). In egui the cut becomes an explicit mitred ribbon quad, since egui clips only
+to a rectangle.</p>
+
+<!-- ============================================================ -->
+<h2><span class="n">8</span>The junction diamond</h2>
+<p class="desc">A fork or merge is marked by an 8-pixel square turned 45&deg; into a
+diamond, in <code>--line</code> (turning to <code>--ink</code> on hover); a
+single-branch junction also carries a transparent 13-pixel hit halo, shown faint.</p>
+<div class="pair">
+  <div class="ground azure"><span class="tag">azure</span>
+    <svg width="70" height="70" viewBox="0 0 70 70" aria-label="junction on azure">
+      <circle class="halo" cx="35" cy="35" r="13"/>
+      <rect class="fork" x="31" y="31" width="8" height="8" transform="rotate(45 35 35)"/>
+    </svg>
+  </div>
+  <div class="ground navy"><span class="tag">navy</span>
+    <svg width="70" height="70" viewBox="0 0 70 70" aria-label="junction on navy">
+      <circle class="halo" cx="35" cy="35" r="13"/>
+      <rect class="fork" x="31" y="31" width="8" height="8" transform="rotate(45 35 35)"/>
+    </svg>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<h2><span class="n">9</span>The note glyph</h2>
+<p class="desc">A card with a note shows a memo-pad glyph in its bottom-right corner, on
+a 16&times;16 viewbox, in <code>--muted</code> (turning to <code>--ink</code> on
+hover): a rounded body, two ring ticks over the top, three ruled lines. Shown at 4&times;.</p>
+<div class="pair">
+  <div class="ground azure"><span class="tag">azure</span>
+    <svg width="64" height="64" viewBox="0 0 16 16" aria-label="note glyph on azure">
+      <g class="note">
+        <rect class="body" x="3" y="3" width="10" height="11" rx="1.5"/>
+        <line class="ring" x1="6" y1="1.5" x2="6" y2="4.5"/>
+        <line class="ring" x1="10" y1="1.5" x2="10" y2="4.5"/>
+        <line class="rule" x1="5.5" y1="7.5" x2="10.5" y2="7.5"/>
+        <line class="rule" x1="5.5" y1="10" x2="10.5" y2="10"/>
+        <line class="rule" x1="5.5" y1="12.5" x2="8.5" y2="12.5"/>
+      </g>
+    </svg>
+  </div>
+  <div class="ground navy"><span class="tag">navy</span>
+    <svg width="64" height="64" viewBox="0 0 16 16" aria-label="note glyph on navy">
+      <g class="note">
+        <rect class="body" x="3" y="3" width="10" height="11" rx="1.5"/>
+        <line class="ring" x1="6" y1="1.5" x2="6" y2="4.5"/>
+        <line class="ring" x1="10" y1="1.5" x2="10" y2="4.5"/>
+        <line class="rule" x1="5.5" y1="7.5" x2="10.5" y2="7.5"/>
+        <line class="rule" x1="5.5" y1="10" x2="10.5" y2="10"/>
+        <line class="rule" x1="5.5" y1="12.5" x2="8.5" y2="12.5"/>
+      </g>
+    </svg>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<h2><span class="n">10</span>Colours (two grounds)</h2>
+<p class="desc">Every fill and stroke is a role token resolving to one of two values by
+ground. Teal marks the structure of a plan (a project and its close); violet marks a
+task that is done. Values from <code>style.css</code>.</p>
+<table>
+  <thead><tr><th>token</th><th>role</th><th>azure</th><th>navy</th></tr></thead>
+  <tbody>
+    <tr><td><code>--ground</code></td><td>canvas</td><td><span class="swatch" style="background:#d3e6ef"></span>#d3e6ef</td><td><span class="swatch" style="background:#0f2334"></span>#0f2334</td></tr>
+    <tr><td><code>--panel</code></td><td>card panel (task)</td><td><span class="swatch" style="background:#f8f3e8"></span>#f8f3e8</td><td><span class="swatch" style="background:#1a3a54"></span>#1a3a54</td></tr>
+    <tr><td><code>--ink</code></td><td>text, cursor mark</td><td><span class="swatch" style="background:#173242"></span>#173242</td><td><span class="swatch" style="background:#e8f1f6"></span>#e8f1f6</td></tr>
+    <tr><td><code>--line</code></td><td>tracks, dots, diamonds</td><td><span class="swatch" style="background:#365b6c"></span>#365b6c</td><td><span class="swatch" style="background:#6fb6c9"></span>#6fb6c9</td></tr>
+    <tr><td><code>--muted</code></td><td>tags, note glyph</td><td><span class="swatch" style="background:#5f7d8b"></span>#5f7d8b</td><td><span class="swatch" style="background:#93b3c2"></span>#93b3c2</td></tr>
+    <tr><td><code>--c-todo</code></td><td>to-do</td><td><span class="swatch" style="background:#d9a53a"></span>#d9a53a</td><td><span class="swatch" style="background:#f0bd55"></span>#f0bd55</td></tr>
+    <tr><td><code>--c-prog</code></td><td>in-progress</td><td><span class="swatch" style="background:#d75f2e"></span>#d75f2e</td><td><span class="swatch" style="background:#f27a44"></span>#f27a44</td></tr>
+    <tr><td><code>--c-done</code></td><td>done (violet)</td><td><span class="swatch" style="background:#7d54a6"></span>#7d54a6</td><td><span class="swatch" style="background:#bd93e6"></span>#bd93e6</td></tr>
+    <tr><td><code>--c-cancel</code></td><td>cancelled</td><td><span class="swatch" style="background:#8aa0ab"></span>#8aa0ab</td><td><span class="swatch" style="background:#7590a0"></span>#7590a0</td></tr>
+    <tr><td><code>--c-project</code></td><td>project hull (teal)</td><td><span class="swatch" style="background:#1f8f8a"></span>#1f8f8a</td><td><span class="swatch" style="background:#37c2ba"></span>#37c2ba</td></tr>
+    <tr><td><code>--c-project-tint</code></td><td>project/close panel</td><td><span class="swatch" style="background:#cbe6e4"></span>#cbe6e4</td><td><span class="swatch" style="background:#356e69"></span>#356e69</td></tr>
+    <tr><td><code>--cursor</code></td><td>HERE pill, drop hints</td><td><span class="swatch" style="background:#d75f2e"></span>#d75f2e</td><td><span class="swatch" style="background:#f27a44"></span>#f27a44</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2><span class="n">11</span>egui translation contract</h2>
+<p class="desc">The only renderer-specific note; the argument for egui is in
+<a href="rust_port_ideas.md">rust_port_ideas</a>. In brief: flatten each quadratic to a
+sampled polyline before any camera transform; draw the outline as two fills, never a
+stroke; tessellate the concave hull and marquee with <code>lyon</code> into a
+<code>Shape::Mesh</code>, since epaint fills only convex polygons; apply SVG
+<code>rotate</code>/<code>scale</code> as affine operations on the point list; map
+strokes to an <code>epaint::Stroke</code>; and replace the even-odd underpass clip with
+an explicit mitred ribbon quad, because egui clips only to an axis-aligned rectangle.
+Drive zoom through world coordinates and font size, or atlas-sampled text blurs while
+the vector marks stay crisp.</p>
+
+<p class="small" style="margin-top:40px; border-top:1px solid var(--rule); padding-top:16px;">
+Canonical source: <code>docs/mark-geometry.md</code>. This page is regenerated from it;
+if they drift, the Markdown wins. Sources for every number:
+<code>render/shapes.js</code>, <code>render/tracks.js</code>, <code>render/card.js</code>,
+<code>render/scene.js</code>, <code>style.css</code>, and
+<a href="node-visual-system.md">node-visual-system.md</a>.</p>
+
+</div>
+</body>
+</html>
