@@ -223,3 +223,9 @@ already cut for other reasons.
 What is already done, so it is not proposed again: the `work_flagged` repair itself, and the two
 guards that hold a prompt to the tool surface (`tools.test.js`, and the reasoning in
 `mcp_ideas.md`). These are questions under study, not a plan.
+
+# 10. Adding Front Matter to Node Note Files
+We could add front matter that includes the name of the note. Why do this? Good question that needa a goo answer. Is there one? Do we want other apps to be able to read these notes?
+
+But then we're trying to share data between apps. And isn;t that why we have the MCP server?
+
