@@ -217,6 +217,11 @@ its free services alone.
 
 ### Rendering the diagrams with `egui::Painter`
 
+The per-mark geometry, complete enough to redraw every silhouette, glyph, track, and
+decorator without reading the renderer, is specified separately in
+[`mark-geometry.md`](mark-geometry.md) (with a rendered HTML sibling); this subsection
+is the argument, that document is the reference.
+
 The map re-expresses in `egui::Painter` more directly than a general "SVG to Rust"
 port would suggest, because its drawing inventory is small and entirely flat. A
 search of the renderer for `Gradient`, `filter=`, `feGaussian`, `mask=`, and
