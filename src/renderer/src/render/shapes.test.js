@@ -125,7 +125,7 @@ describe('renderCard — the box a silhouette is painted from', () => {
   })
 
   it('gives a project node and its close the tinted panel, and a task the card panel', () => {
-    // A scope's two ends wear a tint of the project violet rather than the panel colour every
+    // A scope's two ends wear a tint of the scope teal rather than the panel colour every
     // task wears, so a pair reads as one material and a folded pair, drawn flush, reads as one
     // closed object. The task's inline fill is cleared rather than left set, since renderCard
     // is called again on the same element whenever a card changes kind.
