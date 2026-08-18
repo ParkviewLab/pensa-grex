@@ -132,7 +132,7 @@ outer path and the `innerT` transform for the inner. The outer path per shape is
 given first; the shared inner-path mechanism follows.
 
 The margin `m = 1.5` is common to all four: every silhouette is inset 1.5 pixels
-inside the card box, so with `x0 = m`, `x1 = w - m`, `y0 = m`, `y1 = h - m`, and the
+inside the card box. Define `x0 = m`, `x1 = w - m`, `y0 = m`, `y1 = h - m`, and the
 centres `cx = (x0 + x1) / 2`, `cy = (y0 + y1) / 2`.
 
 #### 3.1 screen (a plain task)
@@ -291,7 +291,7 @@ it, which is a text property, not a mark.
 
 Any flagged node wears the orbits: three heavy, off-axis elliptical rings centred on
 the card, each carrying one solid electron ball set back from apogee, all in the
-node's own colour (its status colour for a task, the project violet for a project).
+node's own colour (its status colour for a task, the scope teal for a project).
 The rings are off-axis and irregular on purpose; rings at 0, 90, and 180 degrees would
 read as a tidy modern diagram rather than atomic-age. Each ring is an ellipse of
 semi-axes `(rx, ry)` rotated by `ang` degrees about the card centre, stroked at width
@@ -373,7 +373,7 @@ the egui translation section, because a naive stroke cannot express it.
 
 The gap is specified by the air wanted across the crossed line, `perpClear = 3` plus
 the crossed line's half-width (`CROSSED_HALF`: riser 1.5, return 1.15). For a crossing
-at angle whose sine between the two lines is `s`, the cut ends sit back along the
+whose angle between the two lines has sine `s`, the cut ends sit back along the
 lateral by `half = min(breakMax, across / s)`, where `across = perpClear + crossedHalf`
 and `breakMax = 12` caps a nearly parallel crossing (there the air is given up rather
 than the line). The strip that removes the ink is a rectangle centred on the crossed
