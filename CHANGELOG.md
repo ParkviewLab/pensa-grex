@@ -4,6 +4,30 @@ All notable changes to this project are recorded here.
 
 ## [Unreleased]
 
+## [v3.5.1] - 2026-09-15
+
+### Highlights
+
+This is a maintenance and documentation release with no changes to the app's behaviour beyond one link fix: the About dialog's download link now points at the relocated downloads page. The GitHub Pages site is rebuilt to publish a generated index alongside the download page and the full contents of docs/, and the macOS build is repaired by pinning electron-builder to 26.16.1 so signing works on the current runner image. The rest is documentation work, including a new mark-geometry drawing spec, a field-by-field data-types reference, an HTML twin of the northstar, and assorted corrections.
+
+### Bug fixes
+
+- Point the About dialog's download link at the new downloads page (#99) (6c773ae)
+- Electron-builder 26.16.1, so macOS signing works again (#104) (8857b54)
+
+### Docs
+
+- Add mark-geometry drawing spec and expand the Rust-port study (#97) (043568e)
+- The data types, field by field (#89) (ee0684e)
+- Correct the project-colour misnomer and three prose faults in the mark docs (#98) (b8d99f1)
+- Add the designed HTML twin of the northstar (#101) (5de9ffa)
+- Point the README back at the live download page until the release (#102) (17a6a22)
+- Point the README at the published site, and correct the tag comment (#103) (aaecc23)
+
+### Features
+
+- Publish the whole documentation site from main (#100) (75c40f9)
+
 ## [v3.5.0] - 2026-07-27
 
 ### Highlights
