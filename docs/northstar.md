@@ -37,6 +37,10 @@ A domain is plain files on your own disk: one JSON file, in a directory beside i
 - Local files against richer capability. Plain JSON and markdown are the floor. Search, indexing and anything like lancedb are built over those files, not by replacing them with a store you do not own.
 - Theme against clarity. The Googie theme is part of the design and not an afterthought, but a decorative element that does not clarify the structure is removed.
 
+## What it is not
+
+PensaGrex is not project management software. It does not track resources, level them, cost a plan, or work out when the project will finish, and it has no assignees, no reports, and nothing to roll up to a portfolio. Issue trackers keep a team's queue of tickets, and scheduling tools fit resources to a calendar; neither is what this is for. PensaGrex lays out the steps of one piece of work, shows their shape, and lets you move through them as the work changes, with you and your agents doing the work as it goes. A plan here is something to steer by, not something to report against.
+
 ## Axioms
 
 1. The creating action decides structure, not order: inserting a task continues the line at that edge; opening a branch starts a parallel line off it.
