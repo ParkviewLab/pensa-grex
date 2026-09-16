@@ -9,10 +9,14 @@ name: Deploy the site
 # there is no Jekyll or other build system in the path.
 #
 # main advances only at a release, so a release is what redeploys the site, and the
-# script pins every GitHub link to the newest v* tag reachable from HEAD. That tag
-# has to be fetched for the build to run at all: if the release push arrives before
-# its tag, the build fails rather than publishing an unstamped page, and the manual
-# run below is the way to deploy it once the tag lands.
+# script pins every GitHub link to the newest v* tag reachable from HEAD. git
+# push --follow-tags sends the branch and its tag together, so the new tag is on the
+# runner by the time the build reads it. Note what the build does NOT do: it takes
+# whatever v* tag is reachable, so a run that somehow started before the tag landed
+# would stamp the PREVIOUS release and publish successfully; it fails only when no
+# v* tag exists at all. That leniency is deliberate, since a later manual run sits on
+# the changelog commit rather than on the tagged one; if a deployment ever does stamp
+# a stale version, re-run this workflow by hand once the tag is in place.
 #
 # The Pages source is GitHub Actions (gh api -X PUT repos/ParkviewLab/pensa-grex/
 # pages -f build_type=workflow), and the github-pages environment's branch policy
