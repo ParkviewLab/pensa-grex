@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<!--
+SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
+SPDX-License-Identifier: CC-BY-4.0
+
+Designed HTML presentation of northstar.md, which is canonical: if the two
+drift, the Markdown wins and this file is re-authored from it. Wording is
+faithful to northstar.md, sentence for sentence.
+
+One self-contained file: inline style, inline SVG, Michroma embedded as base64
+woff2, no script, no animation, no network dependency. The drawings use the
+subway vocabulary of the repo's other HTML documents (stations, hulls, terminus
+pills, junction diamonds, return lines), set in the ParkviewLab brand.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="The canonical statement of what this project is for. Design decisions and feature proposals are weighed against it.">
+<title>ParkviewLab &middot; PensaGrex northstar</title>
+<style>
+/* ===========================================================================
+   ParkviewLab brand - see the handbook's docs/brand.md (single source of
+   truth). The three brand colours (teal / teal-deep / sage) carry identity.
+   Of the Bauhaus accents only red is used: the cursor - "here" - the label of
+   the section on tensions, and the link hover; blue and yellow are declared and
+   unused. The :root block follows brand.md, without --code and --code-text,
+   which this page has no use for, and with --line added, a neutral rule tint
+   that is not a brand token.
+   Michroma (SIL Open Font License 1.1) is embedded as a base64 woff2 so the
+   page is single-file and renders with no network.
+   =========================================================================== */
+@font-face {
+  font-family:'Michroma'; font-style:normal; font-weight:400; font-display:swap;
+  src:url('data:font/woff2;base64,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') format('woff2');
+}
+
+:root{
+  --teal:#00C2C7; --teal-deep:#004f52; --sage:#90b095; --ink:#141414;
+  --red:#E2483D; --blue:#2547C8; --yellow:#F2B33D;
+  --paper:#f3eee2; --paper-2:#ece5d4; --card:#fbf8f1; --muted:#5d6258; --line:#d4cab5;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --display:'Michroma',var(--sans);
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.65;-webkit-font-smoothing:antialiased;}
+.wrap{max-width:1000px;margin:0 auto;padding:0 24px 96px;}
+a{color:var(--teal-deep);text-decoration-color:var(--teal);}
+a:hover{color:var(--red);}
+code{font-family:var(--mono);font-size:.92em;background:var(--paper-2);padding:.05em .35em;border-radius:3px;}
+
+header.site{border-bottom:3px solid var(--ink);padding:22px 0 18px;margin-bottom:40px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+header.site .mark{height:54px;width:54px;flex:none;}
+header.site .word{font-family:var(--display);text-transform:uppercase;letter-spacing:.12em;font-size:14px;color:var(--teal-deep);line-height:1.1;}
+header.site .word small{display:block;color:var(--muted);font-size:10.5px;letter-spacing:.22em;}
+
+.hero{margin:8px 0 30px;}
+.eyebrow{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.22em;color:var(--muted);margin:0 0 10px;}
+.hero h1{font-family:var(--display);font-size:34px;line-height:1.2;margin:0 0 16px;color:var(--teal-deep);text-transform:uppercase;letter-spacing:.02em;}
+.hero .rule{height:6px;width:150px;background:var(--teal);margin:0 0 22px;}
+.hero p.lede{font-size:19px;max-width:760px;margin:0;}
+.hero p.lede .leads{display:block;margin-top:10px;font-size:16px;color:var(--muted);}
+
+h2.section-label{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted);margin:54px 0 18px;font-weight:600;display:flex;align-items:center;gap:10px;}
+h2.section-label::before{content:"";width:12px;height:12px;flex:none;background:var(--ac,var(--teal-deep));}
+.umbrella{max-width:760px;font-size:16.5px;margin:6px 0 18px;}
+.prose{max-width:760px;}
+.prose p{font-size:16.5px;margin:0 0 14px;}
+
+/* The three intents, perceived at a glance before any one of them is read.
+   Each card's line is a sentence of the section it stands for. */
+.intents{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin:8px 0;}
+.intent{position:relative;background:var(--card);border:2px solid var(--ink);padding:22px 22px 20px;overflow:hidden;}
+.intent::before{content:"";position:absolute;top:0;left:0;width:100%;height:8px;background:var(--ac);}
+.intent .num{font-family:var(--display);font-size:42px;color:var(--paper-2);line-height:1;}
+.intent .t{font-family:var(--display);font-size:13.5px;letter-spacing:.01em;line-height:1.5;margin:4px 0 8px;}
+.intent p{font-size:14px;color:var(--muted);margin:0;}
+.i1{--ac:var(--teal-deep)} .i2{--ac:var(--teal)} .i3{--ac:var(--sage)}
+
+/* Deep dives: each intent expanded, a figure only where one earns its place */
+.dive{margin:52px 0 0;}
+.dive h3{font-family:var(--display);font-size:16px;letter-spacing:.02em;margin:0 0 18px;display:flex;align-items:baseline;gap:14px;color:var(--ink);}
+.dive h3 .n{font-family:var(--display);font-size:34px;color:var(--ac,var(--teal-deep));line-height:1;}
+.d1{--ac:var(--teal-deep)} .d2{--ac:var(--teal)} .d3{--ac:var(--sage)}
+
+/* Figures, contrasts, and the strip of four */
+.contrast{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:0 0 22px;}
+.panel{background:var(--card);border:1px solid var(--line);padding:14px 16px 12px;}
+.panel .lbl{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.18em;color:var(--muted);margin:0 0 4px;}
+.panel .cap{font-size:14px;color:var(--ink);margin:0 0 8px;font-style:italic;}
+.panel svg,.figure svg,.strip svg{width:100%;height:auto;display:block;}
+.figure{background:var(--card);border:1px solid var(--line);padding:14px 16px 10px;margin:0 0 22px;max-width:760px;}
+.figure .cap{font-size:13px;color:var(--muted);margin:6px 0 0;font-style:italic;}
+.figure.wide{max-width:none;overflow-x:auto;}
+.figure.wide svg{min-width:600px;}
+.strip{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:0 0 22px;max-width:760px;}
+.strip .cell{background:var(--card);border:1px solid var(--line);padding:10px 12px 8px;}
+.strip .cell p{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.04em;line-height:1.45;margin:8px 0 0;}
+
+/* The drawing vocabulary, shared with model_v3_ideas.html and mark-geometry.html:
+   a station is a card, a project node wears a hull, a scope closes at a terminus
+   pill, a junction is a diamond in the gap between two stations, and a return
+   line carries a branch back into the trunk it left. */
+svg .st{fill:var(--card);stroke:var(--ink);stroke-width:1.5;}
+svg .st.done{stroke:var(--sage);stroke-width:2.4;}
+svg .st.prog{stroke:var(--teal);stroke-width:2.4;}
+svg .st.cancel{stroke:var(--muted);stroke-width:1.4;stroke-dasharray:3 2.4;}
+svg .hull,svg .term,svg .jn,svg .dot{fill:var(--ink);}
+svg .jnr{fill:var(--teal-deep);}
+svg .trunk{stroke:var(--ink);stroke-width:2.2;fill:none;}
+svg .ret{stroke:var(--teal-deep);stroke-width:2.2;fill:none;}
+svg .brk{stroke:var(--muted);stroke-width:1;fill:none;}
+svg .dash{fill:none;stroke:var(--teal-deep);stroke-width:1.2;stroke-dasharray:5 4;}
+svg .ray{stroke:var(--red);stroke-width:1.4;stroke-linecap:round;}
+svg .spark{fill:var(--red);}
+svg .lbl{font-family:var(--sans);font-size:11px;fill:var(--ink);}
+svg .txt{font-family:var(--mono);font-size:9px;fill:var(--muted);letter-spacing:.06em;}
+svg .txt.ink{fill:var(--ink);}
+svg .txt.red{fill:var(--red);}
+svg .box{fill:var(--card);stroke:var(--ink);stroke-width:1.5;}
+svg .bar{fill:var(--paper-2);}
+svg .lead{stroke:var(--teal-deep);stroke-width:1.4;fill:none;}
+svg .tip{fill:var(--teal-deep);}
+svg .app{fill:var(--teal);}
+svg .app2{fill:var(--teal-deep);}
+
+/* Tensions: the pair, and beneath it what settles the pair */
+.tensions{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:8px 0;}
+.tension{background:var(--card);border:1px solid var(--line);border-top:3px solid var(--ink);padding:16px 16px 14px;}
+.tension h3{font-family:var(--display);font-size:12px;letter-spacing:.02em;line-height:1.65;margin:0 0 10px;}
+.tension h3 .vs{font-family:var(--sans);font-style:italic;font-weight:400;font-size:13px;color:var(--muted);padding:0 .25em;}
+.tension p{font-size:14px;margin:0;}
+
+/* Axioms as a constellation: read together, each with its faded numeral */
+.axioms{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;margin:8px 0;}
+.axiom{position:relative;background:var(--card);border:1px solid var(--line);border-left:4px solid var(--teal);padding:16px 16px 14px;overflow:hidden;}
+.axiom .big{position:absolute;right:10px;top:-6px;font-family:var(--display);font-size:64px;color:var(--paper-2);line-height:1;}
+.axiom .k{font-family:var(--display);font-size:11px;color:var(--teal-deep);letter-spacing:.06em;position:relative;}
+.axiom h3{font-family:var(--display);font-size:12px;line-height:1.55;margin:6px 0;letter-spacing:.01em;position:relative;}
+.axiom p{font-size:13.5px;color:var(--muted);margin:0;position:relative;}
+
+footer.site{margin-top:64px;border-top:3px solid var(--ink);padding-top:20px;font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:.03em;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;}
+
+/* Single column on a narrow screen */
+@media (max-width:680px){
+  .intents,.tensions,.contrast,.axioms{grid-template-columns:1fr;}
+  .strip{grid-template-columns:1fr 1fr;}
+  .hero h1{font-size:26px;}
+  header.site{padding:18px 0;margin-bottom:30px;}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="site">
+    <svg class="mark" viewBox="60 115 170 170" role="img" aria-label="ParkviewLab" xmlns="http://www.w3.org/2000/svg">
+      <g transform="translate(200,200)">
+        <rect x="-88.572067" y="39.569824" width="9" height="28" fill="#90b095"/>
+        <circle cx="-83" cy="10" r="30" fill="#90b095"/>
+        <circle cx="-111" cy="20" r="22" fill="#90b095"/>
+        <circle cx="-55" cy="18" r="21" fill="#90b095"/>
+        <circle cx="-119" cy="4" r="16" fill="#90b095"/>
+        <circle cx="-47" cy="6" r="15" fill="#90b095"/>
+        <circle cx="-99" cy="-14" r="24" fill="#90b095"/>
+        <circle cx="-71" cy="-22" r="20" fill="#90b095"/>
+        <circle cx="-103" cy="-32" r="16" fill="#90b095"/>
+        <circle cx="-79" cy="-38" r="15" fill="#90b095"/>
+        <circle cx="-59" cy="-14" r="13" fill="#90b095"/>
+        <rect x="-5.820663" y="39.498325" width="6" height="22" fill="#90b095"/>
+        <circle cx="-2" cy="26" r="17" fill="#90b095"/>
+        <circle cx="-19" cy="29" r="13" fill="#90b095"/>
+        <circle cx="14" cy="27" r="12" fill="#90b095"/>
+        <circle cx="-11" cy="12" r="13" fill="#90b095"/>
+        <circle cx="7" cy="13" r="14" fill="#90b095"/>
+        <circle cx="-4.2837896" cy="-2.7139649" r="11" fill="#90b095"/>
+        <circle cx="6" cy="-2.14414" r="7" fill="#90b095"/>
+        <g transform="matrix(0.84873049,0,0,0.84873049,-48.542203,6.0416091)">
+          <path d="m -16,-78 a 28,28 0 0 1 32,0" fill="none" stroke="#00C2C7" stroke-width="4" stroke-linecap="square"/>
+          <path d="m -28,-88 a 46,46 0 0 1 56,0" fill="none" stroke="#00C2C7" stroke-width="2.5" stroke-linecap="square"/>
+          <polyline points="0,-28 0,-36 0,-62" fill="none" stroke="#00C2C7" stroke-width="6" stroke-linecap="square" stroke-linejoin="miter"/>
+          <polyline points="24,-14 32,-22 53.7,-28" fill="none" stroke="#00C2C7" stroke-width="6" stroke-linecap="square" stroke-linejoin="miter"/>
+          <polyline points="-24,-14 -32,-22 -53.7,-28" fill="none" stroke="#00C2C7" stroke-width="6" stroke-linecap="square" stroke-linejoin="miter"/>
+          <polyline points="0,28 0,35 0,56" fill="none" stroke="#00C2C7" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+          <polyline points="24,14 30,20 46,28" fill="none" stroke="#00C2C7" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+          <polyline points="-24,14 -30,20 -46,28" fill="none" stroke="#00C2C7" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+          <circle cx="0" cy="-62" r="11" fill="#00C2C7"/><circle cx="0" cy="-62" r="5" fill="#004f52"/>
+          <circle cx="53.7" cy="-31" r="11" fill="#00C2C7"/><circle cx="53.7" cy="-31" r="5" fill="#004f52"/>
+          <circle cx="-53.7" cy="-31" r="11" fill="#00C2C7"/><circle cx="-53.7" cy="-31" r="5" fill="#004f52"/>
+          <circle cx="0" cy="56" r="9" fill="#00C2C7"/><circle cx="0" cy="56" r="4" fill="#004f52"/>
+          <circle cx="46" cy="28" r="9" fill="#00C2C7"/><circle cx="46" cy="28" r="4" fill="#004f52"/>
+          <circle cx="-46" cy="28" r="9" fill="#00C2C7"/><circle cx="-46" cy="28" r="4" fill="#004f52"/>
+          <polygon points="0,-28 24,-14 24,14 0,28 -24,14 -24,-14" fill="#00C2C7"/>
+          <polygon points="0,-23 20,-11.5 20,11.5 0,23 -20,11.5 -20,-11.5" fill="#004f52"/>
+          <line x1="0" y1="-23" x2="0" y2="23" stroke="#00C2C7" stroke-width="3" stroke-linecap="square"/>
+        </g>
+      </g>
+    </svg>
+    <span class="word">ParkviewLab<small>PensaGrex</small></span>
+  </header>
+
+  <div class="hero">
+    <p class="eyebrow">northstar</p>
+    <h1>PensaGrex</h1>
+    <div class="rule"></div>
+    <p class="lede">The canonical statement of what this project is for. Design
+      decisions and feature proposals are weighed against it.
+      <span class="leads">Where it and the code disagree, this document is the
+      authority, and the code is the thing to fix.</span></p>
+  </div>
+
+  <h2 class="section-label">what it is</h2>
+  <div class="figure wide">
+    <svg viewBox="0 0 660 360" role="img" aria-label="One plan drawn as a subway map: it opens at a project node at the base and closes at a terminus at the top; tasks sit on the line between them; a run of tasks is wrapped as a sub-project with its own terminus; a branch leaves the line, runs alongside it, and rejoins it; the cursor marks where you are.">
+      <defs>
+        <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="tip" d="M0,1 L9,5 L0,9 z"/></marker>
+      </defs>
+      <!-- the trunk, from the base of the plan to its close -->
+      <path class="trunk" d="M240,330 V300"/><path class="trunk" d="M240,274 V244"/><path class="trunk" d="M240,218 V188"/><path class="trunk" d="M240,162 V134"/><path class="trunk" d="M240,126 V100"/><path class="trunk" d="M240,74 V42"/>
+      <!-- the branch: leaves the edge above Measure up, runs alongside the sub-project, rejoins above its close -->
+      <path class="trunk" d="M240,268 H411 Q440,268 440,244"/><path class="trunk" d="M440,218 V188"/>
+      <path class="ret" d="M440,162 V106 H246" marker-end="url(#arrA)"/>
+      <!-- the stations on the trunk -->
+      <rect class="st" x="185" y="330" width="110" height="26" rx="2.5"/><rect class="hull" x="185" y="350" width="110" height="6"/><text class="lbl" x="240" y="343" text-anchor="middle">Kitchen refit</text>
+      <rect class="st" x="185" y="274" width="110" height="26" rx="2.5"/><text class="lbl" x="240" y="291" text-anchor="middle">Measure up</text>
+      <rect class="st" x="185" y="218" width="110" height="26" rx="2.5"/><rect class="hull" x="185" y="238" width="110" height="6"/><text class="lbl" x="240" y="231" text-anchor="middle">Cabinets</text>
+      <rect class="st" x="185" y="162" width="110" height="26" rx="2.5"/><text class="lbl" x="240" y="179" text-anchor="middle">Order doors</text>
+      <rect class="term" x="217" y="126" width="46" height="8" rx="4"/>
+      <rect class="st" x="185" y="74" width="110" height="26" rx="2.5"/><text class="lbl" x="240" y="91" text-anchor="middle">Fit worktop</text>
+      <rect class="term" x="217" y="34" width="46" height="8" rx="4"/>
+      <!-- the stations on the branch; the leaning marquee is the one carrying the cursor -->
+      <g transform="translate(385,218) rotate(-4 55 13)"><path class="st" d="M1,1 Q55,4.6 109,1 Q103.5,13 109,25 Q55,21.4 1,25 Q6.5,13 1,1 Z"/><text class="lbl" x="55" y="17" text-anchor="middle">Choose tiles</text></g>
+      <!-- the cursor mark: the Atomic Starburst of mark-geometry.md, ten rays at its
+           specified tips. Drawn inline rather than through <use>, because document
+           CSS does not select into a use element's shadow tree. -->
+      <g transform="translate(506,217) scale(0.56)">
+        <g class="ray"><line x1="0" y1="0" x2="14.9" y2="-1.6"/><line x1="0" y1="0" x2="8.6" y2="4.9"/><line x1="0" y1="0" x2="7.6" y2="15"/><line x1="0" y1="0" x2="-1.4" y2="8.6"/><line x1="0" y1="0" x2="-10" y2="9"/><line x1="0" y1="0" x2="-18" y2="0.9"/><line x1="0" y1="0" x2="-8.8" y2="-5.1"/><line x1="0" y1="0" x2="-6.2" y2="-14"/><line x1="0" y1="0" x2="3.2" y2="-11.9"/><line x1="0" y1="0" x2="12" y2="-10.8"/></g>
+        <g class="spark"><circle r="2.2" cx="14.9" cy="-1.6"/><circle r="2.2" cx="8.6" cy="4.9"/><circle r="2.2" cx="7.6" cy="15"/><circle r="2.2" cx="-1.4" cy="8.6"/><circle r="2.2" cx="-10" cy="9"/><circle r="2.2" cx="-18" cy="0.9"/><circle r="2.2" cx="-8.8" cy="-5.1"/><circle r="2.2" cx="-6.2" cy="-14"/><circle r="2.2" cx="3.2" cy="-11.9"/><circle r="2.2" cx="12" cy="-10.8"/><circle r="2.8" cx="0" cy="0"/></g>
+      </g>
+      <rect class="st" x="385" y="162" width="110" height="26" rx="2.5"/><text class="lbl" x="440" y="179" text-anchor="middle">Order tiles</text>
+      <!-- the junctions, each in the gap between two stations -->
+      <path class="jn" d="M240,262 l6,6 l-6,6 l-6,-6 z"/>
+      <path class="jnr" d="M240,100 l6,6 l-6,6 l-6,-6 z"/>
+      <!-- the sub-project's scope, base to close -->
+      <path class="brk" d="M179,244 H173 V126 H179"/>
+      <!-- what each part is -->
+      <text class="txt" x="162" y="341" text-anchor="end">project node</text><text class="txt" x="162" y="352" text-anchor="end">the plan opens</text>
+      <text class="txt" x="162" y="291" text-anchor="end">task</text>
+      <text class="txt" x="162" y="229" text-anchor="end">sub-project</text><text class="txt" x="162" y="240" text-anchor="end">a wrapped run of tasks</text>
+      <text class="txt" x="162" y="179" text-anchor="end">task</text>
+      <text class="txt" x="162" y="133" text-anchor="end">terminus</text><text class="txt" x="162" y="144" text-anchor="end">the sub-project closes</text>
+      <text class="txt" x="162" y="91" text-anchor="end">task</text>
+      <text class="txt" x="162" y="41" text-anchor="end">terminus</text><text class="txt" x="162" y="52" text-anchor="end">the plan closes</text>
+      <text class="txt" x="300" y="281">branch &middot; part of the work runs alongside the rest</text>
+      <text class="txt" x="300" y="99">rejoins the line it left</text>
+      <text class="txt red" x="526" y="234">&quot;here&quot; &middot; the cursor</text>
+    </svg>
+    <p class="cap">One plan: it opens at a project node and closes at a terminus, and everything in it happens between the two.</p>
+  </div>
+  <div class="prose">
+    <p>PensaGrex keeps track of what you are doing: a live, evolving set of
+      project plans, gathered one domain at a time (HomeLab, Work, and so on). A
+      plan opens at a project node and closes at a terminus, and everything in it
+      happens between the two. You insert a task where it belongs on the line,
+      wrap a run of tasks to name it as a sub-project, and open a branch where
+      part of the work runs alongside the rest; a branch always rejoins the line
+      it left. A cursor you set by hand ("here") marks where you are on each
+      branch.</p>
+  </div>
+
+  <h2 class="section-label">why it exists</h2>
+  <div class="contrast">
+    <div class="panel">
+      <p class="lbl">flat lists or nested checklists</p>
+      <p class="cap">neither matches how a piece of work actually grows</p>
+      <svg viewBox="0 0 340 170" role="img" aria-label="A flat list of six checkbox rows beside a nested checklist of six indented checkbox rows.">
+        <text class="txt" x="30" y="16">a flat list</text>
+        <rect class="box" x="30" y="30" width="10" height="10"/><rect class="bar" x="48" y="33" width="78" height="4"/>
+        <rect class="box" x="30" y="52" width="10" height="10"/><rect class="bar" x="48" y="55" width="60" height="4"/>
+        <rect class="box" x="30" y="74" width="10" height="10"/><rect class="bar" x="48" y="77" width="88" height="4"/>
+        <rect class="box" x="30" y="96" width="10" height="10"/><rect class="bar" x="48" y="99" width="52" height="4"/>
+        <rect class="box" x="30" y="118" width="10" height="10"/><rect class="bar" x="48" y="121" width="72" height="4"/>
+        <rect class="box" x="30" y="140" width="10" height="10"/><rect class="bar" x="48" y="143" width="64" height="4"/>
+        <text class="txt" x="190" y="16">a nested checklist</text>
+        <rect class="box" x="190" y="30" width="10" height="10"/><rect class="bar" x="208" y="33" width="80" height="4"/>
+        <rect class="box" x="204" y="52" width="10" height="10"/><rect class="bar" x="222" y="55" width="60" height="4"/>
+        <rect class="box" x="204" y="74" width="10" height="10"/><rect class="bar" x="222" y="77" width="70" height="4"/>
+        <rect class="box" x="218" y="96" width="10" height="10"/><rect class="bar" x="236" y="99" width="48" height="4"/>
+        <rect class="box" x="190" y="118" width="10" height="10"/><rect class="bar" x="208" y="121" width="86" height="4"/>
+        <rect class="box" x="204" y="140" width="10" height="10"/><rect class="bar" x="222" y="143" width="56" height="4"/>
+      </svg>
+    </div>
+    <div class="panel">
+      <p class="lbl">the tool's structure is that structure</p>
+      <p class="cap">you can see it at a glance</p>
+      <svg viewBox="0 0 340 170" role="img" aria-label="A line of work: you are somewhere specific on it, tasks queue up ahead of you, and part of the work runs in parallel for a while and then comes back together.">
+        <defs>
+          <marker id="arrB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="tip" d="M0,1 L9,5 L0,9 z"/></marker>
+        </defs>
+        <path class="trunk" d="M130,158 V12"/>
+        <path class="trunk" d="M130,98 H196 Q210,98 210,84"/><path class="trunk" d="M210,84 V56"/>
+        <path class="ret" d="M210,56 V42 H136" marker-end="url(#arrB)"/>
+        <circle class="dot" cx="130" cy="140" r="4"/><circle class="dot" cx="130" cy="84" r="4"/><circle class="dot" cx="130" cy="56" r="4"/><circle class="dot" cx="130" cy="28" r="4"/>
+        <circle class="dot" cx="210" cy="76" r="4"/><circle class="dot" cx="210" cy="56" r="4"/>
+        <path class="jn" d="M130,92 l6,6 l-6,6 l-6,-6 z"/>
+        <path class="jnr" d="M130,36 l6,6 l-6,6 l-6,-6 z"/>
+        <!-- the cursor mark: the Atomic Starburst of mark-geometry.md, ten rays at its
+             specified tips. Drawn inline rather than through <use>, because document
+             CSS does not select into a use element's shadow tree. -->
+        <g transform="translate(152,140) scale(0.52)">
+          <g class="ray"><line x1="0" y1="0" x2="14.9" y2="-1.6"/><line x1="0" y1="0" x2="8.6" y2="4.9"/><line x1="0" y1="0" x2="7.6" y2="15"/><line x1="0" y1="0" x2="-1.4" y2="8.6"/><line x1="0" y1="0" x2="-10" y2="9"/><line x1="0" y1="0" x2="-18" y2="0.9"/><line x1="0" y1="0" x2="-8.8" y2="-5.1"/><line x1="0" y1="0" x2="-6.2" y2="-14"/><line x1="0" y1="0" x2="3.2" y2="-11.9"/><line x1="0" y1="0" x2="12" y2="-10.8"/></g>
+          <g class="spark"><circle r="2.2" cx="14.9" cy="-1.6"/><circle r="2.2" cx="8.6" cy="4.9"/><circle r="2.2" cx="7.6" cy="15"/><circle r="2.2" cx="-1.4" cy="8.6"/><circle r="2.2" cx="-10" cy="9"/><circle r="2.2" cx="-18" cy="0.9"/><circle r="2.2" cx="-8.8" cy="-5.1"/><circle r="2.2" cx="-6.2" cy="-14"/><circle r="2.2" cx="3.2" cy="-11.9"/><circle r="2.2" cx="12" cy="-10.8"/><circle r="2.8" cx="0" cy="0"/></g>
+        </g>
+        <text class="txt red" x="112" y="137" text-anchor="end">you are</text><text class="txt red" x="112" y="148" text-anchor="end">somewhere specific</text>
+        <text class="txt" x="112" y="74" text-anchor="end">tasks queue up</text><text class="txt" x="112" y="85" text-anchor="end">ahead of you</text>
+        <text class="txt" x="224" y="90">part of the work</text><text class="txt" x="224" y="101">runs in parallel</text><text class="txt" x="224" y="112">for a while</text>
+        <text class="txt" x="224" y="44">and then comes</text><text class="txt" x="224" y="55">back together</text>
+      </svg>
+    </div>
+  </div>
+  <div class="prose">
+    <p>Most task tools are flat lists or nested checklists. Neither matches how a
+      piece of work actually grows: you are somewhere specific, tasks queue up
+      ahead of you, and every so often part of the work runs in parallel for a
+      while and then comes back together. PensaGrex is built so that the tool's
+      structure is that structure, and so that you can see it at a glance.</p>
+  </div>
+
+  <h2 class="section-label">three intents</h2>
+  <p class="umbrella">These are complementary facets of one purpose, not a
+    ranking; the tensions between them (below) are where the design is decided.</p>
+  <div class="intents">
+    <div class="intent i1"><div class="num">1</div><p class="t">The structure is the mental model</p>
+      <p>Projects, Tasks, Branches.</p></div>
+    <div class="intent i2"><div class="num">2</div><p class="t">Structure is legible at a glance</p>
+      <p>The visual channel carries the structure; text only names it.</p></div>
+    <div class="intent i3"><div class="num">3</div><p class="t">It is yours, and it is local</p>
+      <p>No account, no cloud, no lock-in.</p></div>
+  </div>
+
+  <section class="dive d1">
+    <h3><span class="n">1</span>The structure is the mental model</h3>
+    <div class="prose">
+      <p>Projects, Tasks, Branches. A project opens a plan and closes it, so a
+        plan is a bounded run of work rather than an open-ended pile; a task is
+        one thing to do, sitting on the line between the two; a branch leaves
+        that line where part of the work runs in parallel and returns to it where
+        that work is absorbed. The data model stores exactly this and nothing
+        that contradicts it: each node has one main-line successor and zero or
+        more branches, each branch names the edge it rejoins, and the action that
+        creates a node (insert a task, wrap a run as a project, open a branch) is
+        what decides the structure it takes. Ordering never decides structure.
+        The result is a block structure that grows from the base upward: every
+        plan and every sub-project is one run with one way in and one way out,
+        and every branch comes back.</p>
+    </div>
+  </section>
+
+  <section class="dive d2">
+    <h3><span class="n">2</span>Structure is legible at a glance</h3>
+    <div class="strip">
+      <div class="cell">
+        <svg viewBox="0 0 150 60" role="img" aria-label="A leaning marquee card with the cursor mark beside it.">
+          <g transform="translate(14,20) rotate(-4 35 10)"><path class="st" d="M1,1 Q35,3.8 69,1 Q65.5,10 69,19 Q35,16.2 1,19 Q4.5,10 1,1 Z"/></g>
+          <!-- the cursor mark: the Atomic Starburst of mark-geometry.md, ten rays at its
+               specified tips. Drawn inline rather than through <use>, because document
+               CSS does not select into a use element's shadow tree. -->
+          <g transform="translate(106,30) scale(0.56)">
+            <g class="ray"><line x1="0" y1="0" x2="14.9" y2="-1.6"/><line x1="0" y1="0" x2="8.6" y2="4.9"/><line x1="0" y1="0" x2="7.6" y2="15"/><line x1="0" y1="0" x2="-1.4" y2="8.6"/><line x1="0" y1="0" x2="-10" y2="9"/><line x1="0" y1="0" x2="-18" y2="0.9"/><line x1="0" y1="0" x2="-8.8" y2="-5.1"/><line x1="0" y1="0" x2="-6.2" y2="-14"/><line x1="0" y1="0" x2="3.2" y2="-11.9"/><line x1="0" y1="0" x2="12" y2="-10.8"/></g>
+            <g class="spark"><circle r="2.2" cx="14.9" cy="-1.6"/><circle r="2.2" cx="8.6" cy="4.9"/><circle r="2.2" cx="7.6" cy="15"/><circle r="2.2" cx="-1.4" cy="8.6"/><circle r="2.2" cx="-10" cy="9"/><circle r="2.2" cx="-18" cy="0.9"/><circle r="2.2" cx="-8.8" cy="-5.1"/><circle r="2.2" cx="-6.2" cy="-14"/><circle r="2.2" cx="3.2" cy="-11.9"/><circle r="2.2" cx="12" cy="-10.8"/><circle r="2.8" cx="0" cy="0"/></g>
+          </g>
+        </svg>
+        <p>where you are</p>
+      </div>
+      <div class="cell">
+        <svg viewBox="0 0 150 60" role="img" aria-label="Three station cards whose outline colours differ: done, in progress, cancelled.">
+          <rect class="st done" x="12" y="23" width="36" height="14" rx="2"/>
+          <rect class="st prog" x="57" y="23" width="36" height="14" rx="2"/>
+          <rect class="st cancel" x="102" y="23" width="36" height="14" rx="2"/>
+        </svg>
+        <p>what is done, in progress, or cancelled</p>
+      </div>
+      <div class="cell">
+        <svg viewBox="0 0 150 60" role="img" aria-label="A junction diamond where a branch leaves the line.">
+          <path class="trunk" d="M56,56 V4"/>
+          <path class="trunk" d="M56,36 H86 Q100,36 100,22 V6"/>
+          <path class="jn" d="M56,30 l6,6 l-6,6 l-6,-6 z"/>
+        </svg>
+        <p>where a line branches</p>
+      </div>
+      <div class="cell">
+        <svg viewBox="0 0 150 60" role="img" aria-label="A junction diamond where a branch returns to the line it left.">
+          <defs><marker id="arrD" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="tip" d="M0,1 L9,5 L0,9 z"/></marker></defs>
+          <path class="trunk" d="M56,56 V4"/>
+          <path class="trunk" d="M100,56 V30"/>
+          <path class="ret" d="M100,30 V20 H62" marker-end="url(#arrD)"/>
+          <path class="jnr" d="M56,14 l6,6 l-6,6 l-6,-6 z"/>
+        </svg>
+        <p>where it comes back</p>
+      </div>
+    </div>
+    <div class="prose">
+      <p>A domain is drawn as a subway map: stations are nodes, tracks are the
+        trunks they sit on, and a junction in the gap between two stations is
+        where a branch leaves or where one returns. Before reading a single label
+        you can see the shape of the work: where you are (the leaning marquee and
+        its cursor), what is done, in progress, or cancelled (the outline
+        colour), where a line branches, and where it comes back. The visual
+        channel carries the structure; text only names it. The atomic-age skin is
+        in service of this and not the reverse.</p>
+    </div>
+  </section>
+
+  <section class="dive d3">
+    <h3><span class="n">3</span>It is yours, and it is local</h3>
+    <div class="figure">
+      <svg viewBox="0 0 470 150" role="img" aria-label="A domain is a directory of plain files on your own disk: one JSON file beside a directory of markdown notes. The app reads it, and so does any other tool.">
+        <text class="txt" x="235" y="12" text-anchor="middle">no account, no cloud, no lock-in</text>
+        <rect class="dash" x="150" y="22" width="170" height="114"/>
+        <text class="txt" x="160" y="36">on your own disk</text>
+        <rect class="box" x="162" y="44" width="146" height="20"/><text class="txt ink" x="172" y="57">domain.json</text>
+        <text class="txt ink" x="164" y="82">notes/</text>
+        <rect class="box" x="208" y="72" width="100" height="14"/><text class="txt ink" x="216" y="82">markdown</text>
+        <rect class="box" x="208" y="92" width="100" height="14"/><text class="txt ink" x="216" y="102">markdown</text>
+        <rect class="box" x="208" y="112" width="100" height="14"/><text class="txt ink" x="216" y="122">markdown</text>
+        <polygon class="app" points="62,56 82,68 82,92 62,104 42,92 42,68"/>
+        <polygon class="app2" points="62,64 75,72 75,88 62,96 49,88 49,72"/>
+        <text class="txt" x="62" y="124" text-anchor="middle">the app</text>
+        <line class="lead" x1="92" y1="80" x2="142" y2="80"/><polygon class="tip" points="150,80 142,76 142,84"/>
+        <line class="lead" x1="372" y1="80" x2="334" y2="80"/><polygon class="tip" points="326,80 334,76 334,84"/>
+        <text class="txt ink" x="404" y="70" text-anchor="middle">grep-able</text>
+        <text class="txt ink" x="404" y="84" text-anchor="middle">diff-able</text>
+        <text class="txt ink" x="404" y="98" text-anchor="middle">editable</text>
+        <text class="txt" x="404" y="122" text-anchor="middle">in any other tool</text>
+      </svg>
+    </div>
+    <div class="prose">
+      <p>A domain is plain files on your own disk: one JSON file, in a directory
+        beside its per-node markdown notes. No account, no cloud, no lock-in. The
+        files are grep-able, diff-able, and editable in any other tool; a note is
+        just markdown. The app owns the formatting of the domain file, never your
+        ability to read, move, or keep your own data.</p>
+    </div>
+  </section>
+
+  <h2 class="section-label" style="--ac:var(--red)">tensions (these are design-revealing)</h2>
+  <div class="tensions">
+    <div class="tension">
+      <h3>Legibility <span class="vs">against</span> faithful structure</h3>
+      <p>The picture must not distort the model to look tidy; when a layout
+        choice and the data disagree, the data wins and the layout accommodates
+        it.</p>
+    </div>
+    <div class="tension">
+      <h3>Local files <span class="vs">against</span> richer capability</h3>
+      <p>Plain JSON and markdown are the floor; later richness (search, indexing,
+        a possible lancedb) is added over the files, not by replacing them with
+        something you do not own.</p>
+    </div>
+    <div class="tension">
+      <h3>Skin <span class="vs">against</span> clarity</h3>
+      <p>The Googie theme is a genuine pleasure, but any decoration that does not
+        clarify the structure is decoration to remove.</p>
+    </div>
+  </div>
+
+  <h2 class="section-label" style="--ac:var(--sage)">axioms</h2>
+  <div class="axioms">
+    <div class="axiom"><span class="big" aria-hidden="true">1</span><div class="k">axiom 1</div>
+      <h3>The creating action decides structure, not order</h3>
+      <p>Inserting a task continues the line at that edge; opening a branch starts a parallel line off it.</p></div>
+    <div class="axiom"><span class="big" aria-hidden="true">2</span><div class="k">axiom 2</div>
+      <h3>Single entry, single exit, bottom-up</h3>
+      <p>A plan opens at its base ProjectNode and closes at its TerminusNode, a sub-project likewise, and growth rises between them. One way in at the bottom, one way out at the top, at every level.</p></div>
+    <div class="axiom"><span class="big" aria-hidden="true">3</span><div class="k">axiom 3</div>
+      <h3>Every fork returns</h3>
+      <p>A branch opens a parallel trunk off an edge and rejoins the trunk it left, before the close of the scope in which it was opened. No branch reaches out of its scope, so any scope can be read, and collapsed, as a single block. Work that diverges and never reconverges is a separate plan, not a branch.</p></div>
+    <div class="axiom"><span class="big" aria-hidden="true">4</span><div class="k">axiom 4</div>
+      <h3>One cursor per branch, set by hand and clearable</h3>
+      <p>A branching plan may show several, one per branch.</p></div>
+    <div class="axiom"><span class="big" aria-hidden="true">5</span><div class="k">axiom 5</div>
+      <h3>Status is shown, not inferred</h3>
+      <p>Completing or cancelling a task leaves it on the map, recoloured; only delete removes it.</p></div>
+    <div class="axiom"><span class="big" aria-hidden="true">6</span><div class="k">axiom 6</div>
+      <h3>Structure lives in the visual channel</h3>
+      <p>If the reader must read to see the shape of the work, the drawing has failed.</p></div>
+    <div class="axiom"><span class="big" aria-hidden="true">7</span><div class="k">axiom 7</div>
+      <h3>The file is the source of truth, and it is the user's</h3>
+      <p>Plain JSON and markdown on disk, portable and legible without the app.</p></div>
+    <div class="axiom"><span class="big" aria-hidden="true">8</span><div class="k">axiom 8</div>
+      <h3>Decoration that does not clarify is cut</h3></div>
+    <div class="axiom"><span class="big" aria-hidden="true">9</span><div class="k">axiom 9</div>
+      <h3>View is not data</h3>
+      <p>What a client has collapsed, where its camera rests, and its zoom are that client's own state, kept out of the domain file; a named, saved view may be shared with the data, but a client's live view is never written into it.</p></div>
+  </div>
+
+  <footer class="site">
+    <span>&copy; 2026 Gary Frattarola &middot; ParkviewLab</span>
+    <span>CC-BY-4.0 &middot; canonical source: <a href="northstar.md">northstar.md</a></span>
+  </footer>
+
+</div>
+</body>
+</html>
