@@ -1,0 +1,23 @@
+<!--
+SPDX-FileCopyrightText: 2026 Gary Frattarola <garyf@parkviewlab.ai>
+SPDX-License-Identifier: CC-BY-4.0
+-->
+<!-- The hand-written introduction to PensaGrex. A fragment, not a page: no <html>,
+     <head> or <body>, only the paragraphs. scripts/build_pages_site.py drops the
+     leading comments and inserts the rest into the site's root index.html, between
+     the tagline and the Downloads link. Edit the prose here; nothing else on the
+     index page is hand-written. -->
+<p>PensaGrex is a Googie-themed desktop app that holds what you are doing as a live set
+of project plans, gathered one domain at a time (HomeLab, Work, and so on). A plan opens
+at a project node and closes at a terminus, and everything in it happens between the
+two: you insert a task where it belongs on the line, wrap a run of tasks to name it as a
+sub-project, and open a branch where part of the work runs alongside the rest. A branch
+always rejoins the line it left, and a cursor you set by hand marks where you are on
+each branch.</p>
+<p>A domain is drawn as a subway map: stations are nodes, tracks are the lines between
+them, and a junction is where a branch leaves or returns. Outline colour follows status,
+so the shape of the work is visible before a single label is read. Every node carries a
+markdown note.</p>
+<p>A domain is plain files on your own disk, one JSON file beside its per-node markdown
+notes: no account, no cloud, no lock-in. While the app runs it is also an MCP server, so
+Claude Code can read a plan, add tasks and mark them done as you watch the map change.</p>
