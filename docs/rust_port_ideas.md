@@ -7,9 +7,10 @@ SPDX-License-Identifier: CC-BY-4.0
 
 Status: under study. This is an in-flight idea held for exploration, not a
 commitment; `in-flight_ideas.md` carries the index entry. Everything below is
-weighed against `northstar.md`. Dates and versions are as of July 2026; the
-option write-ups draw on a dedicated research pass (sources at the end of each
-section).
+weighed against `northstar.md`. The option write-ups draw on a dedicated research
+pass (sources at the end of each section); the crate versions and licenses were
+last verified against crates.io on 2026-08-16, and the design reasoning dates to
+July 2026 except where a later revision is marked.
 
 ## Why consider it
 
@@ -52,7 +53,7 @@ discards the renderer, not only the `src/main` backend.
   library-root bounds-checking) ports to Rust as routine work, with one caveat
   below (JSON5 round-trip fidelity).
 - The MCP server ports to Rust via rmcp, the official Rust MCP SDK (Apache-2.0,
-  v2.2.0 on 2026-07-08, tracking MCP spec 2025-11-25). It supports the
+  v3.1.2 on 2026-08-07, tracking MCP spec 2025-11-25). It supports the
   Streamable-HTTP server transport through `StreamableHttpService` on an axum
   router, so the loopback endpoint on `127.0.0.1:35899` can be rebuilt faithfully
   and, being in the same process as the authority, calls the mutation functions
@@ -183,30 +184,145 @@ glyphs, gradients, and azure/navy ground faithfully enough to satisfy intent 2.
 
 Both are permissively licensed and viable; they differ in ways that matter here.
 
-- egui (with eframe; 0.35.0, 2026-06-25; MIT or Apache-2.0). Immediate mode. Pan
+- egui (with eframe; 0.36.1, 2026-08-07; MIT or Apache-2.0). Immediate mode. Pan
   and zoom come turnkey via `egui::Scene` (added ~0.31). `TextEdit` ships built-in
   undo/redo and IME, and `egui_commonmark` gives a turnkey markdown preview.
-  AccessKit accessibility is on by default through eframe. Weaknesses: epaint's
-  painter natively supports only simple linear gradients, so the radial glows and
-  gradient-filled paths of the Googie skin need hand-built meshes with per-vertex
-  colours; `TextEdit` has no viewport culling, so very large notes degrade badly
-  (reported near 1 fps at ~1 MB); and text drawn through `Scene`'s layer transform
-  can blur at high zoom unless zoom is driven through painter coordinate mapping.
-- iced (0.14.0, 2025-12-07; MIT). Elm-like, retained. Its `Canvas` has first-class
-  gradient fills and lyon tessellation, so the skin is easier to render faithfully,
-  and it redraws geometry per frame so glyphs stay crisp at zoom. Weaknesses: you
+  AccessKit accessibility is on by default through eframe. Weaknesses: epaint fills
+  only convex polygons, so the two silhouettes whose edges bow inward (the project
+  hull's top and the marquee's four sides) need lyon tessellation and a `Shape::Mesh`
+  rather than a plain fill; `TextEdit` has no viewport culling, so very large notes
+  degrade badly (reported near 1 fps at ~1 MB); and text drawn through `Scene`'s
+  layer transform can blur at high zoom unless zoom is driven through painter
+  coordinate mapping. (Its thin gradient support is not a weakness for this skin, a
+  point the "Rendering the diagrams" subsection below settles: the skin carries no
+  gradients.)
+- iced (0.14.0, 2025-12-07; MIT). Elm-like, retained. Its `Canvas` redraws geometry
+  per frame, so glyphs stay crisp at zoom, and its lyon tessellation and gradient
+  fills make it the stronger pure vector painter in the abstract. Weaknesses: you
   build pan and zoom yourself; the `text_editor` widget is solid but has no
   built-in undo/redo (the app must implement the undo stack); there is no AccessKit
   integration (issue #552, open since 2020); and there is no drop-in markdown
   viewer, so a preview pane is custom work.
 
-The trade is legible: egui is the better fit for the subway-map-plus-notes shape
-(pan/zoom, editor undo, accessibility, turnkey markdown all come free), at the cost
-of hand-building the gradient work for the skin; iced is the stronger pure vector
-painter (gradients and tessellation for the skin), at the cost of building pan/zoom,
-undo, accessibility, and the markdown preview yourself. On balance egui is the
-recommended toolkit for this app, with the skin's gradients as the one piece of
-deliberate extra effort.
+The trade is legible, and it turns on the framework services rather than on the
+painter. egui is the better fit for the subway-map-plus-notes shape: pan/zoom,
+editor undo, accessibility, and turnkey markdown all come free, whereas iced asks
+the app to build each of them. iced's compensating advantage is its painter, first-
+class gradient fills and per-frame geometry; but the current skin is flat (see the
+next subsection), so gradients buy nothing here, and the one drawing task that is
+genuinely harder under egui, tessellating the two concave silhouettes, is one lyon
+also serves. The painter advantage the earlier draft weighed for iced therefore
+does not apply to this app, and egui is the recommended toolkit on the strength of
+its free services alone.
+
+### Rendering the diagrams with `egui::Painter`
+
+The per-mark geometry, complete enough to redraw every silhouette, glyph, track, and
+decorator without reading the renderer, is specified separately in
+[`mark-geometry.md`](mark-geometry.md) (with a rendered HTML sibling); this subsection
+is the argument, that document is the reference.
+
+The map re-expresses in `egui::Painter` more directly than a general "SVG to Rust"
+port would suggest, because its drawing inventory is small and entirely flat. A
+search of the renderer for `Gradient`, `filter=`, `feGaussian`, `mask=`, and
+`radial-gradient` (`src/renderer/src/render/*.js`, `style.css`) returns nothing but
+the ground's dot pattern; every node mark in `shapes.js` and `tracks.js` is a solid
+fill or a constant-width stroke in one colour. Most of it maps one for one. Tracks
+are polylines with a stroke width, which is `Shape::line` with a `Stroke`
+(`tracks.js:trackPath`). The variable-weight outline is a fill-only construction, an
+outer silhouette and the same path scaled inward and painted over it
+(`shapes.js:buildShape`), so none of the offset-curve or stroke-join arithmetic that
+usually makes such a port unpleasant is needed. The terminus half-turn
+(`shapes.js`, the `flip` transform) becomes an affine transform on the point list;
+the flagged-node orbits are rotated ellipses, flattened to polylines and stroked
+(`shapes.js:drawOrbits`); theme colours stop being CSS custom properties and become
+a palette struct, a simplification; and the ground's dot grid (`style.css`,
+`radial-gradient`) becomes a single tiled texture or a loop of small filled circles
+over the visible rectangle.
+
+Two things do not transfer directly, and they are the whole of the extra work.
+
+The first is concave fills. epaint fills correctly only convex polygons (its
+`PathShape` documents "Fill is only supported for convex polygons", and
+`fill_closed_path` in `tessellator.rs` assumes a convex area), and exactly the two
+shapes that carry the Googie character are concave: the hull's top edge bows inward
+and the marquee is bowed inward on all four edges (`shapes.js`, the `hull` and
+`marquee` branches of `outerPath`). The remedy is routine and one-time: flatten the
+quadratics to points (the paths are already parameterised numerically, so this is a
+few lines), tessellate with `lyon`, and hand the triangles to `Shape::Mesh`. Every
+silhouette then goes through one function.
+
+The second is the underpass, and it is the sharper constraint. `underpassClip`
+(`tracks.js`) draws a crossing by cutting strips out of a stroked path with an
+even-odd `clipPath`, and egui offers no arbitrary clipping: `set_clip_rect`
+(`tessellator.rs`) takes an axis-aligned rectangle and nothing else. Overdrawing the
+gap in the ground colour is unavailable too, since the ground carries the dot
+pattern and a solid strip would erase dots. The replacement follows from the comment
+already at `tracks.js` (a stroke can only end square to its own direction): stop
+stroking the lateral and emit it as an explicit ribbon quad whose end edges are
+mitred parallel to the line being passed under, with the angle and offset coming
+from `breakSize` unchanged. Since laterals are straight runs of constant width, each
+piece is one quadrilateral. It is a re-expression of geometry that already exists,
+not a redesign, and it arguably states the intent more directly than the clip does.
+
+Text measurement improves. `measure.js` today mounts every card off-screen, waits on
+`document.fonts`, and reads `offsetWidth`; in egui the same measurement is
+`Fonts::layout_job` returning a galley with exact dimensions, a pure function of the
+loaded atlas, with no DOM, no font-ready race, and no first-paint reflow. The
+bundled League Spartan and Boogaloo faces load from bytes through `FontDefinitions`.
+One verified caveat: epaint's line breaker (`RowBreakCandidates` in
+`text_layout.rs`) breaks on whitespace, CJK, a literal `-`, and ASCII punctuation,
+but not on the U+00AD soft hyphen that `hyphenate.js` inserts, so soft-hyphen-aware
+wrapping is custom work, either choosing the wrap points explicitly and laying out
+line by line, or feeding the `hyphenation` crate's Knuth-Liang points. Separately,
+shapes are retessellated every frame and stay crisp at any zoom whereas text is
+sampled from an atlas, so zoom should be driven through coordinates and font size
+rather than through a `Scene` layer transform, which is the blurring case noted
+above.
+
+### Hit-testing, drag-and-drop, and hover-time restyling
+
+The interaction layer maps onto egui's `Response` API closely enough that the port
+is a re-hosting rather than a redesign, which the earlier draft did not record.
+
+Hit-testing. The DOM resolves the target under the pointer with
+`closest('[data-node-id]')` (`hittest.js`), shape-exact and free because pointer
+events respect each element's box. In egui one allocates a `Rect` per node keyed by
+a stable `Id` (the node id) and calls `ui.interact(rect, id, Sense::click_and_drag())`
+for a per-node `Response`. Cards are already rectangular positioned divs, so
+rectangle interaction matches the DOM exactly and loses nothing. The one
+non-rectangular target is the junction halo, the 13px transparent circle a
+single-branch diamond wears (`tracks.js`, `.jx-hit`); it resolves with a
+point-in-circle test against `response.hover_pos()`. Overlap order follows
+allocation order together with each region's `Sense`.
+
+Drag-and-drop. The controller in `drag.js` (a 5px threshold before a press becomes a
+drag, a floating `.drag-preview` label that follows the cursor, `onProbe` on each
+move to resolve the drop and draw the hint, `onDrop` on release, `onCancel` on
+abandon) maps almost one for one. `response.drag_started()` replaces the threshold
+(egui applies its own); `response.dragged()` with `interact_pointer_pos()` each frame
+resolves the target and paints the hint; `response.drag_stopped()` applies the move.
+egui's typed drag payload, `dnd_set_drag_payload` / `dnd_hover_payload` /
+`dnd_release_payload`, carries the source descriptor that `drag.js` passes as
+`source` (`{type:'node',id}` for a card, `{type:'fork'|'merge',footId}` for a
+junction handle), and `egui::DragAndDrop` draws the floating payload layer that
+replaces `.drag-preview`. The insertion caret and the target ring, which `app.js`
+creates and later clears as `.insert-caret` and `.drop-target` DOM nodes
+(`renderDropHint` and `clearDropHint`), become `Painter` draw calls with nothing to
+create or clear, one fewer moving part than the DOM carries.
+
+Hover and drag-time restyling: the immediate-mode inversion. The DOM changes an
+element's look by toggling a CSS class once and leaving it: `.drag-src` dims the
+grabbed card to opacity 0.4, `.drop-target` rings the fork target, `.jx:hover .fork`
+fills the junction diamond, and `.drag-active` switches the cursor to grabbing
+(`style.css`). egui holds no retained styling to toggle; the frame is redrawn every
+tick, so changing a look is a conditional in the paint code, which reads the state
+(is this node the drag source, the resolved drop target, `response.hovered()`) each
+frame and chooses the colour or alpha then, with `ctx.set_cursor_icon(CursorIcon::Grabbing)`
+for the cursor. State is read per frame, not mutated once and remembered; that
+inversion is how every hover and drag affordance in the app re-expresses, and it is
+worth stating plainly because it is the one structural difference the whole
+interaction layer inherits.
 
 ### The note editor: not CodeMirror, and why
 
@@ -246,9 +362,11 @@ by ink-coverage IoU, row by row, over math, mhchem chemistry, and physics, plus 
 public support table and live demo), so it is evidence-based rather than marketing;
 the caveats are that the corpus is the project's own (self-measured, not independently
 audited) and the live table renders via JavaScript so the exact number was not read
-directly. Maturity is the residual risk, not coverage or license: pre-1.0 (v0.1.13,
-2026-07-07), a multi-crate workspace on crates.io, ~1.4k stars but apparently a single
-maintainer, so expect API churn and weigh bus-factor. The remaining validation, when
+directly. Maturity is the residual risk, not coverage or license: pre-1.0 (the
+typeset crates `ratex-layout` and `ratex-svg` at 0.1.14, 2026-07-28; the umbrella
+`ratex` name is a 0.0.1 placeholder, so depend on the workspace crates by name), a
+multi-crate workspace on crates.io, ~1.4k stars but apparently a single maintainer,
+so expect API churn and weigh bus-factor. The remaining validation, when
 the port is real, is to run representative note formulas through its harness. So math
 is a bounded implementation task in the preview pane, not a lost capability.
 
@@ -285,9 +403,73 @@ rewrite but the only design that is actually 100% Rust, removes the webview-fide
 problem outright, and collapses the model to a single home. egui is the toolkit to
 prototype first, with the subway scene as the acceptance test.
 
-Stack (fully MIT or Apache-2.0): egui/eframe/epaint (or iced), wgpu, winit,
-AccessKit, pulldown-cmark, egui_commonmark, rmcp, axum; cargo-packager and
-apple-codesign at build time.
+Stack: the linked runtime crates are all MIT or Apache-2.0 (egui/eframe/epaint,
+wgpu, winit, AccessKit, pulldown-cmark, egui_commonmark, rmcp, axum), with the one
+optional runtime exception being `notify` (CC0-1.0); the build-time signing and
+packaging tools add MPL-2.0 (`apple-codesign`) and the vendored math fonts add
+OFL-1.1. The full inventory, with versions and licenses, is the next subsection.
+
+### Crate inventory (Design B)
+
+The crates a Design B build would depend on, with the version and license verified
+against crates.io on 2026-08-16 and the role each plays. PensaGrex ships under
+AGPL-3.0-or-later; every crate below is permissive and compatible with distributing
+an AGPL binary (Apache-2.0 is compatible with the GPLv3 family, of which AGPL-3.0 is
+a member). Crates marked "if" are conditional on a design choice named in the role.
+
+| Crate | Version | License | Role |
+| --- | --- | --- | --- |
+| egui | 0.36.1 | MIT OR Apache-2.0 | immediate-mode GUI core |
+| eframe | 0.36.1 | MIT OR Apache-2.0 | app shell: window, event loop, AccessKit |
+| epaint | 0.36.1 | MIT OR Apache-2.0 | 2D painter, mesh, text layout |
+| egui_extras | 0.36.1 | MIT OR Apache-2.0 | static SVG asset loading for icons, if wanted |
+| egui-wgpu | 0.36.1 | MIT OR Apache-2.0 | custom paint-callback path, if a bespoke renderer is composited |
+| egui_commonmark | 0.25.0 | MIT OR Apache-2.0 | markdown preview pane |
+| wgpu | 30.0.0 | MIT OR Apache-2.0 | GPU backend (via eframe) |
+| winit | 0.30.13 | Apache-2.0 | windowing (via eframe) |
+| accesskit | 0.24.1 | MIT OR Apache-2.0 | accessibility (via eframe) |
+| lyon_tessellation | 1.0.20 | MIT OR Apache-2.0 | concave-silhouette fill tessellation |
+| i_overlay | 8.1.0 | MIT OR Apache-2.0 | 2D boolean ops, if the underpass ribbon needs polygon difference |
+| hyphenation | 0.8.4 | MIT OR Apache-2.0 | Knuth-Liang wrap points, if soft-hyphen wrapping is not hand-rolled |
+| pulldown-cmark | 0.13.4 | MIT | markdown parse (under egui_commonmark) |
+| ratex-layout | 0.1.14 | MIT | in-note math layout (vendored subset) |
+| ratex-svg | 0.1.14 | MIT | math display-list to SVG (vendored subset) |
+| pulldown-latex | 0.8.0 | MIT | alternative math path: LaTeX to MathML |
+| serde | 1.0.229 | MIT OR Apache-2.0 | model (de)serialization |
+| serde_json | 1.0.151 | MIT OR Apache-2.0 | plain-JSON write path (axiom 7) |
+| json5 | 1.3.1 | MIT | tolerant read of a legacy `forest.json5` |
+| tempfile | 3.27.0 | MIT OR Apache-2.0 | atomic write-to-temp-then-rename |
+| directories | 6.0.0 | MIT OR Apache-2.0 | platform library-root path |
+| uuid | 1.24.1 | MIT OR Apache-2.0 | node id minting |
+| semver | 1.0.28 | MIT OR Apache-2.0 | About-window `-devN` ordering (parity with `version.js`) |
+| thiserror | 2.0.20 | MIT OR Apache-2.0 | typed errors in the core crate |
+| anyhow | 1.0.104 | MIT OR Apache-2.0 | error plumbing at the app edge |
+| rmcp | 3.1.2 | Apache-2.0 | in-app MCP server (official Rust SDK) |
+| axum | 0.8.9 | MIT | loopback HTTP for the MCP endpoint |
+| tokio | 1.53.1 | MIT | async runtime for rmcp and axum |
+| ureq | 3.4.0 | MIT OR Apache-2.0 | About-window GitHub latest-release check (blocking) |
+| rfd | 0.17.2 | MIT | native file/folder dialogs: domain switcher, library root |
+| open | 5.4.1 | MIT | open the download page and external links |
+| arboard | 3.6.1 | MIT OR Apache-2.0 | OS clipboard (egui already uses it) |
+| notify | 8.2.0 | CC0-1.0 | optional: reflect external edits to a domain file |
+| log | 0.4.33 | MIT OR Apache-2.0 | logging facade |
+| env_logger | 0.11.11 | MIT OR Apache-2.0 | log backend |
+| egui_kittest | 0.36.1 | MIT OR Apache-2.0 | GUI tests via AccessKit (dev-dependency) |
+| insta | 1.48.0 | Apache-2.0 | snapshot tests for layout and geometry (dev-dependency) |
+| cargo-packager | 0.11.8 | Apache-2.0 OR MIT | bundle the installers (build-time tool) |
+| apple-codesign | 0.29.0 | MPL-2.0 | macOS sign, notarize, staple from any-OS CI (build-time tool) |
+
+License watch. The linked runtime stack is entirely MIT and/or Apache-2.0, with two
+qualifications: the optional `notify` is CC0-1.0 (public-domain-equivalent, no
+obligation), and the vendored RaTeX subset is MIT code bundling OFL-1.1 math fonts,
+the same license class the app already vendors for League Spartan and Boogaloo.
+`apple-codesign` (MPL-2.0) and `cargo-packager` are build-time command-line tools,
+not linked into the binary, so neither touches the app's own license; this is why
+the older "fully MIT or Apache-2.0" phrasing overstated the position, and the Stack
+paragraph above now separates the linked stack from the build tools. The MIT-only
+crates (rmcp, axum, tokio, pulldown-cmark, json5, rfd, open, the RaTeX crates) and
+the Apache-only winit each satisfy the org's MIT-or-Apache library preference; none
+imposes a copyleft obligation on the AGPL application.
 
 ## Design C — Rust plus Python
 
@@ -659,3 +841,25 @@ history, and a harder cutover than swapping a branch.
   repo-strategy section reserves 3.0.0 for the Rust cutover, which model v3 has now
   taken; a cutover release would be 4.0.0. None of this changes the recommendation,
   only its size.
+- 2026-08-16 — The renderer and interaction layers worked through against the code,
+  a premise corrected, and a crate inventory added (this revision). Reading the
+  renderer settled that the Googie skin is flat: a search for `Gradient`, `filter=`,
+  `feGaussian`, `mask=`, and `radial-gradient` finds only the ground's dot pattern,
+  so the earlier claim that the skin needs hand-built gradient meshes, and the
+  egui-versus-iced weighing that leaned on iced's gradient support to compensate, do
+  not hold; egui's recommendation now rests on its free framework services (pan/zoom,
+  editor undo, accessibility, markdown), not on a painter trade it was losing. The
+  two genuine porting costs are named instead: tessellating the two concave
+  silhouettes (the hull top and the marquee) with lyon into a `Shape::Mesh`, and
+  replacing the even-odd `clipPath` underpass with an explicit mitred ribbon quad,
+  since egui clips only to an axis-aligned rectangle. The interaction layer is a
+  re-hosting, not a redesign: egui's `Response` (`hovered`, `contains_pointer`,
+  `drag_started`/`dragged`/`interact_pointer_pos`, `drag_stopped`) plus the typed
+  `dnd_set_drag_payload`/`dnd_hover_payload`/`dnd_release_payload` trio maps the
+  `drag.js` controller and its `source` descriptor almost one for one, with the one
+  structural difference that hover and drag looks are chosen per frame from read
+  state rather than by toggling a CSS class. The crate inventory (versions and
+  licenses as of this date) narrows the old "fully MIT or Apache-2.0" stack claim:
+  the linked runtime is MIT/Apache, but `notify` is CC0-1.0, the build-time
+  `apple-codesign` is MPL-2.0, and the vendored math fonts are OFL-1.1. None of this
+  changes the Design B recommendation.

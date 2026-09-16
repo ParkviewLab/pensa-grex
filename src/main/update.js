@@ -15,7 +15,7 @@
 import { compareVersions, stripTag } from '../shared/version.js'
 
 export const LATEST_RELEASE_URL = 'https://api.github.com/repos/ParkviewLab/pensa-grex/releases/latest'
-export const DOWNLOAD_URL = 'https://parkviewlab.github.io/pensa-grex/'
+export const DOWNLOAD_URL = 'https://parkviewlab.github.io/pensa-grex/downloads/'
 
 /**
  * Ask GitHub for the latest release and compare it with `currentVersion`.

@@ -118,6 +118,9 @@ brief:
   subway-map-plus-notes shape; the note editor is not CodeMirror (that needs a
   webview) but `TextEdit` + `egui_commonmark`; math is a preview-pane task with real
   native Rust renderers (RaTeX, ReX, pulldown-latex), not a lost capability. The
+  notebook now also works the renderer and interaction layers through against the
+  code (drawing the flat Googie skin with `egui::Painter`; hit-testing, drag, and
+  hover on egui's `Response` API) and carries a crate inventory with licenses. The
   recommended end state.
 - Design C (Rust + Python): keep Python only across a wire, as a federated peer
   service (FastAPI, smalt-mcp). Every in-app shape (PyO3 embed, sidecar, Python MCP
@@ -220,3 +223,9 @@ already cut for other reasons.
 What is already done, so it is not proposed again: the `work_flagged` repair itself, and the two
 guards that hold a prompt to the tool surface (`tools.test.js`, and the reasoning in
 `mcp_ideas.md`). These are questions under study, not a plan.
+
+# 10. Adding Front Matter to Node Note Files
+We could add front matter that includes the name of the note. Why do this? Good question that needa a goo answer. Is there one? Do we want other apps to be able to read these notes?
+
+But then we're trying to share data between apps. And isn;t that why we have the MCP server?
+

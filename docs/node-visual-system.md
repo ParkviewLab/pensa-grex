@@ -13,7 +13,10 @@ is written down rather than left in the code. The implementation is
 [`src/renderer/src/render/shapes.js`](../src/renderer/src/render/shapes.js) (the
 silhouettes and the `orbits` / `shadow` decorators) and
 [`src/renderer/src/render/tracks.js`](../src/renderer/src/render/tracks.js) (the
-Atomic Starburst, the "here" mark); both point back here.
+Atomic Starburst, the "here" mark); both point back here. The reproducible geometry,
+the formulas and constants for redrawing every mark against any 2D API, is the
+companion [`mark-geometry.md`](mark-geometry.md): this document is the grammar and
+policy, that one is the drawing specification.
 
 ## Outline as a gap between two fills
 
@@ -59,7 +62,7 @@ The mapping is policy, set in `renderCard`, not a property of the shapes:
   one shape and its reflection, and the inversion says which end of the scope this is. It
   carries no label, so the hull is empty;
 - any **flagged** node → the **orbits**, in the node's own colour (its status colour
-  for a task, the project violet for a project);
+  for a task, the scope teal for a project);
 - a project node and its terminus → the panel is `--c-project-tint`, a tint of the
   scope teal (`#cbe6e4` on azure, `#356e69` on navy), in place of the `--panel` colour
   every task wears, so a scope's two ends read as one material;
