@@ -23,7 +23,7 @@ pills, junction diamonds, return lines), set in the ParkviewLab brand.
    ParkviewLab brand - see the handbook's docs/brand.md (single source of
    truth). The three brand colours (teal / teal-deep / sage) carry identity.
    Of the Bauhaus accents only red is used: the cursor - "here" - the label of
-   the section on tensions, and the link hover; blue and yellow are declared and
+   the trade-offs section label, and the link hover; blue and yellow are declared and
    unused. The :root block follows brand.md, without --code and --code-text,
    which this page has no use for, and with --line added, a neutral rule tint
    that is not a brand token.
@@ -125,12 +125,12 @@ svg .tip{fill:var(--teal-deep);}
 svg .app{fill:var(--teal);}
 svg .app2{fill:var(--teal-deep);}
 
-/* Tensions: the pair, and beneath it what settles the pair */
-.tensions{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:8px 0;}
-.tension{background:var(--card);border:1px solid var(--line);border-top:3px solid var(--ink);padding:16px 16px 14px;}
-.tension h3{font-family:var(--display);font-size:12px;letter-spacing:.02em;line-height:1.65;margin:0 0 10px;}
-.tension h3 .vs{font-family:var(--sans);font-style:italic;font-weight:400;font-size:13px;color:var(--muted);padding:0 .25em;}
-.tension p{font-size:14px;margin:0;}
+/* Trade-offs: the pair, and beneath it the ruling */
+.tradeoffs{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:8px 0;}
+.tradeoff{background:var(--card);border:1px solid var(--line);border-top:3px solid var(--ink);padding:16px 16px 14px;}
+.tradeoff h3{font-family:var(--display);font-size:12px;letter-spacing:.02em;line-height:1.65;margin:0 0 10px;}
+.tradeoff h3 .vs{font-family:var(--sans);font-style:italic;font-weight:400;font-size:13px;color:var(--muted);padding:0 .25em;}
+.tradeoff p{font-size:14px;margin:0;}
 
 /* Axioms as a constellation: read together, each with its faded numeral */
 .axioms{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;margin:8px 0;}
@@ -144,7 +144,7 @@ footer.site{margin-top:64px;border-top:3px solid var(--ink);padding-top:20px;fon
 
 /* Single column on a narrow screen */
 @media (max-width:680px){
-  .intents,.tensions,.contrast,.axioms{grid-template-columns:1fr;}
+  .intents,.tradeoffs,.contrast,.axioms{grid-template-columns:1fr;}
   .strip{grid-template-columns:1fr 1fr;}
   .hero h1{font-size:26px;}
   header.site{padding:18px 0;margin-bottom:30px;}
@@ -329,7 +329,8 @@ footer.site{margin-top:64px;border-top:3px solid var(--ink);padding-top:20px;fon
 
   <h2 class="section-label">three intents</h2>
   <p class="umbrella">These are complementary facets of one purpose, not a
-    ranking; the tensions between them (below) are where the design is decided.</p>
+    ranking. The trade-offs below say which one gives way when two of them cannot
+    both be satisfied.</p>
   <div class="intents">
     <div class="intent i1"><div class="num">1</div><p class="t">The structure is the mental model</p>
       <p>Projects, Tasks, Branches.</p></div>
@@ -444,24 +445,24 @@ footer.site{margin-top:64px;border-top:3px solid var(--ink);padding-top:20px;fon
     </div>
   </section>
 
-  <h2 class="section-label" style="--ac:var(--red)">tensions (these are design-revealing)</h2>
-  <div class="tensions">
-    <div class="tension">
+  <h2 class="section-label" style="--ac:var(--red)">trade-offs</h2>
+  <div class="tradeoffs">
+    <div class="tradeoff">
       <h3>Legibility <span class="vs">against</span> faithful structure</h3>
-      <p>The picture must not distort the model to look tidy; when a layout
+      <p>The drawing must not distort the model to look tidy. Where a layout
         choice and the data disagree, the data wins and the layout accommodates
         it.</p>
     </div>
-    <div class="tension">
+    <div class="tradeoff">
       <h3>Local files <span class="vs">against</span> richer capability</h3>
-      <p>Plain JSON and markdown are the floor; later richness (search, indexing,
-        a possible lancedb) is added over the files, not by replacing them with
-        something you do not own.</p>
+      <p>Plain JSON and markdown are the floor. Search, indexing and anything
+        like lancedb are built over those files, not by replacing them with a
+        store you do not own.</p>
     </div>
-    <div class="tension">
-      <h3>Skin <span class="vs">against</span> clarity</h3>
-      <p>The Googie theme is a genuine pleasure, but any decoration that does not
-        clarify the structure is decoration to remove.</p>
+    <div class="tradeoff">
+      <h3>Theme <span class="vs">against</span> clarity</h3>
+      <p>The Googie theme is part of the design and not an afterthought, but a
+        decorative element that does not clarify the structure is removed.</p>
     </div>
   </div>
 
