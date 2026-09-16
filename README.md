@@ -18,14 +18,16 @@ them, and a junction is where a branch leaves or returns. Outline colour follows
 status; every node carries a markdown note.
 
 The project's intent and its axioms are in [`docs/northstar.md`](docs/northstar.md);
-read it first. A domain is plain files on disk: one JSON file in a directory of its
-own, beside its per-node markdown notes.
+read it first. That document and everything else in `docs/` is published, as of the
+newest release, on the [documentation site](https://parkviewlab.github.io/pensa-grex/).
+A domain is plain files on disk: one JSON file in a directory of its own, beside its
+per-node markdown notes.
 
 ## Download
 
 Get the latest macOS, Windows, and Linux builds from the
-**[download page](https://parkviewlab.github.io/pensa-grex/)**, or straight from
-[GitHub Releases](https://github.com/ParkviewLab/pensa-grex/releases).
+**[download page](https://parkviewlab.github.io/pensa-grex/downloads/)**, or straight
+from [GitHub Releases](https://github.com/ParkviewLab/pensa-grex/releases).
 
 There is no auto-update, and the app makes no request to the internet on its own.
 Opening **About PensaGrex** asks GitHub which release is the latest and says whether
