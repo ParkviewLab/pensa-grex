@@ -1,0 +1,89 @@
+name: Dev release
+
+# Assembled from the ParkviewLab handbook's dev-release parts, one for each of
+# this repository's publish targets that has a dev counterpart: the gate, then
+# the dev job of each of those targets. The recipe is in the handbook's ci.md.
+#
+# A dev build is for local testing: a candidate CI builds before the release, not
+# a version for others to use. Manually triggered (workflow_dispatch; run it with
+# `--ref develop`, or via `git dev-release`). It creates NO `v*` tag, so the
+# release gate is untouched, and runs no changelog job. See the handbook's
+# releases.md ("What a release publishes", "Development versioning").
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Verify dev build from develop
+        id: v
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/develop" ]; then
+            echo "dev-release runs from develop only (got $GITHUB_REF)"; exit 1
+          fi
+          # The repository's one version file, read as the release gate reads it.
+          if [ -f pyproject.toml ]; then
+            FILE=pyproject.toml
+            VERSION=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          elif [ -f package.json ]; then
+            FILE=package.json
+            VERSION=$(jq -r .version package.json)
+          elif [ -f VERSION.txt ]; then
+            FILE=VERSION.txt
+            VERSION=$(tr -d '[:space:]' < VERSION.txt)
+          else
+            echo "no version file: expected pyproject.toml, package.json or VERSION.txt"; exit 1
+          fi
+          case "$VERSION" in
+            *.dev[0-9]*|*-dev[0-9]*) ;;
+            *) echo "::error::$FILE version '$VERSION' has no dev marker (expected X.Y.Z.devN or X.Y.Z-devN); the build would be indistinguishable from a release. Open a dev cycle first: git dev-release --open"; exit 1 ;;
+          esac
+          echo "dev version: $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  # Unsigned installers for macOS, Windows and Linux, uploaded as workflow
+  # artifacts and kept seven days. There is no `v*` tag and no GitHub Release, so
+  # the release gate is untouched; the build is for local testing.
+  installers:
+    needs: gate
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24.x
+          cache: npm
+      - run: npm ci
+      # electron 43 ships no install script, so `npm ci` does not extract its prebuilt.
+      # dist/ is otherwise filled lazily on first require, which `npm run legal` never
+      # triggers (it reads dist/ from disk). Extract it now so dist/ and its Chromium
+      # notices exist before `npm run legal`.
+      - run: node node_modules/electron/install.js
+      - run: npm run legal      # generate legal/ before electron-builder copies extraResources
+      - run: npm run build
+      - name: Package installers (unsigned)
+        run: npx electron-builder --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+      - uses: actions/upload-artifact@v6
+        with:
+          name: dev-installers-${{ matrix.os }}
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            dist/*.dmg
+            dist/*.exe
+            dist/*.AppImage
+            dist/*.deb
