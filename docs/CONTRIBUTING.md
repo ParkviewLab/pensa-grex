@@ -8,9 +8,7 @@ SPDX-License-Identifier: CC-BY-4.0
 > The authoritative, org-wide version of these conventions is the
 > [ParkviewLab handbook](https://github.com/ParkviewLab/handbook).
 
-PensaGrex follows the ParkviewLab conventions, adapted for a repo outside
-the ParkviewLab org (no org-inherited secrets, no org-level PyPI/npm trusted
-publishers). The essentials:
+PensaGrex follows the ParkviewLab conventions. The essentials:
 
 ## Branch & PR flow
 

@@ -827,9 +827,9 @@ history, and a harder cutover than swapping a branch.
   (Cargo.toml the one SoT, Electron tree removed there), keep `main`/`develop` shipping
   Electron until a parity cutover that replaces `develop` with `rust` and releases 3.0.0.
   Cut on-demand three-OS dev builds via a `dev-release-rust.yml` cloned from
-  `dev-release.yml`. Two prerequisites: a `Cargo.toml` kind in dev-tools
-  `_sot.sh`, and a handbook rust-desktop profile. Recommended, not executed; gated on the
-  rewrite being green-lit.
+  `dev-release-electron.yml` (since replaced by `dev-release.yml`). Two prerequisites: a
+  `Cargo.toml` kind in dev-tools `_sot.sh`, and a handbook rust-desktop profile.
+  Recommended, not executed; gated on the rewrite being green-lit.
 - 2026-07-26 — Model v3 lands in the northstar, and three things here move with it.
   The axioms were renumbered (6 becomes 7, 8 becomes 9) and axiom 7 now names plain
   JSON, which narrows the round-trip caveat above from comments to formatting. The

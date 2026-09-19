@@ -9,10 +9,6 @@ name: Dev release
 # `--ref develop`, or via `git dev-release`). It creates NO `v*` tag, so the
 # release gate is untouched, and runs no changelog job. See the handbook's
 # releases.md ("What a release publishes", "Development versioning").
-#
-# PensaGrex's one publish target is installers, so this workflow carries no
-# docker/testpypi job, and it publishes to no registry: the dev build is
-# unsigned installers kept as workflow artifacts, tested locally.
 
 on:
   workflow_dispatch:

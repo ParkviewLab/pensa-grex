@@ -3,10 +3,6 @@ name: Release
 # Assembled from the ParkviewLab handbook's release parts, one for each of this
 # repository's publish targets: the gate, then the job of each target, then the
 # job that creates the GitHub Release. The recipe is in the handbook's ci.md.
-#
-# PensaGrex's one publish target is installers (a desktop Electron app, not a
-# server or a package), so this workflow carries no docker/pypi/npm job — see
-# the handbook's electron-tooling.md.
 
 on:
   push:
@@ -167,10 +163,9 @@ jobs:
 
       - name: Generate release-body.md (LLM call happens here)
         env:
-          # This repo's own slot: a repo-level secret, not an org-inherited
-          # one — pensa-grex has no ParkviewLab-org secret to inherit. Missing
-          # key → script writes a placeholder paragraph and the release still
-          # ships.
+          # Set at the ParkviewLab org level — inherited by every repo
+          # under the org. Missing key → script writes a placeholder
+          # paragraph and the release still ships.
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_REF: ${{ github.ref }}
         # `uv run --with anthropic` injects the SDK for just this invocation,
