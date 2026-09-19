@@ -1,0 +1,222 @@
+name: Release
+
+# Assembled from the ParkviewLab handbook's release parts, one for each of this
+# repository's publish targets: the gate, then the job of each target, then the
+# job that creates the GitHub Release. The recipe is in the handbook's ci.md.
+#
+# PensaGrex's one publish target is installers (a desktop Electron app, not a
+# server or a package), so this workflow carries no docker/pypi/npm job — see
+# the handbook's electron-tooling.md.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0          # full history + all tags: the ancestor and monotonic checks below
+
+      # The repository's one version file, read in `git bump`'s order.
+      - name: Verify tag matches the version file
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          if [ -f pyproject.toml ]; then
+            FILE=pyproject.toml
+            VERSION=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          elif [ -f package.json ]; then
+            FILE=package.json
+            VERSION=$(jq -r .version package.json)
+          elif [ -f VERSION.txt ]; then
+            FILE=VERSION.txt
+            VERSION=$(tr -d '[:space:]' < VERSION.txt)
+          else
+            echo "no version file: expected pyproject.toml, package.json or VERSION.txt"
+            exit 1
+          fi
+          # A dev version is never released: the promotion carries develop's
+          # placeholder onto main, and `git bump release` drops it before the tag.
+          case "$VERSION" in
+            *.dev[0-9]*|*-dev[0-9]*)
+              echo "::error::$FILE version '$VERSION' is a dev version; finalize the cycle with git bump release before tagging"; exit 1 ;;
+          esac
+          if [ "$TAG" != "$VERSION" ]; then
+            echo "tag $TAG != $FILE $VERSION"
+            exit 1
+          fi
+
+      - name: Verify tag is reachable from origin/main
+        run: |
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "tagged commit $GITHUB_SHA is not on origin/main"
+            echo "release tags must come from main — back-merge through, then re-tag from main"
+            exit 1
+          fi
+
+      - name: Verify version is greater than the previous release tag
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          PREV=$(git tag --list 'v*' | grep -vxF "$TAG" | sort -V | tail -n 1 || true)
+          if [ -z "$PREV" ]; then
+            echo "no previous v* tag — first release, nothing to compare"
+            exit 0
+          fi
+          if [ "$(printf '%s\n' "$PREV" "$TAG" | sort -V | tail -n 1)" != "$TAG" ]; then
+            echo "tag $TAG is not greater than the previous release tag $PREV"
+            echo "versions only ever increase — bump past $PREV, then re-tag from main"
+            exit 1
+          fi
+
+  # Installers for macOS, Windows and Linux, each built on its own system. The
+  # part's contract is its artifacts: every leg uploads `installers-<os>`, and the
+  # job that creates the GitHub Release attaches them to it. The steps below are
+  # electron-builder's, the one installer build in use; another build may replace
+  # them, keeping that contract. The macOS build is signed and notarized when the
+  # Apple secrets are present, else unsigned.
+  installers:
+    needs: gate
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24.x
+          cache: npm
+      - run: npm ci
+      # electron 43 ships no install script, so `npm ci` does not extract its prebuilt.
+      # dist/ is otherwise filled lazily on first require, which `npm run legal` never
+      # triggers (it reads dist/ from disk). Extract it now so dist/ and its Chromium
+      # notices exist before `npm run legal`.
+      - run: node node_modules/electron/install.js
+      - run: npm run legal      # generate legal/ before electron-builder copies extraResources
+      - run: npm run build
+      - name: Prepare Apple API key (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          echo "${{ secrets.APPLE_API_KEY_B64 }}" | base64 --decode > "$RUNNER_TEMP/AuthKey.p8"
+          echo "APPLE_API_KEY=$RUNNER_TEMP/AuthKey.p8" >> "$GITHUB_ENV"
+      # electron-builder must be pinned to 26.16.1 or newer in package.json: earlier
+      # versions pass the certificate password to `security set-key-partition-list`,
+      # which wants the temporary keychain's own password, and current macos-latest
+      # images reject it ("SecKeychainUnlock: … passphrase … not correct"). See the
+      # handbook's electron-tooling.md -> "macOS signing needs electron-builder 26.16.1
+      # or newer".
+      - name: Package installers
+        run: npx electron-builder --publish never
+        env:
+          # macOS is signed (Developer ID Application) + notarized (App Store Connect
+          # API key); Windows/Linux stay unsigned. The signing creds must NOT reach the
+          # Windows runner (it would try to sign with them), so each is scoped to macOS.
+          CSC_LINK: ${{ runner.os == 'macOS' && secrets.CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ runner.os == 'macOS' && secrets.CSC_KEY_PASSWORD || '' }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ runner.os == 'macOS' && 'true' || 'false' }}
+          APPLE_API_KEY_ID: ${{ runner.os == 'macOS' && secrets.APPLE_API_KEY_ID || '' }}
+          APPLE_API_ISSUER: ${{ runner.os == 'macOS' && secrets.APPLE_API_ISSUER || '' }}
+          # APPLE_API_KEY (path to the .p8) is exported by the prep step above, macOS only.
+      - uses: actions/upload-artifact@v6
+        with:
+          name: installers-${{ matrix.os }}
+          if-no-files-found: error
+          path: |
+            dist/*.dmg
+            dist/*.exe
+            dist/*.AppImage
+            dist/*.deb
+
+  # Generate the Highlights paragraph + categorized list, commit the new
+  # CHANGELOG.md section back to main, and create the GitHub Release. Runs
+  # AFTER the target jobs so the Release page points at artifacts that already
+  # exist. Two-phase invocation of generate_changelog.py keeps the LLM call
+  # to a single round-trip even though the commit-back happens onto a fresh
+  # main checkout.
+  changelog:
+    needs: [gate, installers]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # scoped here — only this job commits CHANGELOG.md back to main
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0          # full history + all tags for git-cliff
+          # default ref = the tag, which is what we want for `--mode=generate`
+
+      # Installers target only: omit this step where the release builds none.
+      - name: Download all built installers
+        uses: actions/download-artifact@v7
+        with:
+          path: artifacts
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+
+      - name: Install git-cliff
+        uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff
+
+      - name: Generate release-body.md (LLM call happens here)
+        env:
+          # This repo's own slot: a repo-level secret, not an org-inherited
+          # one — pensa-grex has no ParkviewLab-org secret to inherit. Missing
+          # key → script writes a placeholder paragraph and the release still
+          # ships.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_REF: ${{ github.ref }}
+        # `uv run --with anthropic` injects the SDK for just this invocation,
+        # without adding it to the project's dependencies. Lets this workflow
+        # snippet be identical across every ParkviewLab repo regardless of
+        # whether `anthropic` is otherwise a project dep.
+        run: uv run --with anthropic python scripts/generate_changelog.py --mode=generate
+
+      - name: Switch to fresh origin/main and insert into CHANGELOG.md
+        run: |
+          # Stash the just-generated release body so it survives the checkout.
+          cp release-body.md /tmp/release-body.md
+          git fetch origin main
+          git checkout origin/main
+          mv /tmp/release-body.md release-body.md
+          # Re-runs only the file-manipulation half — no LLM call, no anthropic SDK needed.
+          uv run python scripts/generate_changelog.py --mode=insert
+
+      - name: Commit CHANGELOG.md back to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          if git diff --staged --quiet; then
+            echo "no changelog change to commit"
+            exit 0
+          fi
+          TAG="${GITHUB_REF#refs/tags/}"
+          # [skip ci] guards against any future non-tag-triggered workflows;
+          # this release workflow only fires on `push: tags` so isn't at risk
+          # of recursing, but the marker is cheap insurance.
+          git commit -m "docs(changelog): $TAG [skip ci]"
+          git push origin HEAD:main
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          shopt -s globstar nullglob
+          files=()                                  # regular files only — the
+          for f in artifacts/**/*; do               # per-OS dirs are not assets
+            [[ -f "$f" ]] && files+=("$f")
+          done
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes-file release-body.md \
+            --target main \
+            "${files[@]}"
