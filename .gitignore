@@ -3,7 +3,7 @@ out/
 dist/
 legal/
 
-# Python (the release workflow's changelog step)
+# Python (scripts/build_pages_site.py)
 __pycache__/
 *.py[cod]
 
