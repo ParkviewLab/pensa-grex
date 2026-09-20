@@ -17,7 +17,7 @@ files:
   - '!scripts/**'
   - '!.github/**'
   - '!LICENSES/**'
-  - '!{electron.vite.config.js,eslint.config.mjs,electron-builder.yml,cliff.toml,REUSE.toml,LICENSING.md,CHANGELOG.md,README.md,AGENTS.md,CLAUDE.md,.gitignore}'
+  - '!{electron.vite.config.js,eslint.config.mjs,electron-builder.yml,REUSE.toml,LICENSING.md,CHANGELOG.md,README.md,AGENTS.md,CLAUDE.md,.gitignore}'
 mac:
   category: public.app-category.productivity
   target: dmg
