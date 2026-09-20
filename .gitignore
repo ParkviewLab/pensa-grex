@@ -3,7 +3,7 @@ out/
 dist/
 legal/
 
-# Python (changelog tooling: scripts/generate_changelog.py)
+# Python (the release workflow's changelog step)
 __pycache__/
 *.py[cod]
 
