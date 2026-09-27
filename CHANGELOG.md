@@ -4,6 +4,16 @@ All notable changes to this project are recorded here.
 
 ## [Unreleased]
 
+## [v3.5.3] - 2026-09-27
+
+### Highlights
+
+This release contains only internal repository and CI changes: the project moves from squash merges to merge commits and adopts a back-merge pull request in place of the direct back-merge, with the release workflows re-assembled from the handbook templates and dev-tools pins updated. Contributor documentation has been updated to describe the new merge and back-merge process. There are no user-visible changes to the application.
+
+### Maintenance
+
+- Merge commits and the checked back-merge pull request (#108)
+
 ## [v3.5.2] - 2026-09-27
 
 ### Highlights
