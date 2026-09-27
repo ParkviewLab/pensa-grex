@@ -740,10 +740,10 @@ How to carry a full rewrite in the repo while `main` keeps shipping the Electron
 until parity. This is a recommended execution shape, not an executed decision; it
 presumes the rewrite has been green-lit.
 
-The org already has the on-demand dev-build pattern to model on. `dev-release-electron.yml`
+The org already has the on-demand dev-build pattern to model on. `dev-release.yml`
 is a `workflow_dispatch` that runs only from `develop`, refuses to build unless the
 version source-of-truth carries a `-dev` marker, builds the three-OS matrix, and uploads
-installers as artifacts with no `v*` tag and no GitHub Release, so `release-electron.yml`'s
+installers as artifacts with no `v*` tag and no GitHub Release, so `release.yml`'s
 gate is never touched. `git dev-release --open` opens a dev cycle and `git dev-release`
 cuts the builds. That workflow is the template for the Rust app's dev builds.
 
@@ -761,7 +761,7 @@ reconcile.
 Cutover at parity: `rust` becomes `develop` (a wholesale replace, since the Rust app
 supersedes the JS app), then promote `develop` to `main`, `git bump` to `3.0.0`, and retire
 the Electron tree. Because the Rust app is never tagged before that moment,
-`release-electron.yml`'s gate (the tag must match `package.json` and be reachable from
+`release.yml`'s gate (the tag must match `package.json` and be reachable from
 `main`) stays inert throughout, which is what keeps `main` genuinely untouched until parity.
 
 CI on the `rust` branch, four workflows, each modeled on an existing one:
@@ -771,7 +771,7 @@ CI on the `rust` branch, four workflows, each modeled on an existing one:
 - `dev-release-rust.yml` (`workflow_dispatch` from `rust`): gate on a `-dev` marker in
   `Cargo.toml`, then a macOS/Windows/Linux `cargo` build packaged by `cargo-packager` and
   signed by `apple-codesign`/`rcodesign`, published as artifacts or a GitHub pre-release,
-  no `v*` tag. The on-demand parity build; a direct clone of `dev-release-electron.yml`.
+  no `v*` tag. The on-demand parity build; a direct clone of `dev-release.yml`.
 - `reuse.yml`: carried over unchanged.
 - a Rust `version-guard.yml` for PRs into `rust` that checks `Cargo.toml` (the existing
   guard is keyed to `develop` and `package.json`, so it does not cover `rust`).
@@ -827,9 +827,9 @@ history, and a harder cutover than swapping a branch.
   (Cargo.toml the one SoT, Electron tree removed there), keep `main`/`develop` shipping
   Electron until a parity cutover that replaces `develop` with `rust` and releases 3.0.0.
   Cut on-demand three-OS dev builds via a `dev-release-rust.yml` cloned from
-  `dev-release-electron.yml`. Two prerequisites: a `Cargo.toml` kind in dev-tools
-  `_sot.sh`, and a handbook rust-desktop profile. Recommended, not executed; gated on the
-  rewrite being green-lit.
+  `dev-release-electron.yml` (since replaced by `dev-release.yml`). Two prerequisites: a
+  `Cargo.toml` kind in dev-tools `_sot.sh`, and a handbook rust-desktop profile.
+  Recommended, not executed; gated on the rewrite being green-lit.
 - 2026-07-26 — Model v3 lands in the northstar, and three things here move with it.
   The axioms were renumbered (6 becomes 7, 8 becomes 9) and axiom 7 now names plain
   JSON, which narrows the round-trip caveat above from comments to formatting. The

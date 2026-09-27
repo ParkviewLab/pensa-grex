@@ -17,14 +17,14 @@ files:
   - '!scripts/**'
   - '!.github/**'
   - '!LICENSES/**'
-  - '!{electron.vite.config.js,eslint.config.mjs,electron-builder.yml,cliff.toml,REUSE.toml,LICENSING.md,CHANGELOG.md,README.md,AGENTS.md,CLAUDE.md,.gitignore}'
+  - '!{electron.vite.config.js,eslint.config.mjs,electron-builder.yml,REUSE.toml,LICENSING.md,CHANGELOG.md,README.md,AGENTS.md,CLAUDE.md,.gitignore}'
 mac:
   category: public.app-category.productivity
   target: dmg
   hardenedRuntime: true
   # Signed with a Developer ID Application cert (CSC_LINK / CSC_KEY_PASSWORD) and
   # notarized via an App Store Connect API key (APPLE_API_KEY / _ID / _ISSUER),
-  # wired in release-electron.yml's macOS job. Notarization activates from those
+  # wired in release.yml's installers job (macOS leg). Notarization activates from those
   # env vars; electron-builder applies its default Electron entitlements under the
   # hardened runtime, so no custom entitlements plist is needed.
 win:

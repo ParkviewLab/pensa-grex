@@ -3,7 +3,7 @@ out/
 dist/
 legal/
 
-# Python (changelog tooling: scripts/generate_changelog.py)
+# Python (scripts/build_pages_site.py)
 __pycache__/
 *.py[cod]
 
