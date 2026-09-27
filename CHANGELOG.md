@@ -4,6 +4,18 @@ All notable changes to this project are recorded here.
 
 ## [Unreleased]
 
+## [v3.5.2] - 2026-09-27
+
+### Highlights
+
+This release contains only build and release infrastructure changes: the release workflows were reassembled from the shared handbook parts, a redundant fetch was dropped from the version guard, and changelog generation moved to the shared dev-tools script. The only outwardly noticeable effect is in future changelogs, where maintenance-type entries are now listed under Maintenance rather than omitted, unrecognised titles appear under Other changes, and breaking changes, reverts and direct commits get their own groups. The application itself is unchanged.
+
+### Maintenance
+
+- Drop the shallow re-fetch from the version guard (#105)
+- Assemble the release workflows from the handbook's parts (#106)
+- Generate the changelog with dev-tools' shared script (#107)
+
 ## [v3.5.1] - 2026-09-15
 
 ### Highlights
