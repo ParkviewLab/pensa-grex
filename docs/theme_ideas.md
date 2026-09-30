@@ -5,6 +5,10 @@ SPDX-License-Identifier: CC-BY-4.0
 
 # Theme direction (held for the theming stage)
 
+Note, 2026-09-30: the theme shipped in v1.0.0 (Googie styling in light and dark
+grounds; see the changelog), so what follows is the record of the direction, not
+work held for later.
+
 Captured so the direction is written down, not to act on yet. The visual
 theme is a **separate decision from the tree grammar** (see
 [`tree-grammars.html`](tree-grammars.html)); this file records the intended
@@ -13,8 +17,8 @@ skin. It is a notebook, not a spec.
 ## The direction
 
 **Googie / Atomic Age / Mid-Century Modern (Populuxe)** — the optimistic
-retro-futurism of roughly 1955 to 1965: space-age, atomic, jet-age. Gary
-supplied a set of reference images in the design conversation (starburst wall
+retro-futurism of roughly 1955 to 1965: space-age, atomic, jet-age. A
+set of reference images was supplied in the design conversation (starburst wall
 art, a retro-futurist rocket-city illustration, "Atomic Style" and "Midcentury
 Modern" shape packs, Jetsons-style architecture, boomerang-and-blob patterns).
 The images themselves are not committed as files; if we want them in-repo, drop

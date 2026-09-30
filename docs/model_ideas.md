@@ -10,7 +10,7 @@ held in a chat log. A notebook that feeds the eventual `docs/northstar.md` and
 the data model, not a spec. Where something is settled it says so; open
 questions are marked.
 
-This notebook describes the model the running app implements, which is schema 2.
+This notebook describes the model the running app implements, which was schema 2; the app now runs schema 3 (note, 2026-09-30).
 Model v3 supersedes its mental model and several of its entities; the record of
 that design is [`model_v3_ideas.md`](model_v3_ideas.md), and `northstar.md` has
 already been amended to it. Where this file and the northstar disagree the
