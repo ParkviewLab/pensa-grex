@@ -33,7 +33,7 @@ swept straight across the grown branch's lane.
 
 A tree's base is its **root node**, a project node with no incoming edge; the trunk
 line rises from it. The layout keys each tree on that root node's id (there is no
-separate tree record, and `rootOrder` only carries left-to-right ordering). The
+separate tree record, and `planOrder` only carries left-to-right ordering). The
 project's name is the root card's own label, so the former floating tree-title
 (the `.ttl` element that once sat below each tree) is gone: the name is drawn as a
 station, not as chrome beside one. None of this touches the branch-placement
@@ -164,7 +164,7 @@ approximate. The return constraint is a genuine inequality, and its slack is the
 branch's **tail**: the trunk drawn above the branch's last card, derived after the
 solve as `u(P) - cardH(P) - arriveClear - rise - u(T) - anchorGap`. The constraint
 is exactly what guarantees that the tail is at least `departClear`, so the fixed
-departure clearance is a floor the tail can only exceed. That is Gary's rule that
+departure clearance is a floor the tail can only exceed. That is the rule that
 the branch's own trunk is what stretches when the trunk it returns to is the taller
 side.
 

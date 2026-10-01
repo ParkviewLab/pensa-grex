@@ -32,17 +32,17 @@ await cp(join(root, 'LICENSES'), join(legal, 'LICENSES'), { recursive: true })
 
 // Electron's bundled Chromium/Node notices (electron-builder drops LICENSES.chromium.html from
 // the mac .app, so we ship our own copy). These come from node_modules/electron/dist, populated
-// by electron's postinstall. A Node 24.16+/26.1+ regression can make extract-zip settle early and
-// leave dist partially written (electron/electron#51619, nodejs/node#63487) — pinned out via the
-// `yauzl` override in package.json. We still assert both notice files are present and the Chromium
-// notices are non-trivial, so a partial extraction fails the build loudly here instead of silently
-// shipping empty notices.
+// by electron's postinstall, which a fresh `npm ci` may leave unextracted or partly written
+// (electron/electron#51619, nodejs/node#63487); `node node_modules/electron/install.js` extracts
+// it (release.yml does the same before building). We assert both notice files are present and the
+// Chromium notices are non-trivial, so a partial extraction fails the build loudly here instead of
+// silently shipping empty notices.
 const chromiumNotices = join(electronDist, 'LICENSES.chromium.html')
 const electronLicense = join(electronDist, 'LICENSE')
 if (!existsSync(chromiumNotices) || statSync(chromiumNotices).size < 1_000_000 || !existsSync(electronLicense)) {
   console.error(
     'electron dist is incomplete: its license notices are missing or truncated. The prebuilt did ' +
-      'not extract fully — re-run `npm ci`, and verify the `yauzl` override in package.json ' +
+      'not extract fully — run `node node_modules/electron/install.js` ' +
       '(electron/electron#51619, nodejs/node#63487).',
   )
   process.exit(1)

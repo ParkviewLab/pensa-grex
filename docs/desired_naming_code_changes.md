@@ -18,7 +18,7 @@ Status: tracking the specification as of 2026-07-29 (two-point gap anatomy ruled
 several review findings still awaiting rulings, listed at the end). These notes feed
 the v3.6.0 plan once both documents are stable.
 
-## 0. Method (ruled by Gary, 2026-07-29)
+## 0. Method (ruled 2026-07-29)
 
 The order of work is fixed: **first redefine the DomainRecord, then redefine the
 DomainModel, and only after both decide what code changes.** Both definitions are
@@ -32,7 +32,7 @@ derive it from the record, the record must not store it — a stored copy can li
 The record definition trails the specification's completion, since several fields
 await open rulings (side, order, domain identity, and the rest of section 8).
 
-**Standing principle (Gary, 2026-07-29): any time we find ourselves needing to
+**Standing principle (ruled 2026-07-29): any time we find ourselves needing to
 write complex drag & drop code, or complex UI code of any kind, we stop and
 consider whether the DomainModel should be modified first.** Complexity at the UI
 layer is treated as a signal of a missing or under-specified structure in the
@@ -109,7 +109,7 @@ work and after it, permanently.
   in its tip edge (last node to end cap). Connectors are drawn angled-flat-angled:
   the two angles are fixed (the twelve-degree lateral) and the flat segment is
   the elastic one, stretching sideways to reach the branch line, so sideways
-  distance costs width, not height (Gary's correction, 2026-07-29; the earlier
+  distance costs width, not height (corrected 2026-07-29; the earlier
   fixed-connector claim here was wrong). Principle: fixed angles and anchor
   distances; every stretch lands in a designated segment (middle edge, tip edge,
   connector flat). Supersedes ad-hoc slack placement; tree-layout.md to carry
@@ -133,7 +133,7 @@ work and after it, permanently.
   the gap received the node (before the branch point / middle / after the return
   point), with the three meanings: the branch depends on the drop; parallel;
   the drop depends on the branch.
-- **Expected simplification, held as a check on the redesign (Gary, 2026-07-29):**
+- **Expected simplification, held as a check on the redesign (2026-07-29):**
   drag & drop's complexity is the cost of reconstructing structure from pixels.
   With junction points as model objects, drop resolution = enumerate typed
   targets from the model + one legality filter + one mutation per target kind.
@@ -189,7 +189,7 @@ work and after it, permanently.
 - The caps' species name ("cap" is proposed and passes the admission test:
   rule-bearing via identification and the connector joints); the branch-line
   identity noun (today's "foot").
-- **Ruled out (Gary, 2026-07-29): "gap" does not join the vocabulary.** The
+- **Ruled out (2026-07-29): "gap" does not join the vocabulary.** The
   admission test for a spec term: a rule must constrain, or an operation must
   touch, the named thing as a unit (scope passes: legality quantifies over
   scopes, collapse/expand operates on one; gap fails: drops land on edges and

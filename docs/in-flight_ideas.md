@@ -160,7 +160,7 @@ drawn as one or refused. Whether the return line follows the branch or is re-sol
 whether the same gesture should move a branch to a different host edge, which is a different
 verb again (`move_task` and `move_project` already do that by grafting).
 
-Gary's direction, 2026-07-27: a future PR, after v3.3.0.
+Direction, 2026-07-27: a future PR, after v3.3.0.
 
 **Partially answered since (the junction work, after v3.4.0).** The host-edge half is done,
 and by a different handle than this entry imagined: the junction diamond, not the branch's
@@ -177,7 +177,7 @@ one order that is already the author's.
 
 # 9. Under consideration: MCP resources, and more MCP prompts
 
-Gary's two questions, 2026-07-27: should the read tools become MCP *resources*, and should the
+Two questions, 2026-07-27: should the read tools become MCP *resources*, and should the
 server offer more *prompts*? The answers point opposite ways, for the same underlying reason.
 
 **Resources: recommended against, both as a conversion and as an addition for now.** In the
