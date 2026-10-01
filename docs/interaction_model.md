@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-4.0
 # Interaction model: drag-and-drop moves and bookmark cameras
 
 This documents two interaction algorithms whose rules are worth stating outside
-the code: how a drag-and-drop rearranges the forest, and how a bookmark restores a
+the code: how a drag-and-drop rearranges the domain, and how a bookmark restores a
 camera without storing a coordinate. It follows the standing convention of writing
 up an adopted rule so the reasoning is not buried. The implementations are the pure
 moves in [`src/shared/model/mutations.js`](../src/shared/model/mutations.js),
@@ -15,10 +15,12 @@ and the bookmark helpers in
 [`src/renderer/src/interaction/bookmarks.js`](../src/renderer/src/interaction/bookmarks.js);
 each points back here.
 
-Both algorithms are described as they run today, on schema 2. Model v3 changes the
-second of them outright and the first only in its vocabulary; the record of that
-design is [`model_v3_ideas.md`](model_v3_ideas.md), and what it replaces is marked
-where it stands rather than rewritten ahead of the code.
+The app loads schema 3 only (`CURRENT_SCHEMA` in `src/shared/model/migrate.js`; the
+validator refuses any other `schemaVersion`). The drag-and-drop rules are described
+as they run today. The bookmark camera is not yet on the v3 design: the renderer still
+restores a bookmark by its anchor chain and zoom, and the v3 design, recorded in
+[`model_v3_ideas.md`](model_v3_ideas.md), is marked where it stands and is not used
+yet (issue [#95](https://github.com/ParkviewLab/pensa-grex/issues/95)).
 
 ## Drag-and-drop: two drop rules, and reordering
 
@@ -73,7 +75,7 @@ The dragged node's kind and the drop location pick one of these pure moves:
   project node's id is appended to `planOrder`. Only a project node can be a root, so
   a task dropped on empty canvas is refused (it cannot become a root).
 - **reorderRoot** — a root dropped on empty canvas is reordered among the trees by
-  where it lands, left to right. `rootOrder` is canonicalised to the full current
+  where it lands, left to right. `planOrder` is canonicalised to the full current
   root set first (it is advisory and may omit some), so the target index is
   meaningful.
 
@@ -135,8 +137,8 @@ move that merges two lines has its cursors repaired by `normalizeHeres` (the
 tip-most "here" on a merged line survives). "here" flags travel with the nodes they
 sit on.
 
-*Model v3 adds a constraint and a purpose here.* A branch will carry a merge point,
-so a move that changes where a branch sits has to keep that merge legal, and one
+*Model v3 adds a constraint and a purpose here.* A branch carries a merge point (the
+validator enforces it), so a move that changes where a branch sits has to keep that merge legal, and one
 reshaping has to be refused outright rather than drawn: extending a merge across
 the close of a scope the branch was opened outside, which would leave a return line
 landing inside a collapsed block. `detachProject` acquires the second purpose that
@@ -165,7 +167,7 @@ distinct sub-region so the gestures never collide:
   orbits (`toggleFlag`). The status glyph and note icon are excluded, so a
   double-click on either runs its own single-click action twice rather than flagging.
 
-The flag is persisted in the forest file — a shared annotation, not client view
+The flag is persisted in `domain.json` — a shared annotation, not client view
 state (contrast the collapse set and camera, which stay in the client's own
 sidecar; northstar axiom 9) — so a selection made by flagging survives a reload and
 can be read by another tool. See `docs/node-visual-system.md` for how the orbits
@@ -173,7 +175,7 @@ render.
 
 A toolbar toggle, "Flagged," switches the view to show only flagged nodes and locks
 editing — a read-only review of the selection. The toggle is live client view state
-(like the collapse set and camera), never written to the forest.
+(like the collapse set and camera), never written to the domain.
 
 ## Bookmark cameras: anchor to a node, not a coordinate
 
@@ -184,7 +186,7 @@ one incoming edge up to the root). A stored coordinate would rot the moment the
 layout shifted; a node anchor moves with its node.
 
 Restoring is lazy, at jump time, and degrades in a fixed order. First the saved
-collapse set is applied to the live view and the forest re-rendered, so the visible
+collapse set is applied to the live view and the domain re-rendered, so the visible
 stations are known. Then `resolveAnchor` centres the **first id in the chain that
 is still present** (rendered, i.e. neither deleted nor hidden by the just-applied
 collapse), at the saved zoom. So:
@@ -200,12 +202,12 @@ Deleting a node never eagerly rewrites bookmarks; the fallback is computed only
 when a bookmark is used.
 
 This split is the concrete form of northstar axiom 9. A bookmark is a *saved*
-view, shared with the domain data in a `bookmarks.json` sibling of the forest
-file. A client's *live* view — what it currently has collapsed, where its camera
+view, shared with the domain data in a `bookmarks.json` sibling of
+`domain.json`. A client's *live* view — what it currently has collapsed, where its camera
 rests — is its own state, kept in a per-client userData sidecar and never written
-into the forest.
+into the domain.
 
-*Superseded by model v3.* The camera stops being anchored to anything. A bookmark
+*The v3 design, not yet used by the renderer (issue #95).* The camera stops being anchored to anything. A bookmark
 stores the id of every node drawn wholly inside the viewport when it was saved, and
 each client computes its own framing from where those nodes sit now, under a
 maximum scale and a minimum padding. The zoom and the ancestor chain both go, which

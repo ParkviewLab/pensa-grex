@@ -12,6 +12,10 @@ survives across sessions. As of this writing the architecture and the binding
 are settled; the tool surface an agent receives is still open, and no
 implementation plan has been written.
 
+Note, 2026-09-30: the server shipped in v2.0.0 (pensa-grex PR #55), and its tool
+surface has been reworked since (v3.3.0). What follows is the design record as it
+stood before that.
+
 ## Goal
 
 An agent (for instance Claude Code) should be able to read a domain's projects
@@ -107,7 +111,7 @@ depth and composes with all of the above.
 - Agents have access only while the app is running; this is accepted, and it
   keeps v1 simple, since with the app as the sole writer there is no
   file-watching or reconciliation to build.
-- Storage stays plain JSON5 and markdown, not a database. The one genuine
+- Storage stays plain JSON5 (schema 3 dropped JSON5 for plain JSON) and markdown, not a database. The one genuine
   database advantage is concurrent-writer safety, and the single-writer topology
   gives that without the costs (native-module ABI friction, migrations, and the
   hazard of a live SQLite file corrupting under Dropbox or iCloud, which would
@@ -362,7 +366,7 @@ library.
 
 - Runtime: Node, in-process in main, reusing the shared model. (settled)
 - Transport: Streamable HTTP over Node `http`, single `/mcp` path. (settled)
-- Storage: plain JSON5 and markdown files, not a database. (settled)
+- Storage: plain JSON5 (plain JSON since schema 3) and markdown files, not a database. (settled)
 - Access: read-write with scope tiers; agents only while the app runs. (settled)
 - Bind: loopback `127.0.0.1`, fixed port `35899` in `settings.json`, no roaming,
   fail-visible on conflict. (settled)

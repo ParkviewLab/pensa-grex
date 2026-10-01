@@ -15,13 +15,13 @@ you are on each branch.
 
 A domain is drawn as a subway map: stations are nodes, tracks are the lines between
 them, and a junction is where a branch leaves or returns. Outline colour follows
-status; every node carries a markdown note.
+status; any node may carry a markdown note.
 
 The project's intent and its axioms are in [`docs/northstar.md`](docs/northstar.md);
 read it first. That document and everything else in `docs/` is published, as of the
 newest release, on the [documentation site](https://parkviewlab.github.io/pensa-grex/).
-A domain is plain files on disk: one JSON file in a directory of its own, beside its
-per-node markdown notes.
+A domain is plain files on disk: a directory holding `domain.json`, `bookmarks.json`
+once a view is saved, and a `notes/` directory of per-node markdown notes.
 
 ## Download
 
@@ -43,6 +43,7 @@ npm run dev          # electron-vite dev server with HMR
 npm run build        # bundle to out/
 npm start            # preview the built app
 npm test             # vitest unit tests
+node node_modules/electron/install.js   # a fresh npm ci leaves no electron/dist; installers need it
 npm run build:dist   # platform installers (.dmg / NSIS / AppImage + .deb) in dist/
 ```
 

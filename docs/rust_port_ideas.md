@@ -753,7 +753,7 @@ with `Cargo.toml` as the one version source-of-truth. `develop` and `main` go on
 the Electron app untouched, and each branch then has exactly one version source, which the
 org's `git bump`/`git release`/`git dev-release` require, since they auto-detect a single
 source and would be ambiguous with two in one tree. Work lands on `rust` through PRs based
-on `rust`, squash-merged as elsewhere; in the contained worktree layout, add a
+on `rust`, merged with a merge commit as elsewhere; in the contained worktree layout, add a
 `pensa-grex-rust` worktree beside `-main` and `-develop`. A long-lived branch is usually a
 hazard, but it is safe here because this is a replacement, not two live codebases to
 reconcile.

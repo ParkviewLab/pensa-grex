@@ -46,14 +46,17 @@ Run the same checks CI requires, so the PR is green on arrival:
 ```bash
 npm ci
 npm run lint
+npm test                 # Vitest suite
 npm run build            # electron-vite build — a fast smoke-test
 uvx --from "reuse[charset-normalizer]" reuse lint
 ```
 
-PensaGrex is plain JavaScript today (no TypeScript or test suite yet), so
-CI runs ESLint + the electron-vite build. A PR **can't be merged until the
-required checks pass** (the build check, REUSE, and the version guard — see the
-handbook's `ci.md`).
+PensaGrex is plain JavaScript (no TypeScript), so the required `checks` job
+(`.github/workflows/test-electron.yml`) runs ESLint, the Vitest suite and the
+electron-vite build. A PR **can't be merged until the three required checks
+pass**: `checks`, `reuse` and `no-version-change` (the version guard). They are
+strict, so the branch must also be up to date with `develop`, and administrators
+are bound by them. See the handbook's `ci.md`.
 
 ## Versioning
 
@@ -82,4 +85,5 @@ branch layout).
 
 Read [`northstar.md`](northstar.md) first, if it exists, and follow the
 behavioural contract in the handbook's `ai-collaboration.md` (notably:
-merging/tagging/releasing need an explicit, per-action go-ahead).
+merging a pull request is the user's call, merge by merge; a release needs its
+own explicit ask, which covers the whole CLI flow, `git back-merge` included).

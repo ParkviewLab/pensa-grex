@@ -313,7 +313,7 @@ provable. What it cost was the twelve-degree lateral, since a line that climbs c
 cost the tight vertical packing with it: a row is as tall as the tallest card anywhere across it, and cards in
 unrelated plans were pinned to a shared y for no reason the author could see.
 
-Gary chose the angle over the guarantee, and on the evidence the exchange is favourable. The nine live domains
+The angle was chosen over the guarantee, and on the evidence the exchange is favourable. The nine live domains
 and the two committed fixtures are shorter drawn in pixels than they were on the grid, 10,883 pixels of height
 against 11,096; every lateral leaves and arrives
 at exactly twelve degrees; and the invariant the grid guaranteed is met everywhere after a repair pass that
@@ -579,7 +579,7 @@ marked as amended in v3.1.0, which changed how a domain is drawn and touched nei
 - Height assignment is a longest-path layering, which cannot fail because the merge clauses keep the constraint
   graph acyclic. The height that crossings and corridors add is accepted as a cost.
 - *Amended in v3.1.0.* v3.0.0 retired the 12-degree branch tilt in favour of a shared row grid, on which a
-  lateral line was a horizontal run in a clearance band plus a vertical riser. Gary reversed that: the angle is
+  lateral line was a horizontal run in a clearance band plus a vertical riser. That was reversed: the angle is
   back at both ends of every lateral and the grid is gone. A node's height is solved in pixels, so nothing is
   aligned across lanes and consecutive cards sit at their minimum, 25 pixels from a card's bottom edge to the
   centre of the circle beneath it, wherever nothing forces them apart;
