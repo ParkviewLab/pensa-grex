@@ -4,6 +4,20 @@ All notable changes to this project are recorded here.
 
 ## [Unreleased]
 
+## [v3.5.4] - 2026-10-01
+
+### Highlights
+
+This release contains only documentation and maintenance changes, with no user-visible behaviour differences. The documentation has been brought up to date, covering the `npm test` step and required checks in the contributing guide, schema 3, `planOrder` and domain directories in the interaction model and tree-layout notes, the electron install step before `build:dist` in the README, and a note that the v3 bookmark design is not yet used by the renderer. The agent pointer files were also aligned with handbook v2.1.0.
+
+### Docs
+
+- Bring documentation up to date before 3.5.4 (#111)
+
+### Maintenance
+
+- Align with handbook v2.1.0 (#110)
+
 ## [v3.5.3] - 2026-09-27
 
 ### Highlights
