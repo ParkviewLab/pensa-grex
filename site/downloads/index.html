@@ -290,37 +290,24 @@ footer a{color:var(--muted); text-decoration:underline;}
   try{ var s=localStorage.getItem('pensagrex.ground'); if(s==='navy'||s==='azure') setGround(s); }catch(e){}
 })();
 
-// Self-updating downloads: read the latest GitHub Release and point each tile at
-// its installer, matched by file extension. Falls back to the releases page.
-//
-// The version is NOT the fetch's to invent. It is stamped into the page at deploy
-// time, so it is correct with no script at all; this only refreshes it, for the
-// case where a release has been cut since the page was last deployed. GitHub's
-// unauthenticated API allows 60 calls an hour per address, so this request fails
-// routinely — behind a busy network, or for anyone who reloads — and when it does
-// the stamped version must stand. It used to be replaced with the word "latest".
+// Points each tile straight at its installer in the release this page was
+// published with. The deploy stamps that release's tag into the page, and the
+// installers' names follow from it (electron-builder.yml's artifactName), so
+// no request is made: GitHub's API allows a network only 60 unauthenticated
+// calls an hour, and when they ran out the tiles fell back to the release
+// page. Without JavaScript the tiles keep their /releases/latest links.
 (function(){
-  var map={ dmg:'dl-mac', exe:'dl-win', appimage:'dl-appimage', deb:'dl-deb' };
-  // Belt for a page served without the deploy step having run (a local preview,
-  // or a fork): show nothing rather than the raw placeholder.
-  document.querySelectorAll('.ver').forEach(function(e){ if(e.textContent.indexOf('__LATEST')===0) e.textContent=''; });
-  fetch('https://api.github.com/repos/ParkviewLab/pensa-grex/releases/latest', {headers:{Accept:'application/vnd.github+json'}})
-    .then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); })
-    .then(function(rel){
-      if(rel.tag_name) document.querySelectorAll('.ver').forEach(function(e){ e.textContent = rel.tag_name; });
-      var seen={};
-      (rel.assets||[]).forEach(function(a){
-        var m=(a.name||'').match(/\.(dmg|exe|AppImage|deb)$/i);
-        if(!m) return;
-        var ext=m[1].toLowerCase(), id=map[ext];
-        if(id && !seen[ext]){ seen[ext]=1; document.getElementById(id).href=a.browser_download_url; }
-      });
-      Object.keys(map).forEach(function(ext){ if(!seen[ext]){ document.getElementById(map[ext]).setAttribute('aria-disabled','true'); } });
-    })
-    .catch(function(){
-      // Leave the stamped version standing, and leave the tiles at their static
-      // /releases/latest href, which resolves to the same installers.
-    });
+  var ver=document.querySelector('.ver');
+  var tag=ver ? ver.textContent.trim() : '';
+  if(!/^v\d+\.\d+\.\d+$/.test(tag)){
+    // A page served without the deploy step (a local preview, or a fork):
+    // show nothing rather than the raw placeholder.
+    document.querySelectorAll('.ver').forEach(function(e){ if(e.textContent.indexOf('__LATEST')===0) e.textContent=''; });
+    return;
+  }
+  var v=tag.slice(1), base='https://github.com/ParkviewLab/pensa-grex/releases/download/'+tag+'/pensa-grex-'+v;
+  var files={ 'dl-mac':'-arm64.dmg', 'dl-win':'-setup.exe', 'dl-appimage':'-x86_64.AppImage', 'dl-deb':'-amd64.deb' };
+  Object.keys(files).forEach(function(id){ var el=document.getElementById(id); if(el) el.href=base+files[id]; });
 })();
 
 // Copy the connect command to the clipboard.
